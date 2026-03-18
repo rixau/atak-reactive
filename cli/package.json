@@ -1,0 +1,27 @@
+{
+  "name": "@atak-reactive/cli",
+  "version": "0.1.0",
+  "description": "CLI tool for integrating React UIs into ATAK plugins",
+  "type": "module",
+  "bin": {
+    "atak-reactive": "./dist/index.cjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.5.0",
+    "typescript": "~5.8.3"
+  },
+  "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rixau/atak-reactive.git",
+    "directory": "cli"
+  }
+}

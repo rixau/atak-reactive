@@ -1,0 +1,5 @@
+
+# atak-reactive: Keep JavascriptInterface methods for the WebView bridge
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface *;
+}
