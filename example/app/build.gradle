@@ -8,7 +8,7 @@
 
 buildscript {
 
-    ext.PLUGIN_VERSION = "1.0"
+    ext.PLUGIN_VERSION = "0.1"
     ext.ATAK_VERSION = '5.6.0'
 
     def takdevVersion = '3.+'
@@ -72,7 +72,6 @@ plugins {
 }
 apply {
     plugin("atak-takdev-plugin")
-    from("../gradle/typst.gradle")
 }
 
 allprojects {
@@ -87,18 +86,23 @@ allprojects {
     }
 }
 
+ 
+// The supportedFlavors list is an example configuration.  FMS variants can be added and defined via an 
+// ISO tricode (xyz is an example and not a real country code).   The ISO tricode can be found here
+// Please see the A-3 in https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes
 
 
 def supportedFlavors = 
 [
     [ name : 'civ', default: true ],
     [ name : 'mil' /** example: true **/],
-    [ name : 'gov' ],
+    [ name : 'gov'],
+    [ name : 'xyz' ],
 ]
 
 android {
     compileSdk 36
-    namespace 'com.atakmap.android.helloworld.plugin'
+    namespace 'com.atakmap.android.plugintemplate.plugin'
 
     buildFeatures {
         buildConfig = true
@@ -113,12 +117,16 @@ android {
     //    jvmTarget = JavaVersion.VERSION_17
     //}
 
+    // this is required and should not be removed otherwise the TAK 
+    // inner signing check will fail and the plugin will not load
     bundle {
         storeArchive {
             enable = false
         }
     }
 
+    // this is required and should not be removed otherwise the 
+    // plugin will not be able to use native libraries
     packagingOptions {
         jniLibs {
             useLegacyPackaging = true
@@ -148,7 +156,7 @@ android {
         }
         release {
             minifyEnabled true
-            proguardFile 'proguard-gradle.txt'
+            proguardFiles 'proguard-gradle.txt', 'proguard-gradle-repackage.txt'
             signingConfig signingConfigs.release
             matchingFallbacks = ['odk']
         }
@@ -159,7 +167,7 @@ android {
     productFlavors {
         supportedFlavors.each { flav ->
             "${flav.name}" {
-                getIsDefault().set(flav.name.equals("${flav.default}"))
+                getIsDefault().set(flav.default)
                 dimension "application"
 
                 // retain existing application identifiers for civ and mil
@@ -240,50 +248,78 @@ android {
     }
 }
 
+afterEvaluate {
+    project.file('proguard-gradle-repackage.txt').text = "-repackageclasses atakplugin.${rootProject.getName()}"
+
+    try { 
+        tasks.named("compile" + getCommandFlavor() + "ReleaseKotlin") {
+            println "modifying " + getCommandFlavor().toLowerCase() + " kotlin compile options to include: -Xsam-conversions=class"
+            kotlinOptions {
+                freeCompilerArgs += "-Xsam-conversions=class"
+            }
+        }
+    } catch (Exception ignored) { }
+}
+
+// modified code to find the current flavor in progress
+def getCommandFlavor() {
+    String  tskReqStr = getGradle().getStartParameter().getTaskRequests().toString()
+
+    java.util.regex.Pattern pattern
+    if( tskReqStr.contains( "assemble" ) )
+        pattern = java.util.regex.Pattern.compile("assemble(\\w+)(Release|Debug)")
+    else if( tskReqStr.contains( "install" ) )
+        pattern = java.util.regex.Pattern.compile("install(\\w+)(Release|Debug)")
+    else
+        pattern = java.util.regex.Pattern.compile("generate(\\w+)(Release|Debug)")
+
+    java.util.regex.Matcher matcher = pattern.matcher(tskReqStr)
+
+    if( matcher.find() ) {
+        return matcher.group(1)
+    } else {
+        return "Civ"
+    }
+}
+
 
 dependencies {
     implementation fileTree(dir: 'libs', include: '*.jar')
-
-    // atak-reactive: WebView bridge for React-based plugin UIs
     implementation 'androidx.webkit:webkit:1.12.1'
-
-    // Recyclerview version depends on some androidx libraries which
-    // are supplied by core, so they should be excluded.  Otherwise
-    // bad things happen in the release builds after proguarding
-    implementation ('androidx.recyclerview:recyclerview:1.1.0') {
-        exclude module: 'collection'
-        // this is an example of a local exclude since androidx.core is supplied by core atak
-        exclude module: 'core'
-        exclude module: 'lifecycle'
-        exclude module: 'core-common'
-        exclude module: 'collection'
-        exclude module: 'customview'
-    }
-
-    androidTestImplementation 'androidx.lifecycle:lifecycle-runtime:2.2.0'
-
 }
 
 configurations.all {
     resolutionStrategy.eachDependency { details ->
         if (details.requested.group == 'androidx.core' && !details.requested.name.contains('core-viewtree')) {
-            details.useVersion '1.17.0'
+            details.useVersion "1.17.0"
         }
         if (details.requested.group == 'androidx.lifecycle') {
-            details.useVersion '2.9.4'
+            details.useVersion "2.9.4" 
         }
         if (details.requested.group == 'androidx.fragment') {
-            details.useVersion '1.8.9'
+            details.useVersion "1.8.9"
         }
-    }
-}
-
+         if (details.requested.group == 'com.squareup.okhttp3') {
+            details.useVersion "4.11.0"
+        }
+        if (details.requested.group == 'com.squareup.okio') {
+            details.useVersion "3.2.0"
+        } 
+        if (requested.group == 'org.jetbrains.kotlinx' && requested.name == 'kotlinx-serialization-core') {
+            details.useVersion "1.7.3"
+        }
+    }   
+}           
+        
 configurations.implementation {
        exclude group: 'androidx.core', module: 'core-ktx'
        exclude group: 'androidx.core', module: 'core'
        exclude group: 'androidx.fragment', module: 'fragment'
        exclude group: 'androidx.lifecycle', module: 'lifecycle'
        exclude group: 'androidx.lifecycle', module: 'lifecycle-process'
-}
+       exclude group: 'com.squareup.okhttp3', module: 'okhttp'
+       exclude group: 'com.squareup.okio', module: 'okio' 
+       exclude group: 'org.jetbrains.kotlinx', module: 'kotlinx-serialization-core'
 
+}       
 

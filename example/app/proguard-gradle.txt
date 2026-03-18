@@ -89,21 +89,10 @@
 ######################################################################
 ######################################################################
 
-
 ######################################################################
-## Please change PluginTemplate to accurately reflect the name of your 
-## plugin.  This will help get bug reports to your development group.
-######################################################################
-
--repackageclasses atakplugin.helloworld
-
-
-######################################################################
-## below you can add any rules specific to your plugin limited to 
+## below you can add any rules specific to your plugin limited to
 ## dontwarn and keep directives
 ######################################################################
-
--dontwarn androidx.viewpager.widget.ViewPager$SavedState
 
 # atak-reactive: Keep JavascriptInterface methods for the WebView bridge
 -keepclassmembers class * {

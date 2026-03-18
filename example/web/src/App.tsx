@@ -1,140 +1,85 @@
-import {
-  isNative,
-  useSelfLocation,
-  useMapEvent,
-  addMarker,
-  removeMarker,
-  panTo,
-} from '@atak-reactive/sdk';
 import { useState } from 'react';
+import { isNative, useSelfLocation, useMapEvent, addMarker, removeMarker, panTo } from '@atak-reactive/sdk';
 
 export function App() {
   const location = useSelfLocation();
   const lastClick = useMapEvent('mapClick');
   const [markers, setMarkers] = useState<{ uid: string; title: string }[]>([]);
 
-  const handleDropAtSelf = () => {
+  const dropAtSelf = () => {
     if (!location) return;
     const title = `Pin ${markers.length + 1}`;
     const uid = addMarker({ lat: location.lat, lng: location.lng, title });
-    if (uid) setMarkers((prev) => [...prev, { uid, title }]);
+    if (uid) setMarkers(p => [...p, { uid, title }]);
   };
 
-  const handleDropAtClick = () => {
+  const dropAtClick = () => {
     if (!lastClick) return;
-    const title = `Click Pin ${markers.length + 1}`;
+    const title = `Click ${markers.length + 1}`;
     const uid = addMarker({ lat: lastClick.lat, lng: lastClick.lng, title });
-    if (uid) setMarkers((prev) => [...prev, { uid, title }]);
+    if (uid) setMarkers(p => [...p, { uid, title }]);
   };
 
-  const handleRemove = (uid: string) => {
+  const remove = (uid: string) => {
     removeMarker(uid);
-    setMarkers((prev) => prev.filter((m) => m.uid !== uid));
+    setMarkers(p => p.filter(m => m.uid !== uid));
+  };
+
+  const s = {
+    box: { padding: 12, marginBottom: 12, background: '#16213e', borderRadius: 8 } as const,
+    h2: { fontSize: 12, fontWeight: 600, color: '#8d99ae', textTransform: 'uppercase' as const, letterSpacing: 1, marginBottom: 8 },
+    row: { display: 'flex', justifyContent: 'space-between', padding: '3px 0' } as const,
+    label: { color: '#8d99ae', fontSize: 13 },
+    val: { color: '#edf2f4', fontSize: 13, fontFamily: 'monospace' },
+    btn: { padding: '6px 14px', background: '#0f3460', color: '#e0e0e0', border: '1px solid #1a4a7a', borderRadius: 6, cursor: 'pointer', fontSize: 12 } as const,
   };
 
   return (
-    <div style={{ padding: 16, maxWidth: 480 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 18, color: '#fff' }}>React Settings</h1>
-        <span style={{
-          fontSize: 11, padding: '2px 8px', borderRadius: 4,
-          background: isNative() ? '#2d6a4f' : '#4a4e69', color: '#d8f3dc',
-        }}>
-          {isNative() ? 'ATAK' : 'MOCK'}
+    <div style={{ padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+        <h1 style={{ fontSize: 18, color: '#fff' }}>atak-reactive test</h1>
+        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: isNative() ? '#2d6a4f' : '#4a4e69', color: '#d8f3dc' }}>
+          {isNative() ? 'NATIVE' : 'MOCK'}
         </span>
-      </header>
+      </div>
 
-      <Section title="Location">
+      <div style={s.box}>
+        <h2 style={s.h2}>Location</h2>
         {location ? (
           <>
-            <Row label="Lat" value={location.lat.toFixed(6)} />
-            <Row label="Lng" value={location.lng.toFixed(6)} />
-            <Row label="Alt" value={`${(location.alt ?? 0).toFixed(1)} m`} />
+            <div style={s.row}><span style={s.label}>Lat</span><span style={s.val}>{location.lat.toFixed(6)}</span></div>
+            <div style={s.row}><span style={s.label}>Lng</span><span style={s.val}>{location.lng.toFixed(6)}</span></div>
           </>
-        ) : (
-          <p style={{ color: '#555', fontStyle: 'italic' }}>No location</p>
-        )}
-      </Section>
+        ) : <p style={{ color: '#555' }}>Waiting...</p>}
+      </div>
 
-      <Section title="Last Map Click">
-        {lastClick ? (
-          <Row label="Position" value={`${lastClick.lat.toFixed(6)}, ${lastClick.lng.toFixed(6)}`} />
-        ) : (
-          <p style={{ color: '#555', fontStyle: 'italic' }}>Tap the map</p>
-        )}
-      </Section>
+      <div style={s.box}>
+        <h2 style={s.h2}>Last Click</h2>
+        {lastClick
+          ? <div style={s.row}><span style={s.val}>{lastClick.lat.toFixed(6)}, {lastClick.lng.toFixed(6)}</span></div>
+          : <p style={{ color: '#555' }}>Tap the map</p>}
+      </div>
 
-      <Section title="Actions">
+      <div style={s.box}>
+        <h2 style={s.h2}>Actions</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Btn onClick={handleDropAtSelf} disabled={!location}>Drop at Self</Btn>
-          <Btn onClick={handleDropAtClick} disabled={!lastClick}>Drop at Click</Btn>
-          <Btn onClick={() => location && panTo(location.lat, location.lng)}>Pan to Self</Btn>
+          <button style={s.btn} onClick={dropAtSelf} disabled={!location}>Drop at Self</button>
+          <button style={s.btn} onClick={dropAtClick} disabled={!lastClick}>Drop at Click</button>
+          <button style={s.btn} onClick={() => location && panTo(location.lat, location.lng)}>Pan to Self</button>
         </div>
-      </Section>
+      </div>
 
       {markers.length > 0 && (
-        <Section title={`Markers (${markers.length})`}>
-          {markers.map((m) => (
-            <div key={m.uid} style={{
-              display: 'flex', justifyContent: 'space-between',
-              alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #1a2744',
-            }}>
-              <div>
-                <div style={{ color: '#edf2f4', fontSize: 13 }}>{m.title}</div>
-                <div style={{ color: '#555', fontSize: 11, fontFamily: 'monospace' }}>
-                  {m.uid.slice(0, 12)}...
-                </div>
-              </div>
-              <Btn onClick={() => handleRemove(m.uid)} variant="danger">Remove</Btn>
+        <div style={s.box}>
+          <h2 style={s.h2}>Markers ({markers.length})</h2>
+          {markers.map(m => (
+            <div key={m.uid} style={{ ...s.row, alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #1a2744' }}>
+              <span style={s.val}>{m.title}</span>
+              <button style={{ ...s.btn, background: '#3d0000', color: '#ff6b6b', border: '1px solid #5c0000', padding: '3px 10px' }} onClick={() => remove(m.uid)}>x</button>
             </div>
           ))}
-        </Section>
+        </div>
       )}
     </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section style={{ marginBottom: 16, padding: 12, background: '#16213e', borderRadius: 8 }}>
-      <h2 style={{
-        fontSize: 13, fontWeight: 600, color: '#8d99ae',
-        textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8,
-      }}>{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-      <span style={{ color: '#8d99ae', fontSize: 13 }}>{label}</span>
-      <span style={{ color: '#edf2f4', fontSize: 13, fontFamily: 'monospace' }}>{value}</span>
-    </div>
-  );
-}
-
-function Btn({ children, onClick, disabled, variant }: {
-  children: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  variant?: 'danger';
-}) {
-  const bg = variant === 'danger' ? '#3d0000' : '#0f3460';
-  const border = variant === 'danger' ? '#5c0000' : '#1a4a7a';
-  const color = variant === 'danger' ? '#ff6b6b' : '#e0e0e0';
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        padding: '6px 14px', background: bg, color, border: `1px solid ${border}`,
-        borderRadius: 6, cursor: disabled ? 'default' : 'pointer',
-        fontSize: 12, fontWeight: 500, opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      {children}
-    </button>
   );
 }
