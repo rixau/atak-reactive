@@ -18,6 +18,9 @@
     "tsup": "^8.5.0",
     "typescript": "~5.8.3"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "Unlicense",
   "repository": {
     "type": "git",
