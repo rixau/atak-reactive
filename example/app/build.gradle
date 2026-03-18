@@ -153,12 +153,14 @@ android {
         debug {
             debuggable true
             matchingFallbacks = ['sdk']
+            buildConfigField 'boolean', 'DEV_MODE', 'true'
         }
         release {
             minifyEnabled true
             proguardFiles 'proguard-gradle.txt', 'proguard-gradle-repackage.txt'
             signingConfig signingConfigs.release
             matchingFallbacks = ['odk']
+            buildConfigField 'boolean', 'DEV_MODE', 'false'
         }
     }
 
@@ -205,11 +207,15 @@ android {
     sourceSets {
         main {
 
-            // It is strongly encouraged that plugin developers do not modify the archiveBaseName, version code logic and version 
-            // name logic to provide for consistency within the community.   
+            // It is strongly encouraged that plugin developers do not modify the archiveBaseName, version code logic and version
+            // name logic to provide for consistency within the community.
             setProperty("archivesBaseName", "ATAK-Plugin-" + rootProject.name + "-" + PLUGIN_VERSION + "-" + getVersionName() + "-" + ATAK_VERSION)
             defaultConfig.versionCode = getVersionCode()
             defaultConfig.versionName = PLUGIN_VERSION + " (" + getVersionName() + ") - [" + ATAK_VERSION + "]"
+
+            // atak-reactive: serve bundled web assets from web/dist/ (built by Vite)
+            // This keeps build artifacts out of src/main/assets/
+            assets.srcDirs += ["${rootDir}/web/dist-assets"]
         }
 
         gov.java.srcDirs 'src/gov/java'

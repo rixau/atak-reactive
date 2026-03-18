@@ -64,7 +64,7 @@ export function App() {
         <h2 style={s.h2}>Actions</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button style={s.btn} onClick={dropAtSelf} disabled={!location}>Drop at Self</button>
-          <button style={s.btn} onClick={dropAtClick} disabled={!lastClick}>Drop at Click</button>
+          <button style={s.btn} onClick={dropAtClick} disabled={!lastClick}>Drop</button>
           <button style={s.btn} onClick={() => location && panTo(location.lat, location.lng)}>Pan to Self</button>
         </div>
       </div>
@@ -73,7 +73,7 @@ export function App() {
         <div style={s.box}>
           <h2 style={s.h2}>Markers ({markers.length})</h2>
           {markers.map(m => (
-            <div key={m.uid} style={{ ...s.row, alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #1a2744' }}>
+            <div key={m.uid} style={{ ...s.row, alignItems: 'right', padding: '6px 0', borderBottom: '1px solid #1a2744' }}>
               <span style={s.val}>{m.title}</span>
               <button style={{ ...s.btn, background: '#3d0000', color: '#ff6b6b', border: '1px solid #5c0000', padding: '3px 10px' }} onClick={() => remove(m.uid)}>x</button>
             </div>

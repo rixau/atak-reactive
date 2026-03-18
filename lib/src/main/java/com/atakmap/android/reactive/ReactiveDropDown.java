@@ -63,23 +63,15 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
      * @param assetPath   path to the HTML file relative to assets/ (e.g. "web/index.html")
      */
     public ReactiveDropDown(MapView mapView, Context pluginContext, String assetPath) {
-        this(mapView, pluginContext, assetPath, new Object[0]);
+        this(mapView, pluginContext, assetPath, true);
     }
 
-    /**
-     * Create a reactive dropdown with additional JS bridges.
-     *
-     * @param mapView           the ATAK MapView
-     * @param pluginContext     the plugin's context
-     * @param assetPath         path to the HTML file relative to assets/
-     * @param additionalBridges extra @JavascriptInterface objects to attach
-     */
     public ReactiveDropDown(MapView mapView, Context pluginContext,
-            String assetPath, Object... additionalBridges) {
+            String assetPath, boolean devMode, Object... additionalBridges) {
         super(mapView);
         this.assetPath = assetPath;
         this.prodUrl = ASSET_BASE + assetPath;
-        this.devMode = isDevMode();
+        this.devMode = devMode;
 
         container = new LinearLayout(pluginContext);
         container.setLayoutParams(new LayoutParams(
@@ -217,24 +209,6 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         }
         if (webView != null) {
             webView.destroy();
-        }
-    }
-
-    private static boolean isDevMode() {
-        try {
-            Class<?> bc = Class.forName(
-                    Thread.currentThread().getContextClassLoader()
-                            .loadClass("android.app.Application")
-                            .getPackage().getName() + ".BuildConfig");
-            return (boolean) bc.getField("DEV_MODE").get(null);
-        } catch (Exception e) {
-            // If BuildConfig.DEV_MODE doesn't exist, check debuggable flag
-            try {
-                return (android.app.Application.getProcessName() != null &&
-                        android.os.Debug.isDebuggerConnected());
-            } catch (Exception ignored) {
-                return false;
-            }
         }
     }
 

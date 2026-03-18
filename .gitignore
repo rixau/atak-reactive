@@ -4,9 +4,6 @@ build/
 local.properties
 proguard-gradle-repackage.txt
 
-# Android
-example/app/src/main/assets/web/
-
 # IDE
 .idea/
 *.iml
@@ -15,8 +12,8 @@ example/app/src/main/assets/web/
 # Node
 node_modules/
 dist/
+dist-assets/
 sdk/dist/
-example/web/dist/
 
 # OS
 .DS_Store
