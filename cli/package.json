@@ -1,6 +1,6 @@
 {
   "name": "@atak-reactive/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI tool for integrating React UIs into ATAK plugins",
   "type": "module",
   "bin": {
