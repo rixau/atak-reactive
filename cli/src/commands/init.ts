@@ -5,6 +5,9 @@ import {
   fileContains,
   appendIfMissing,
   patchGradleBlock,
+  detectAtakVersion,
+  resolveTemplateVersion,
+  listSupportedVersions,
   exec,
   log,
   logStep,
@@ -32,7 +35,42 @@ export function init(): void {
     process.exit(1);
   }
 
-  // 2. Copy Java source
+  // 2. Detect ATAK version and resolve templates
+  const atakVersion = detectAtakVersion(buildGradle);
+  if (atakVersion) {
+    log(`Detected ATAK version: ${atakVersion}`);
+  } else {
+    log('Warning: Could not detect ATAK_VERSION from build.gradle');
+  }
+
+  const templatesDir = join(__dirname, 'templates');
+  const templateVersion = atakVersion
+    ? resolveTemplateVersion(templatesDir, atakVersion)
+    : null;
+
+  if (atakVersion && !templateVersion) {
+    const supported = listSupportedVersions(templatesDir);
+    logError(
+      `No templates for ATAK ${atakVersion}. Supported versions: ${supported.join(', ')}`,
+    );
+    process.exit(1);
+  }
+
+  const javaTemplatesDir = templateVersion
+    ? join(templatesDir, templateVersion, 'java', 'reactive')
+    : null;
+
+  if (!javaTemplatesDir || !existsSync(javaTemplatesDir)) {
+    const supported = listSupportedVersions(templatesDir);
+    logError(
+      `Java templates not found. Supported versions: ${supported.join(', ')}`,
+    );
+    process.exit(1);
+  }
+
+  log(`Using templates for ATAK ${templateVersion}`);
+
+  // 3. Copy Java source
   const reactiveDir = join(appDir, 'src/main/java/com/atakmap/android/reactive');
   const checkFile = join(reactiveDir, 'ReactiveDropDown.java');
 
@@ -40,9 +78,8 @@ export function init(): void {
     log('Java source already exists, skipping copy');
   } else {
     logStep('Copying Java library source...');
-    const templatesDir = join(__dirname, 'templates', 'java', 'reactive');
-    cpSync(templatesDir, reactiveDir, { recursive: true });
-    log('Copied reactive/ to app/src/main/java/com/atakmap/android/reactive/');
+    cpSync(javaTemplatesDir, reactiveDir, { recursive: true });
+    log(`Copied reactive/ (ATAK ${templateVersion}) to app/src/main/java/com/atakmap/android/reactive/`);
   }
 
   // 3. Patch build.gradle — webkit dependency

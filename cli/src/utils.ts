@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { execSync, type SpawnSyncReturns } from 'child_process';
 
@@ -74,4 +74,55 @@ export function logDone(msg: string): void {
 
 export function logError(msg: string): void {
   console.error(`\n  Error: ${msg}\n`);
+}
+
+/**
+ * Detect ATAK_VERSION from app/build.gradle.
+ * Looks for: ext.ATAK_VERSION = '5.6.0'
+ */
+export function detectAtakVersion(buildGradlePath: string): string | null {
+  if (!existsSync(buildGradlePath)) return null;
+  const content = readFileSync(buildGradlePath, 'utf-8');
+  const match = content.match(/ATAK_VERSION\s*=\s*['"](\d+\.\d+\.\d+)['"]/);
+  return match?.[1] ?? null;
+}
+
+/**
+ * Find the best matching template version for the detected ATAK version.
+ * Uses major.minor matching — e.g. ATAK 5.6.1 matches templates/5.6.0/
+ */
+export function resolveTemplateVersion(
+  templatesDir: string,
+  atakVersion: string,
+): string | null {
+  if (!existsSync(templatesDir)) return null;
+
+  const available = readdirSync(templatesDir)
+    .filter((d) => /^\d+\.\d+\.\d+$/.test(d))
+    .sort()
+    .reverse(); // newest first
+
+  // Exact match
+  if (available.includes(atakVersion)) return atakVersion;
+
+  // Major.minor match (5.6.1 → 5.6.0)
+  const [major, minor] = atakVersion.split('.');
+  const minorMatch = available.find((v) => v.startsWith(`${major}.${minor}.`));
+  if (minorMatch) return minorMatch;
+
+  // Major match (5.7.0 → latest 5.x)
+  const majorMatch = available.find((v) => v.startsWith(`${major}.`));
+  if (majorMatch) return majorMatch;
+
+  return null;
+}
+
+/**
+ * List all supported ATAK versions (template directories).
+ */
+export function listSupportedVersions(templatesDir: string): string[] {
+  if (!existsSync(templatesDir)) return [];
+  return readdirSync(templatesDir)
+    .filter((d) => /^\d+\.\d+\.\d+$/.test(d))
+    .sort();
 }
