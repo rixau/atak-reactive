@@ -1,15 +1,59 @@
 name: Publish Packages
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'sdk/package.json'
+      - 'cli/package.json'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  packages: write
 
 jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      sdk_changed: ${{ steps.check.outputs.sdk_changed }}
+      cli_changed: ${{ steps.check.outputs.cli_changed }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for version changes
+        id: check
+        run: |
+          SDK_VERSION=$(node -p "require('./sdk/package.json').version")
+          CLI_VERSION=$(node -p "require('./cli/package.json').version")
+
+          # Check if sdk/package.json version changed
+          SDK_PREV=$(git show HEAD~1:sdk/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version" 2>/dev/null || echo "")
+          CLI_PREV=$(git show HEAD~1:cli/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version" 2>/dev/null || echo "")
+
+          echo "SDK: $SDK_PREV -> $SDK_VERSION"
+          echo "CLI: $CLI_PREV -> $CLI_VERSION"
+
+          if [ "$SDK_VERSION" != "$SDK_PREV" ]; then
+            echo "sdk_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "sdk_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+          if [ "$CLI_VERSION" != "$CLI_PREV" ]; then
+            echo "cli_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "cli_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "version=$SDK_VERSION" >> $GITHUB_OUTPUT
+
   publish:
+    needs: check-version
+    if: needs.check-version.outputs.sdk_changed == 'true' || needs.check-version.outputs.cli_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,26 +63,38 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
-      - name: Build SDK
+      - name: Build and publish SDK
+        if: needs.check-version.outputs.sdk_changed == 'true'
         working-directory: sdk
         run: |
           npm install
           npm run build
-
-      - name: Publish SDK
-        working-directory: sdk
-        run: npm publish --access public
+          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Build CLI
+      - name: Build and publish CLI
+        if: needs.check-version.outputs.cli_changed == 'true'
         working-directory: cli
         run: |
           npm install
           npm run build
-
-      - name: Publish CLI
-        working-directory: cli
-        run: npm publish --access public
+          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create git tag
+        run: |
+          VERSION="v${{ needs.check-version.outputs.version }}"
+          git tag "$VERSION" || true
+          git push origin "$VERSION" || true
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="v${{ needs.check-version.outputs.version }}"
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --generate-notes \
+            || echo "Release already exists"

@@ -1,3 +1,4 @@
+.env
 # Gradle
 .gradle/
 build/
