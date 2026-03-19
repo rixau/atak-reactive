@@ -1,168 +1,223 @@
 # atak-reactive
 
-A library for building ATAK plugin UIs with React. Drop it into any existing plugin and convert screens from native Android to React one at a time — with hot-reload during development.
+Build ATAK plugin UIs with React. Add React screens to any existing plugin — one screen at a time, alongside your native Android UI — with instant hot-reload during development.
 
-## What It Is
+## How It Works
 
-Two artifacts:
+```
+Dev Machine                          Android Device
+┌──────────────┐    adb reverse     ┌──────────────────────┐
+│ Vite Dev      │◄──────────────────│ ATAK                 │
+│ Server :5173  │   tcp:5173        │  ┌──────────────────┐ │
+└──────────────┘                    │  │ Your Plugin      │ │
+                                    │  │  ┌────────────┐  │ │
+                                    │  │  │ WebView    │  │ │
+                                    │  │  │ (React UI) │  │ │
+                                    │  │  └─────┬──────┘  │ │
+                                    │  │   @JavascriptInterface
+                                    │  │  ┌─────▼──────┐  │ │
+                                    │  │  │ AtakBridge  │  │ │
+                                    │  │  │ (Java)      │  │ │
+                                    │  │  └────────────┘  │ │
+                                    │  └──────────────────┘ │
+                                    └──────────────────────┘
+```
 
-- **Java library** (`lib/`) — a `ReactiveDropDown` class that hosts a WebView with a JS bridge to ATAK. Drop the source into your plugin, register a receiver, done.
-- **TypeScript SDK** (`@atak-reactive/sdk`) — typed bridge functions and React hooks for your web UI.
+Your plugin's React UI runs in a WebView panel. A typed JavaScript bridge connects it to ATAK's map engine — markers, GPS, map events, preferences. During development, Vite serves the UI with hot module replacement. For release, assets are bundled into the APK.
 
-Your plugin keeps all its existing native screens. You add React screens alongside them. Each React screen is a `ReactiveDropDown` registered with its own intent action — same pattern as any other ATAK dropdown.
+## Packages
+
+| Package | Description | Install |
+|---------|-------------|---------|
+| `@atak-reactive/cli` | CLI tool — init, dev server, build | `npx @atak-reactive/cli init` |
+| `@atak-reactive/sdk` | TypeScript bridge + React hooks | `npm install @atak-reactive/sdk` |
 
 ## Quick Start
 
-### 1. Add the library to your plugin
+### 1. Initialize
 
-Copy the `lib/src/main/java/com/atakmap/android/reactive/` folder into your plugin's source tree.
+From the root of any existing ATAK plugin:
 
-Add to `build.gradle`:
-```gradle
-implementation 'androidx.webkit:webkit:1.12.1'
+```bash
+npx @atak-reactive/cli init
 ```
 
-Add to `proguard-gradle.txt`:
-```
--keepclassmembers class * {
-    @android.webkit.JavascriptInterface *;
-}
-```
+This automatically:
+- Copies the Java bridge source into your plugin
+- Patches `build.gradle` (webkit dependency, asset source dir)
+- Patches `proguard-gradle.txt` (JavascriptInterface keep rule)
+- Scaffolds a `web/` folder with React + Vite + TypeScript
+- Installs npm dependencies
 
-### 2. Create a React screen
+### 2. Register a React screen
 
-In your `MapComponent.onCreate()`:
+Add to your `MapComponent.onCreate()`:
 
 ```java
-ReactiveDropDown settingsView = new ReactiveDropDown(view, context, "web/index.html");
+ReactiveDropDown myScreen = new ReactiveDropDown(view, context, "web/index.html");
 DocumentedIntentFilter f = new DocumentedIntentFilter();
-f.addAction("com.myplugin.SHOW_SETTINGS", "React settings screen");
-registerDropDownReceiver(settingsView, f);
+f.addAction("com.myplugin.SHOW_SCREEN", "My React screen");
+registerDropDownReceiver(myScreen, f);
 ```
 
-That's it. Three lines. Your existing native screens are untouched.
+Three lines. Your existing native screens are untouched.
 
-### 3. Build the React UI
-
-Create a `web/` folder in your plugin with a Vite + React + TypeScript project:
+### 3. Develop
 
 ```bash
-npm create vite@latest web -- --template react-ts
-cd web
-npm install @atak-reactive/sdk
+npx @atak-reactive/cli dev
 ```
 
-```tsx
-import { useSelfLocation, useMapEvent, addMarker } from '@atak-reactive/sdk';
+This runs `adb reverse` and starts the Vite dev server. Open your React screen in ATAK — edit `web/src/App.tsx` and changes appear instantly. No rebuild, no reinstall, no ATAK restart.
 
-function MySettings() {
-  const location = useSelfLocation();
-  const lastClick = useMapEvent('mapClick');
-
-  return (
-    <div>
-      <p>You are at: {location?.lat}, {location?.lng}</p>
-      <button onClick={() => lastClick && addMarker({
-        lat: lastClick.lat, lng: lastClick.lng, title: "Pin"
-      })}>
-        Drop Marker
-      </button>
-    </div>
-  );
-}
-```
-
-### 4. Develop with hot-reload
+### 4. Build for release
 
 ```bash
-# Terminal 1: Vite dev server
-adb reverse tcp:5173 tcp:5173
-cd web && npm run dev
-
-# Terminal 2: Build and install plugin (one-time)
-./gradlew installCivDebug
+npx @atak-reactive/cli build
 ```
 
-Open the React screen in ATAK. Edit your React code — changes appear instantly.
-
-### 5. Build for release
-
-The Gradle build bundles web assets into the APK. In debug mode, the WebView tries the dev server first and falls back to bundled assets if it's not running.
+Builds web assets into `web/dist-assets/web/`. Gradle bundles them into the APK automatically. The WebView loads from bundled assets in release mode — no dev server needed.
 
 ## Bridge API
 
 ### Functions
 
-| Function | Returns | Description |
-|----------|---------|-------------|
-| `getSelfLocation()` | `SelfLocation \| null` | GPS position |
-| `getMapCenter()` | `GeoPoint \| null` | Map center |
-| `addMarker(opts)` | `string \| null` | Add marker, returns UID |
-| `updateMarker(uid, opts)` | `boolean` | Update marker properties |
-| `removeMarker(uid)` | `boolean` | Remove marker |
-| `panTo(lat, lng, zoom?)` | `void` | Pan map |
-| `getPreference(key)` | `string \| null` | Read ATAK preference |
+```tsx
+import { getSelfLocation, getMapCenter, addMarker, updateMarker, removeMarker, panTo, getPreference } from '@atak-reactive/sdk';
+
+const location = getSelfLocation();       // { lat, lng, alt, bearing, speed }
+const center = getMapCenter();            // { lat, lng }
+const uid = addMarker({ lat: 38.89, lng: -77.03, title: "Pin" });
+updateMarker(uid, { title: "Updated" });
+removeMarker(uid);
+panTo(38.89, -77.03, 15);
+const val = getPreference("some.key");
+```
 
 ### React Hooks
 
-| Hook | Returns | Description |
-|------|---------|-------------|
-| `useSelfLocation()` | `SelfLocation \| null` | Live GPS position |
-| `useMapEvent('mapClick')` | `MapClickEvent \| null` | Last map tap |
-| `useMapEvent('mapLongPress')` | `MapClickEvent \| null` | Last long press |
-| `useMapEvent('itemSelected')` | `ItemSelectedEvent \| null` | Last item tap |
+```tsx
+import { useSelfLocation, useMapEvent } from '@atak-reactive/sdk';
+
+function MyScreen() {
+  const location = useSelfLocation();              // updates on GPS change
+  const lastClick = useMapEvent('mapClick');        // { lat, lng }
+  const selected = useMapEvent('itemSelected');     // { uid, type, title, lat, lng }
+
+  return (
+    <div>
+      <p>You are at: {location?.lat}, {location?.lng}</p>
+      <p>Last click: {lastClick?.lat}, {lastClick?.lng}</p>
+    </div>
+  );
+}
+```
+
+### Events
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `selfLocationChanged` | `{ lat, lng, alt, bearing, speed }` | GPS position updated |
+| `mapClick` | `{ lat, lng }` | User tapped the map |
+| `mapLongPress` | `{ lat, lng }` | User long-pressed the map |
+| `itemSelected` | `{ uid, type, title, lat, lng }` | User tapped a map item |
 
 ### Custom Bridges
 
-Add plugin-specific JS bridges:
+Add plugin-specific functionality beyond the built-in bridge:
 
 ```java
-public class MyBridge {
+public class MyPluginBridge {
     @JavascriptInterface
-    public String getData() { return "{\"hello\": true}"; }
+    public String getCustomData() {
+        return "{\"status\": \"ok\"}";
+    }
 }
 
-// Exposed as window._myBridge
+// Pass as additional bridge — exposed as window._myPluginBridge
 ReactiveDropDown view = new ReactiveDropDown(mapView, ctx, "web/index.html",
-    new MyBridge());
+    true, new MyPluginBridge());
 ```
 
-## Example
+### Mock Bridge
 
-The `example/` directory is a modified helloworld plugin with one React screen added alongside all the existing native screens. See:
+The SDK includes a mock bridge for browser-only development. When no device is connected, bridge calls return fake data and log to the console. Your React UI shows a "MOCK" badge automatically.
 
-- `ReactSettingsReceiver.java` — the new receiver (20 lines)
-- `HelloWorldMapComponent.java` — 3 lines added to register it
-- `example/web/` — the React UI
+```bash
+cd web && npm run dev
+# Open http://localhost:5173 in a browser — no device needed
+```
+
+## How It Integrates
+
+The library uses ATAK's standard plugin patterns. Each React screen is a `ReactiveDropDown` (extends `DropDownReceiver`) registered with a `DocumentedIntentFilter` — the same way native ATAK screens work. Multiple React screens and native screens coexist in the same plugin.
+
+```
+your-plugin/
+├── app/src/main/java/com/yourplugin/
+│   ├── YourMapComponent.java          # registers native + React receivers
+│   ├── NativeScreen.java             # existing native UI (untouched)
+│   └── com/atakmap/android/reactive/  # copied by CLI init
+│       ├── ReactiveDropDown.java
+│       ├── DevReloadHelper.java
+│       └── bridge/
+│           ├── AtakBridge.java
+│           ├── BridgeEventEmitter.java
+│           └── MarkerManager.java
+├── web/                               # created by CLI init
+│   ├── src/
+│   │   ├── App.tsx                    # your React UI
+│   │   └── main.tsx
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── tsconfig.json
+└── app/build.gradle                   # patched by CLI init
+```
+
+## Incremental Migration
+
+Convert screens one at a time:
+
+1. Pick a screen (settings panel, detail view, list)
+2. Build it in React in `web/src/`
+3. Register a `ReactiveDropDown` for it
+4. Route the intent to the new receiver
+5. Delete the old native receiver when ready
+
+Old screens keep working. New screens hot-reload. No big bang rewrite.
 
 ## Project Structure
 
 ```
 atak-reactive/
-├── lib/                          # Java library source
-│   └── src/main/java/.../reactive/
-│       ├── ReactiveDropDown.java     # Main class — WebView + bridge + lifecycle
-│       ├── DevReloadHelper.java      # Debug plugin reload utility
-│       └── bridge/
-│           ├── AtakBridge.java       # @JavascriptInterface methods
-│           ├── BridgeEventEmitter.java
-│           └── MarkerManager.java
+├── cli/                          # @atak-reactive/cli (npm package)
+│   └── src/
+│       ├── commands/             # init, dev, build
+│       ├── templates/            # Java source + web scaffold
+│       └── index.ts
 │
 ├── sdk/                          # @atak-reactive/sdk (npm package)
 │   └── src/
-│       ├── types.ts, bridge.ts, events.ts, hooks.ts, mock.ts, index.ts
+│       ├── bridge.ts             # typed bridge wrappers
+│       ├── events.ts             # Java → JS event system
+│       ├── hooks.ts              # React hooks
+│       ├── mock.ts               # browser-only mock bridge
+│       └── types.ts              # TypeScript interfaces
 │
-└── example/                      # Modified helloworld plugin
-    ├── app/                      # Standard ATAK plugin
+├── lib/                          # Java library source (canonical copy)
+│   └── src/main/java/.../reactive/
+│
+└── example/                      # Working example plugin
+    ├── app/                      # ATAK plugin (plugintemplate base)
     └── web/                      # React UI
 ```
 
 ## Compatibility
 
-- ATAK 5.5.x / 5.6.x
+- ATAK 5.6.x
 - Android 5.0+ (API 21+)
 - Java 17
-- Node.js 18+
+- Node.js 20+
 - React 18+
 
 ## License
