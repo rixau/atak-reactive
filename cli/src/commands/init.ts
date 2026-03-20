@@ -85,17 +85,25 @@ export function init(): void {
   // 3. Patch build.gradle — webkit dependency
   logStep('Patching app/build.gradle...');
 
-  const webkitDep = "    implementation 'androidx.webkit:webkit:1.12.1'";
-  const webkitPatched = patchGradleBlock(
-    buildGradle,
-    'dependencies {',
-    'androidx.webkit',
-    webkitDep,
-  );
-  if (webkitPatched) {
-    log('Added androidx.webkit dependency');
-  } else {
+  const gradleRaw = readFileSync(buildGradle, 'utf-8');
+  if (gradleRaw.includes('androidx.webkit')) {
     log('androidx.webkit dependency already present');
+  } else {
+    // Find the project-level dependencies block (has "implementation fileTree")
+    // not the buildscript dependencies block (has "classpath")
+    const depsRegex = /dependencies\s*\{[^}]*implementation\s+fileTree/;
+    const depsMatch = depsRegex.exec(gradleRaw);
+    if (depsMatch) {
+      const depsIdx = gradleRaw.indexOf('dependencies', depsMatch.index);
+      const braceIdx = gradleRaw.indexOf('{', depsIdx);
+      const webkitLine = "\n    implementation 'androidx.webkit:webkit:1.12.1'";
+      const patched = gradleRaw.slice(0, braceIdx + 1) + webkitLine + gradleRaw.slice(braceIdx + 1);
+      writeFileSync(buildGradle, patched);
+      log('Added androidx.webkit dependency');
+    } else {
+      log('Warning: Could not find project dependencies block — add manually:');
+      log("  implementation 'androidx.webkit:webkit:1.12.1'");
+    }
   }
 
   // 4. Patch build.gradle — assets srcDir
