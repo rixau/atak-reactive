@@ -30,7 +30,7 @@ Your plugin's React UI runs in a WebView panel. A typed JavaScript bridge connec
 | Package | Description | Install |
 |---------|-------------|---------|
 | `@atak-reactive/cli` | CLI tool — init, dev server, build | `npx @atak-reactive/cli init` |
-| `@atak-reactive/sdk` | TypeScript bridge + React hooks | `npm install @atak-reactive/sdk` |
+| `@atak-reactive/sdk` | TypeScript bridge + React hooks | Installed automatically by `init` |
 
 ## Quick Start
 
@@ -43,26 +43,30 @@ npx @atak-reactive/cli init
 ```
 
 This automatically:
+- Detects your ATAK version from `build.gradle`
 - Copies the Java bridge source into your plugin
 - Patches `build.gradle` (webkit dependency, asset source dir)
 - Patches `proguard-gradle.txt` (JavascriptInterface keep rule)
-- Scaffolds a `web/` folder with React + Vite + TypeScript
+- Scaffolds a `web/` folder with React + Vite + TypeScript + `@atak-reactive/sdk`
+- Registers a `ReactiveDropDown` in your MapComponent (auto-detected)
 - Installs npm dependencies
 
-### 2. Register a React screen
+No manual Java editing required.
 
-Add to your `MapComponent.onCreate()`:
+### 2. Build and install
 
-```java
-ReactiveDropDown myScreen = new ReactiveDropDown(view, context, "web/index.html");
-DocumentedIntentFilter f = new DocumentedIntentFilter();
-f.addAction("com.myplugin.SHOW_SCREEN", "My React screen");
-registerDropDownReceiver(myScreen, f);
+```bash
+# Build web assets
+npx @atak-reactive/cli build
+
+# Build the plugin APK
+./gradlew assembleCivDebug
+
+# Install on device/emulator
+adb install -r app/build/outputs/apk/civ/debug/*.apk
 ```
 
-Three lines. Your existing native screens are untouched.
-
-### 3. Develop
+### 3. Develop with hot-reload
 
 ```bash
 npx @atak-reactive/cli dev
@@ -70,13 +74,34 @@ npx @atak-reactive/cli dev
 
 This runs `adb reverse` and starts the Vite dev server. Open your React screen in ATAK — edit `web/src/App.tsx` and changes appear instantly. No rebuild, no reinstall, no ATAK restart.
 
-### 4. Build for release
-
+To trigger the React screen:
 ```bash
-npx @atak-reactive/cli build
+adb shell am broadcast -a com.yourplugin.SHOW_REACT
 ```
 
-Builds web assets into `web/dist-assets/web/`. Gradle bundles them into the APK automatically. The WebView loads from bundled assets in release mode — no dev server needed.
+The `init` command prints the exact intent action for your plugin.
+
+### That's it
+
+Day-to-day workflow is just `npx @atak-reactive/cli dev` and editing React code. Your existing native screens are untouched.
+
+## What `init` Does
+
+The CLI detects your plugin's structure and makes minimal, additive changes:
+
+| What | Where | Change |
+|------|-------|--------|
+| Java bridge source | `app/src/main/java/.../reactive/` | Copied (5 files) |
+| WebKit dependency | `app/build.gradle` | One line added to `dependencies {}` |
+| Asset source dir | `app/build.gradle` | One line added to `sourceSets.main {}` |
+| Proguard rule | `app/proguard-gradle.txt` | Appended |
+| Web project | `web/` | Created with React + Vite + TypeScript |
+| MapComponent | Your existing MapComponent | Registration injected after last receiver |
+| .gitignore | `.gitignore` | `dist-assets/` appended |
+
+Running `init` again is safe — it detects what's already there and skips it.
+
+If no MapComponent is found, or multiple are found, the CLI prints the code snippet to add manually.
 
 ## Bridge API
 
@@ -141,80 +166,60 @@ ReactiveDropDown view = new ReactiveDropDown(mapView, ctx, "web/index.html",
 
 ### Mock Bridge
 
-The SDK includes a mock bridge for browser-only development. When no device is connected, bridge calls return fake data and log to the console. Your React UI shows a "MOCK" badge automatically.
+The SDK includes a mock bridge for browser-only development. When no device is connected, bridge calls return fake data and log to the console.
 
 ```bash
-cd web && npm run dev
+cd web && npx vite
 # Open http://localhost:5173 in a browser — no device needed
-```
-
-## How It Integrates
-
-The library uses ATAK's standard plugin patterns. Each React screen is a `ReactiveDropDown` (extends `DropDownReceiver`) registered with a `DocumentedIntentFilter` — the same way native ATAK screens work. Multiple React screens and native screens coexist in the same plugin.
-
-```
-your-plugin/
-├── app/src/main/java/com/yourplugin/
-│   ├── YourMapComponent.java          # registers native + React receivers
-│   ├── NativeScreen.java             # existing native UI (untouched)
-│   └── com/atakmap/android/reactive/  # copied by CLI init
-│       ├── ReactiveDropDown.java
-│       ├── DevReloadHelper.java
-│       └── bridge/
-│           ├── AtakBridge.java
-│           ├── BridgeEventEmitter.java
-│           └── MarkerManager.java
-├── web/                               # created by CLI init
-│   ├── src/
-│   │   ├── App.tsx                    # your React UI
-│   │   └── main.tsx
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── tsconfig.json
-└── app/build.gradle                   # patched by CLI init
 ```
 
 ## Incremental Migration
 
 Convert screens one at a time:
 
-1. Pick a screen (settings panel, detail view, list)
-2. Build it in React in `web/src/`
-3. Register a `ReactiveDropDown` for it
-4. Route the intent to the new receiver
-5. Delete the old native receiver when ready
+1. Build the new screen in React in `web/src/`
+2. Register another `ReactiveDropDown` with a new intent action
+3. Route the intent to the new receiver (or trigger from a button in your native UI)
+4. Delete the old native receiver when ready
 
 Old screens keep working. New screens hot-reload. No big bang rewrite.
 
 ## Project Structure
 
 ```
-atak-reactive/
-├── cli/                          # @atak-reactive/cli (npm package)
-│   └── src/
-│       ├── commands/             # init, dev, build
-│       ├── templates/            # Java source + web scaffold
-│       └── index.ts
-│
-├── sdk/                          # @atak-reactive/sdk (npm package)
-│   └── src/
-│       ├── bridge.ts             # typed bridge wrappers
-│       ├── events.ts             # Java → JS event system
-│       ├── hooks.ts              # React hooks
-│       ├── mock.ts               # browser-only mock bridge
-│       └── types.ts              # TypeScript interfaces
-│
-├── lib/                          # Java library source (canonical copy)
-│   └── src/main/java/.../reactive/
-│
-└── example/                      # Working example plugin
-    ├── app/                      # ATAK plugin (plugintemplate base)
-    └── web/                      # React UI
+your-plugin/                          (after running init)
+├── app/src/main/java/
+│   ├── com/yourplugin/
+│   │   ├── YourMapComponent.java     ← registration auto-injected here
+│   │   └── NativeScreen.java        ← untouched
+│   └── com/atakmap/android/reactive/ ← copied by init
+│       ├── ReactiveDropDown.java
+│       ├── DevReloadHelper.java
+│       └── bridge/
+│           ├── AtakBridge.java
+│           ├── BridgeEventEmitter.java
+│           └── MarkerManager.java
+├── web/                              ← created by init
+│   ├── src/
+│   │   ├── App.tsx                   ← your React UI
+│   │   └── main.tsx
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── tsconfig.json
+└── app/build.gradle                  ← patched by init
 ```
+
+## CLI Commands
+
+| Command | What it does |
+|---------|-------------|
+| `npx @atak-reactive/cli init` | Set up atak-reactive in an existing ATAK plugin |
+| `npx @atak-reactive/cli dev` | Run `adb reverse` + start Vite dev server |
+| `npx @atak-reactive/cli build` | Build web assets for release |
 
 ## Compatibility
 
-- ATAK 5.6.x
+- ATAK 5.6.x (version-specific templates, more versions coming)
 - Android 5.0+ (API 21+)
 - Java 17
 - Node.js 20+
