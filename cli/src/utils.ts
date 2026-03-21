@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { execSync, type SpawnSyncReturns } from 'child_process';
 
 export function findProjectRoot(startDir: string = process.cwd()): string | null {
@@ -125,4 +125,124 @@ export function listSupportedVersions(templatesDir: string): string[] {
   return readdirSync(templatesDir)
     .filter((d) => /^\d+\.\d+\.\d+$/.test(d))
     .sort();
+}
+
+/**
+ * Recursively find all .java files in a directory.
+ */
+function findJavaFiles(dir: string): string[] {
+  const results: string[] = [];
+  if (!existsSync(dir)) return results;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...findJavaFiles(fullPath));
+    } else if (entry.name.endsWith('.java')) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+export interface MapComponentInfo {
+  filePath: string;
+  relativePath: string;
+  packageName: string;
+  className: string;
+}
+
+/**
+ * Find MapComponent files that contain registerDropDownReceiver.
+ */
+export function findMapComponents(appDir: string): MapComponentInfo[] {
+  const srcDir = join(appDir, 'src/main/java');
+  const javaFiles = findJavaFiles(srcDir);
+  const results: MapComponentInfo[] = [];
+
+  for (const filePath of javaFiles) {
+    // Skip our own library source
+    if (filePath.includes('/reactive/')) continue;
+
+    const content = readFileSync(filePath, 'utf-8');
+    if (content.includes('registerDropDownReceiver')) {
+      const pkgMatch = content.match(/^package\s+([\w.]+);/m);
+      const classMatch = content.match(/class\s+(\w+)/);
+      if (pkgMatch && classMatch) {
+        results.push({
+          filePath,
+          relativePath: relative(appDir, filePath),
+          packageName: pkgMatch[1]!,
+          className: classMatch[1]!,
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Derive an intent action from the package name.
+ */
+export function deriveIntentAction(packageName: string): string {
+  return `${packageName}.SHOW_REACT`;
+}
+
+/**
+ * Inject ReactiveDropDown registration into a MapComponent file.
+ * Returns what was done.
+ */
+export function injectReactiveRegistration(
+  filePath: string,
+  intentAction: string,
+): 'injected' | 'already_exists' | 'failed' {
+  const content = readFileSync(filePath, 'utf-8');
+
+  // Check if already registered
+  if (content.includes('ReactiveDropDown')) {
+    return 'already_exists';
+  }
+
+  // Find the last registerDropDownReceiver call to insert after
+  const registerPattern = /this\.registerDropDownReceiver\([^)]+\);/g;
+  let lastMatch: RegExpExecArray | null = null;
+  let match: RegExpExecArray | null;
+  while ((match = registerPattern.exec(content)) !== null) {
+    lastMatch = match;
+  }
+
+  if (!lastMatch) {
+    return 'failed';
+  }
+
+  const insertPos = lastMatch.index + lastMatch[0].length;
+
+  const registration = `
+
+        // atak-reactive: React-based screen
+        ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");
+        DocumentedIntentFilter reactFilter = new DocumentedIntentFilter();
+        reactFilter.addAction("${intentAction}",
+                "React screen powered by atak-reactive");
+        this.registerDropDownReceiver(reactScreen, reactFilter);`;
+
+  // Add import if missing
+  let patched = content;
+  if (!content.includes('import com.atakmap.android.reactive.ReactiveDropDown')) {
+    const firstImport = content.indexOf('import ');
+    if (firstImport !== -1) {
+      patched = content.slice(0, firstImport) +
+        'import com.atakmap.android.reactive.ReactiveDropDown;\n' +
+        content.slice(firstImport);
+    }
+  }
+
+  // Recalculate insert position after import was added
+  const offset = patched.length - content.length;
+  const adjustedPos = insertPos + offset;
+
+  patched = patched.slice(0, adjustedPos) + registration + patched.slice(adjustedPos);
+
+  writeFileSync(filePath, patched);
+  return 'injected';
 }
