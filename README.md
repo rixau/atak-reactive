@@ -21,7 +21,7 @@ This sets up everything — Java bridge source, Gradle config, web project with 
 ### 2. Build and install
 
 ```bash
-cd web && npm run build && cd ..
+npx @atak-reactive/cli build
 ./gradlew assembleCivDebug
 adb install -r app/build/outputs/apk/civ/debug/*.apk
 ```
@@ -29,7 +29,7 @@ adb install -r app/build/outputs/apk/civ/debug/*.apk
 ### 3. Develop
 
 ```bash
-cd web && npm run dev
+npx @atak-reactive/cli dev
 ```
 
 Edit `web/src/App.tsx` — changes appear instantly in ATAK. No rebuild, no reinstall, no restart.
