@@ -158,9 +158,12 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private static final String LOADING_HTML =
             "data:text/html;charset=utf-8," +
             "<html><body style='margin:0;background:%231a1a2e;display:flex;" +
-            "align-items:center;justify-content:center;height:100vh;" +
-            "font-family:sans-serif;color:%238d99ae;font-size:14px'>" +
-            "Loading...</body></html>";
+            "flex-direction:column;align-items:center;justify-content:center;" +
+            "height:100vh;font-family:sans-serif;color:%238d99ae'>" +
+            "<div style='font-size:13px;letter-spacing:1px;text-transform:uppercase;" +
+            "opacity:0.5;margin-bottom:8px'>atak-reactive dev</div>" +
+            "<div style='font-size:14px'>Connecting to dev server...</div>" +
+            "</body></html>";
 
     @Override
     public void onReceive(Context context, Intent intent) {
