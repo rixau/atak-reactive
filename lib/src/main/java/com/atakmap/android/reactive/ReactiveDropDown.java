@@ -151,13 +151,22 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         }
     }
 
+    private static final String LOADING_HTML =
+            "data:text/html;charset=utf-8," +
+            "<html><body style='margin:0;background:%231a1a2e;display:flex;" +
+            "align-items:center;justify-content:center;height:100vh;" +
+            "font-family:sans-serif;color:%238d99ae;font-size:14px'>" +
+            "Loading...</body></html>";
+
     @Override
     public void onReceive(Context context, Intent intent) {
         showDropDown(container, HALF_WIDTH, FULL_HEIGHT,
                 FULL_WIDTH, HALF_HEIGHT, false, this);
 
         if (devMode) {
-            // Check if dev server is reachable before loading — avoids error flash
+            // Show loading screen while checking dev server
+            webView.loadUrl(LOADING_HTML);
+
             new Thread(() -> {
                 boolean reachable = isDevServerReachable();
                 webView.post(() -> {
@@ -183,7 +192,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private static boolean isDevServerReachable() {
         try {
             java.net.Socket socket = new java.net.Socket();
-            socket.connect(new java.net.InetSocketAddress("localhost", 5173), 300);
+            socket.connect(new java.net.InetSocketAddress("localhost", 5173), 500);
             socket.close();
             return true;
         } catch (Exception e) {
