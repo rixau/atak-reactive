@@ -1,32 +1,25 @@
-import { useSelfLocation, useMapEvent, addMarker, removeMarker, panTo } from '@atak-reactive/sdk';
-import type { MarkerEntry } from '../App';
+import { useSelfLocation, useMapEvent, useMapItems, addMarker, removeMarker, panTo } from '@atak-reactive/sdk';
 
-interface Props {
-  markers: MarkerEntry[];
-  setMarkers: React.Dispatch<React.SetStateAction<MarkerEntry[]>>;
-}
-
-export function MarkersPage({ markers, setMarkers }: Props) {
+export function MarkersPage() {
   const location = useSelfLocation();
   const lastClick = useMapEvent('mapClick');
+  const allItems = useMapItems({ visible: true });
+  const items = allItems.filter(m => m.lat != null && m.lng != null);
 
   const dropAtSelf = () => {
     if (!location) return;
-    const title = `Self ${markers.length + 1}`;
-    const uid = addMarker({ lat: location.lat, lng: location.lng, title });
-    if (uid) setMarkers(p => [...p, { uid, title, lat: location.lat, lng: location.lng }]);
+    const title = `Self ${items.length + 1}`;
+    addMarker({ lat: location.lat, lng: location.lng, title });
   };
 
   const dropAtClick = () => {
     if (!lastClick) return;
-    const title = `Click ${markers.length + 1}`;
-    const uid = addMarker({ lat: lastClick.lat, lng: lastClick.lng, title });
-    if (uid) setMarkers(p => [...p, { uid, title, lat: lastClick.lat, lng: lastClick.lng }]);
+    const title = `Click ${items.length + 1}`;
+    addMarker({ lat: lastClick.lat, lng: lastClick.lng, title });
   };
 
   const remove = (uid: string) => {
     removeMarker(uid);
-    setMarkers(p => p.filter(m => m.uid !== uid));
   };
 
   return (
@@ -43,22 +36,25 @@ export function MarkersPage({ markers, setMarkers }: Props) {
         </button>
       </div>
 
-      {markers.length === 0 ? (
+      {items.length === 0 ? (
         <p style={{ color: '#555', fontStyle: 'italic', textAlign: 'center', padding: 32 }}>
-          No markers yet. Drop one using the buttons above.
+          No map items. Drop a marker or add one in ATAK.
         </p>
       ) : (
         <div style={{ background: '#16213e', borderRadius: 8, overflow: 'hidden' }}>
-          {markers.map((m, i) => (
+          {items.map((m, i) => (
             <div key={m.uid} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               padding: '10px 12px',
-              borderBottom: i < markers.length - 1 ? '1px solid #1a2744' : 'none',
+              borderBottom: i < items.length - 1 ? '1px solid #1a2744' : 'none',
             }}>
               <div>
-                <div style={{ color: '#edf2f4', fontSize: 13, fontWeight: 500 }}>{m.title}</div>
+                <div style={{ color: '#edf2f4', fontSize: 13, fontWeight: 500 }}>
+                  {m.title || m.callsign || m.uid.slice(0, 12)}
+                </div>
                 <div style={{ color: '#555', fontSize: 11, fontFamily: 'monospace' }}>
-                  {m.lat.toFixed(4)}, {m.lng.toFixed(4)}
+                  {m.lat != null ? m.lat.toFixed(4) : '?'}, {m.lng != null ? m.lng.toFixed(4) : '?'}
+                  {m.type ? ` · ${m.type}` : ''}
                 </div>
               </div>
               <button

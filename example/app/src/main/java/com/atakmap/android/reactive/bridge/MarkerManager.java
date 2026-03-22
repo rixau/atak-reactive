@@ -9,6 +9,8 @@ import com.atakmap.coremap.maps.coords.GeoPoint;
 
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -105,6 +107,10 @@ public class MarkerManager {
         }
 
         return false;
+    }
+
+    public List<String> getMarkerUids() {
+        return new ArrayList<>(managedMarkers.keySet());
     }
 
     public void removeAll() {

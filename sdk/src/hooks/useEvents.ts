@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import type { AtakEventMap, AtakEventName, SelfLocation } from './types';
-import { getSelfLocation as bridgeGetSelfLocation } from './bridge';
-import { on, off } from './events';
+import type { AtakEventMap, AtakEventName, SelfLocation } from '../types';
+import { getSelfLocation as bridgeGetSelfLocation } from '../bridge';
+import { on, off } from '../events';
 
 /**
  * Hook that returns the current self location.
@@ -11,11 +11,9 @@ export function useSelfLocation(): SelfLocation | null {
   const [location, setLocation] = useState<SelfLocation | null>(null);
 
   useEffect(() => {
-    // Initial fetch
     const loc = bridgeGetSelfLocation();
     setLocation(loc);
 
-    // Subscribe to updates
     const handler = (data: SelfLocation) => setLocation(data);
     on('selfLocationChanged', handler);
     return () => off('selfLocationChanged', handler);

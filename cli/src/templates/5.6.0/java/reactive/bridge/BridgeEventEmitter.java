@@ -10,6 +10,7 @@ import com.atakmap.android.maps.PointMapItem;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -156,6 +157,19 @@ public class BridgeEventEmitter {
         }
 
         Log.d(TAG, "Stopped listening for map events");
+    }
+
+    public void emitMapItemsChanged(JSONArray added, JSONArray removed,
+            JSONArray updated) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("added", added);
+            payload.put("removed", removed);
+            payload.put("updated", updated);
+            emit("mapItemsChanged", payload.toString());
+        } catch (JSONException e) {
+            Log.e(TAG, "Error emitting mapItemsChanged", e);
+        }
     }
 
     private void emit(String eventName, String jsonPayload) {

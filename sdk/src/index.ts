@@ -8,13 +8,33 @@ export {
   removeMarker,
   panTo,
   getPreference,
+  getManagedUids,
 } from './bridge';
+
+// Map item queries
+export {
+  getMapItemsSnapshot,
+  getMapItem,
+  getMapGroups,
+  getPluginMarkers,
+} from './mapItems';
+
+// Map item store
+export { mapItemStore, matchesFilter } from './MapItemStore';
 
 // Event system
 export { on, off } from './events';
 
 // React hooks
-export { useSelfLocation, useMapEvent, useAtakEvent } from './hooks';
+export {
+  useSelfLocation,
+  useMapEvent,
+  useAtakEvent,
+  useMapItems,
+  useMapItem,
+  useMapGroups,
+  usePluginMarkers,
+} from './hooks';
 
 // Types
 export type {
@@ -24,6 +44,10 @@ export type {
   MarkerUpdateOptions,
   MapClickEvent,
   ItemSelectedEvent,
+  MapItemData,
+  MapItemFilter,
+  MapGroupData,
+  MapItemsChangedEvent,
   AtakEventName,
   AtakEventMap,
 } from './types';

@@ -27,9 +27,12 @@ export function getMapCenter(): GeoPoint | null {
   return JSON.parse(raw) as GeoPoint;
 }
 
+const managedUids = new Set<string>();
+
 export function addMarker(options: MarkerOptions): string | null {
   const raw = getBridge().addMarker(JSON.stringify(options));
   if (raw === 'null') return null;
+  managedUids.add(raw);
   return raw;
 }
 
@@ -41,7 +44,12 @@ export function updateMarker(
 }
 
 export function removeMarker(uid: string): boolean {
+  managedUids.delete(uid);
   return getBridge().removeMarker(uid) === 'true';
+}
+
+export function getManagedUids(): ReadonlySet<string> {
+  return managedUids;
 }
 
 export function panTo(lat: number, lng: number, zoom?: number): void {

@@ -2,6 +2,8 @@ package com.atakmap.android.reactive.bridge;
 
 import android.webkit.JavascriptInterface;
 
+import com.atakmap.android.maps.MapGroup;
+import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
 import com.atakmap.android.maps.PointMapItem;
@@ -9,9 +11,11 @@ import com.atakmap.android.preference.AtakPreferences;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.List;
 import java.util.UUID;
 
 public class AtakBridge {
@@ -21,11 +25,13 @@ public class AtakBridge {
     private final MapView mapView;
     private final BridgeEventEmitter emitter;
     private final MarkerManager markerManager;
+    private final MapItemEventRelay relay;
 
     public AtakBridge(MapView mapView, BridgeEventEmitter emitter) {
         this.mapView = mapView;
         this.emitter = emitter;
         this.markerManager = new MarkerManager(mapView);
+        this.relay = new MapItemEventRelay(mapView, emitter);
     }
 
     @JavascriptInterface
@@ -130,7 +136,101 @@ public class AtakBridge {
         emitter.unsubscribe(eventName);
     }
 
+    @JavascriptInterface
+    public String getMapItemsSnapshot() {
+        try {
+            JSONArray result = new JSONArray();
+            MapGroup root = mapView.getRootGroup();
+            if (root == null) return "[]";
+            root.deepForEachItem(new MapGroup.MapItemsCallback() {
+                @Override
+                public boolean onItemFunction(MapItem item) {
+                    try {
+                        result.put(MapItemSerializer.serialize(item));
+                    } catch (JSONException e) {
+                        Log.e(TAG, "Error serializing item in snapshot", e);
+                    }
+                    return false;
+                }
+            });
+            return result.toString();
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting map items snapshot", e);
+            return "[]";
+        }
+    }
+
+    @JavascriptInterface
+    public String getMapItem(String uid) {
+        try {
+            MapItem item = mapView.getRootGroup().deepFindUID(uid);
+            if (item == null) return "null";
+            return MapItemSerializer.serialize(item).toString();
+        } catch (JSONException e) {
+            Log.e(TAG, "Error getting map item: " + uid, e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String getMapGroups() {
+        try {
+            MapGroup root = mapView.getRootGroup();
+            JSONArray result = new JSONArray();
+            for (MapGroup child : root.getChildGroups()) {
+                result.put(serializeGroup(child));
+            }
+            return result.toString();
+        } catch (JSONException e) {
+            Log.e(TAG, "Error getting map groups", e);
+            return "[]";
+        }
+    }
+
+    @JavascriptInterface
+    public String getPluginMarkers() {
+        try {
+            JSONArray result = new JSONArray();
+            List<String> uids = markerManager.getMarkerUids();
+            for (String uid : uids) {
+                MapItem item = mapView.getRootGroup().deepFindUID(uid);
+                if (item != null) {
+                    result.put(MapItemSerializer.serialize(item));
+                }
+            }
+            return result.toString();
+        } catch (JSONException e) {
+            Log.e(TAG, "Error getting plugin markers", e);
+            return "[]";
+        }
+    }
+
+    @JavascriptInterface
+    public void startMapItemStream() {
+        relay.start();
+    }
+
+    @JavascriptInterface
+    public void stopMapItemStream() {
+        relay.stop();
+    }
+
+    private JSONObject serializeGroup(MapGroup group) throws JSONException {
+        JSONObject json = new JSONObject();
+        json.put("name", group.getFriendlyName());
+        json.put("itemCount", group.getItemCount());
+
+        JSONArray children = new JSONArray();
+        for (MapGroup child : group.getChildGroups()) {
+            children.put(serializeGroup(child));
+        }
+        json.put("childGroups", children);
+
+        return json;
+    }
+
     public void dispose() {
         markerManager.removeAll();
+        relay.dispose();
     }
 }

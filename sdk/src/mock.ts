@@ -55,4 +55,32 @@ export const mockBridge: NativeBridge = {
   unsubscribe(eventName: string) {
     console.log('[atak mock] unsubscribe:', eventName);
   },
+
+  getMapItemsSnapshot() {
+    console.log('[atak mock] getMapItemsSnapshot');
+    return '[]';
+  },
+
+  getMapItem(uid: string) {
+    console.log('[atak mock] getMapItem:', uid);
+    return 'null';
+  },
+
+  getMapGroups() {
+    console.log('[atak mock] getMapGroups');
+    return '[]';
+  },
+
+  getPluginMarkers() {
+    console.log('[atak mock] getPluginMarkers');
+    return '[]';
+  },
+
+  startMapItemStream() {
+    console.log('[atak mock] startMapItemStream');
+  },
+
+  stopMapItemStream() {
+    console.log('[atak mock] stopMapItemStream');
+  },
 };

@@ -19,16 +19,23 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "react": ">=18.0.0"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.2.3",
+    "jsdom": "^29.0.1",
     "react": "^19.1.0",
+    "react-dom": "^19.2.4",
     "tsup": "^8.5.0",
-    "typescript": "~5.8.3"
+    "typescript": "~5.8.3",
+    "vitest": "^4.1.0"
   },
   "publishConfig": {
     "access": "public"
