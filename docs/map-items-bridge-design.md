@@ -237,60 +237,84 @@ All fields optional. Omitted fields = no filter on that dimension. `type` suppor
 
 Fixed set of common fields. Plugins can access additional metadata via `getMapItemMeta(uid, key)` bridge method.
 
-## Delta Event Format
+## Update Event Format
+
+Events push full item objects — no partial deltas. Simpler SDK, no merge logic, no cache synchronization edge cases. Each update is self-contained.
 
 ```json
 {
   "type": "mapItemsChanged",
   "subscriptionId": "sub_1",
-  "added": [ { ... item ... } ],
+  "added": [ { ...full item... } ],
   "removed": [ "uid-1", "uid-2" ],
-  "updated": [ { "uid": "uid-3", "lat": 38.90, "lng": -77.04 } ]
+  "updated": [ { ...full item... } ]
 }
 ```
 
-- `added`: Full item objects
-- `removed`: Just UIDs
-- `updated`: Partial objects — only changed fields + uid
+- `added`: Full item objects for new items matching the filter
+- `removed`: UIDs of items that no longer match (removed from map or no longer pass filter)
+- `updated`: Full item objects for items whose properties changed
+
+Tradeoff: more bandwidth than partial updates, but eliminates the need for a client-side cache with merge logic. For typical plugin use (dozens of tracked items), this is fine. Can optimize to partials later if performance demands it.
+
+## Reactive Model (No Polling)
+
+Hooks are fully reactive — no polling, no manual refresh. Data flows from ATAK → Java → JS → React re-render.
+
+1. Hook mounts → bridge call for initial snapshot
+2. Java registers listeners for matching changes (ITEM_ADDED, ITEM_REMOVED, OnPointChanged, etc.)
+3. Changes push full items to JS via `evaluateJavascript`
+4. Hook state updates → React re-renders
+5. Hook unmounts → Java unregisters listeners
+
+Same pattern as `useSelfLocation()` which already works. The developer sees:
+
+```tsx
+const items = useMapItems({ type: 'a-f-*' });
+// Always current. No refresh needed. Cleans up on unmount.
+```
 
 ## Implementation Phases
 
-### Phase 1: Read-Only Queries
-- `getMapItems(filter)` bridge method
-- `getMapItem(uid)` bridge method
-- `getMapGroups()` bridge method
-- `useMapItems()`, `useMapItem()`, `useMapGroups()` hooks
-- No live updates — hooks poll or refresh on mount
+### Phase 1: Queries + Subscriptions
+- `MapItemQueryEngine.java` — filter parsing, efficient queries against MapGroup tree
+- `MapItemEventRelay.java` — global listeners for ITEM_ADDED/REMOVED/REFRESH, per-item OnPointChanged tracking
+- `getMapItems(filter)`, `getMapItem(uid)`, `getMapGroups()` bridge methods
+- `subscribeMapItems(filter)`, `unsubscribeMapItems(id)` bridge methods
+- SDK: `useMapItems(filter?)`, `useMapItem(uid)`, `useMapGroups()` hooks
+- SDK: `usePluginMarkers()` hook (items created by this plugin)
+- Debouncing (100ms batches) to prevent event floods from GPS updates
 
-### Phase 2: Live Updates
-- `MapItemEventRelay` listens globally for ITEM_ADDED/REMOVED
-- Subscription system — JS subscribes with a filter, Java pushes matching deltas
-- `useMapItems()` becomes truly reactive
-- Debouncing and batching
-
-### Phase 3: Per-Item Tracking
-- `useMapItem(uid)` subscribes to OnPointChanged + OnMetadataChanged for that item
-- Real-time position tracking for individual items
-- Auto-unsubscribe on component unmount
-
-### Phase 4: Advanced Queries
+### Phase 2: Advanced Queries
 - Geo-radius search (`near` filter)
-- Pagination for large result sets
-- Custom metadata queries
-- Type hierarchy awareness (a-f-* matching)
+- Pagination (`limit`/`offset`) for large result sets
+- Group tree hierarchy via `useMapGroups()` returning nested structure
+
+### Phase 3: Write Operations
+- `updateMapItem(uid, changes)` — update existing items (not just plugin-created ones)
+- Optimistic updates in the SDK — update local state immediately, reconcile with Java response
+
+## Design Decisions
+
+### 1. No default group filter
+`useMapItems()` with no filter returns ALL items from all groups. Use `{ group: 'Cursor on Target' }` to narrow. The developer queries what they need — no hidden assumptions about ATAK's group structure.
+
+### 2. Group tree is exposed
+Groups are part of ATAK's data model — expose them as-is. `useMapGroups()` returns the hierarchy. Consistent with ATAK, not a simplified abstraction over it.
+
+### 3. Full items in updates (not partials)
+Each update event includes full item objects. No client-side cache merging. Simpler SDK, no sync edge cases. Trade bandwidth for simplicity.
+
+### 4. Items without position are included
+Non-PointMapItem items (routes, drawing objects) have `lat: null, lng: null`. Included by default, filterable by the developer. Consistent with ATAK's model where not all map items are points.
+
+### 5. No subscription limits
+Let the developer manage their own subscriptions. The hook lifecycle handles cleanup — subscriptions are removed when components unmount. No artificial caps.
 
 ## Risks
 
-1. **Performance on large maps**: Serializing 1000+ items to JSON is expensive. Mitigated by filters and pagination.
-2. **Event flood**: Rapid GPS updates for many tracked items. Mitigated by debouncing.
+1. **Performance on large maps**: Serializing 1000+ items to JSON is expensive. Mitigated by filters — developers should always filter, not query everything.
+2. **Event flood**: Rapid GPS updates for many tracked items. Mitigated by debouncing (100ms batches).
 3. **Thread contention**: Bridge calls and event dispatch on different threads. Mitigated by posting to correct threads.
-4. **Memory leaks**: Forgotten subscriptions holding listener references. Mitigated by auto-cleanup on dropdown close.
-5. **Stale data**: Delta updates could get out of sync. Include sequence numbers or periodic full refresh as safety net.
-
-## Open Questions
-
-1. Should `useMapItems()` return items from ALL groups or only "Cursor on Target"? Default to all, filter to narrow.
-2. Should we expose the group tree hierarchy or flatten it? Start flat (group name as string), add hierarchy later if needed.
-3. Should `updated` deltas include the full item or just changed fields? Partial for performance, full as option.
-4. How to handle items with no position (non-PointMapItem)? Include with null lat/lng or filter out? Include with null.
-5. Max reasonable subscription count per plugin? Start with 5, warn above 10.
+4. **Memory leaks**: Forgotten subscriptions holding listener references. Mitigated by auto-cleanup on dropdown close and hook unmount.
+5. **Stale data**: Full-item updates reduce sync issues. Periodic full refresh as safety net if needed.
