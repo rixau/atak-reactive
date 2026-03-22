@@ -20,6 +20,9 @@ sdk/dist/
 .DS_Store
 Thumbs.db
 
+# Planning docs (local only)
+docs/
+
 # Build artifacts
 lib/build/
 *.jar
