@@ -1,85 +1,53 @@
-import { useState } from 'react';
-import { isNative, useSelfLocation, useMapEvent, addMarker, removeMarker, panTo } from '@atak-reactive/sdk';
+import { Routes, Route, NavLink } from 'react-router-dom';
+import { isNative } from '@atak-reactive/sdk';
+import { HomePage } from './pages/Home';
+import { MarkersPage } from './pages/Markers';
+import { SettingsPage } from './pages/Settings';
 
 export function App() {
-  const location = useSelfLocation();
-  const lastClick = useMapEvent('mapClick');
-  const [markers, setMarkers] = useState<{ uid: string; title: string }[]>([]);
-
-  const dropAtSelf = () => {
-    if (!location) return;
-    const title = `Pin ${markers.length + 1}`;
-    const uid = addMarker({ lat: location.lat, lng: location.lng, title });
-    if (uid) setMarkers(p => [...p, { uid, title }]);
-  };
-
-  const dropAtClick = () => {
-    if (!lastClick) return;
-    const title = `Click ${markers.length + 1}`;
-    const uid = addMarker({ lat: lastClick.lat, lng: lastClick.lng, title });
-    if (uid) setMarkers(p => [...p, { uid, title }]);
-  };
-
-  const remove = (uid: string) => {
-    removeMarker(uid);
-    setMarkers(p => p.filter(m => m.uid !== uid));
-  };
-
-  const s = {
-    box: { padding: 12, marginBottom: 12, background: '#16213e', borderRadius: 8 } as const,
-    h2: { fontSize: 12, fontWeight: 600, color: '#8d99ae', textTransform: 'uppercase' as const, letterSpacing: 1, marginBottom: 8 },
-    row: { display: 'flex', justifyContent: 'space-between', padding: '3px 0' } as const,
-    label: { color: '#8d99ae', fontSize: 13 },
-    val: { color: '#edf2f4', fontSize: 13, fontFamily: 'monospace' },
-    btn: { padding: '6px 14px', background: '#0f3460', color: '#e0e0e0', border: '1px solid #1a4a7a', borderRadius: 6, cursor: 'pointer', fontSize: 12 } as const,
-  };
-
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 18, color: '#fff' }}>atak-reactive test</h1>
-        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: isNative() ? '#2d6a4f' : '#4a4e69', color: '#d8f3dc' }}>
-          {isNative() ? 'NATIVE' : 'MOCK'}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #16213e' }}>
+        <h1 style={{ fontSize: 16, color: '#fff', fontWeight: 600 }}>atak-reactive</h1>
+        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, background: isNative() ? '#2d6a4f' : '#4a4e69', color: '#d8f3dc', fontWeight: 600 }}>
+          {isNative() ? 'ATAK' : 'MOCK'}
         </span>
+      </header>
+
+      <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/markers" element={<MarkersPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>
       </div>
 
-      <div style={s.box}>
-        <h2 style={s.h2}>Location</h2>
-        {location ? (
-          <>
-            <div style={s.row}><span style={s.label}>Lat</span><span style={s.val}>{location.lat.toFixed(6)}</span></div>
-            <div style={s.row}><span style={s.label}>Lng</span><span style={s.val}>{location.lng.toFixed(6)}</span></div>
-          </>
-        ) : <p style={{ color: '#555' }}>Waiting...</p>}
-      </div>
-
-      <div style={s.box}>
-        <h2 style={s.h2}>Last Click</h2>
-        {lastClick
-          ? <div style={s.row}><span style={s.val}>{lastClick.lat.toFixed(6)}, {lastClick.lng.toFixed(6)}</span></div>
-          : <p style={{ color: '#555' }}>Tap the map</p>}
-      </div>
-
-      <div style={s.box}>
-        <h2 style={s.h2}>Actions</h2>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button style={s.btn} onClick={dropAtSelf} disabled={!location}>Drop at Self</button>
-          <button style={s.btn} onClick={dropAtClick} disabled={!lastClick}>Drop</button>
-          <button style={s.btn} onClick={() => location && panTo(location.lat, location.lng)}>Pan to Self</button>
-        </div>
-      </div>
-
-      {markers.length > 0 && (
-        <div style={s.box}>
-          <h2 style={s.h2}>Markers ({markers.length})</h2>
-          {markers.map(m => (
-            <div key={m.uid} style={{ ...s.row, alignItems: 'right', padding: '6px 0', borderBottom: '1px solid #1a2744' }}>
-              <span style={s.val}>{m.title}</span>
-              <button style={{ ...s.btn, background: '#3d0000', color: '#ff6b6b', border: '1px solid #5c0000', padding: '3px 10px' }} onClick={() => remove(m.uid)}>x</button>
-            </div>
-          ))}
-        </div>
-      )}
+      <nav style={{ display: 'flex', borderTop: '1px solid #16213e', background: '#0f0f23' }}>
+        <Tab to="/" label="Home" />
+        <Tab to="/markers" label="Markers" />
+        <Tab to="/settings" label="Settings" />
+      </nav>
     </div>
+  );
+}
+
+function Tab({ to, label }: { to: string; label: string }) {
+  return (
+    <NavLink
+      to={to}
+      style={({ isActive }) => ({
+        flex: 1,
+        padding: '10px 0',
+        textAlign: 'center' as const,
+        fontSize: 12,
+        fontWeight: 600,
+        textDecoration: 'none',
+        color: isActive ? '#4cc9f0' : '#8d99ae',
+        borderTop: isActive ? '2px solid #4cc9f0' : '2px solid transparent',
+        transition: 'color 0.15s',
+      })}
+    >
+      {label}
+    </NavLink>
   );
 }
