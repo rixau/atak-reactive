@@ -76,6 +76,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         container = new LinearLayout(pluginContext);
         container.setLayoutParams(new LayoutParams(
                 LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        container.setBackgroundColor(0xFF1a1a2e);
 
         mapView.post(() -> {
             Context appContext = mapView.getContext();
@@ -89,6 +90,9 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                     .addPathHandler("/assets/",
                             new WebViewAssetLoader.AssetsPathHandler(pluginContext))
                     .build();
+
+            // Dark background from the start — no white flash
+            webView.setBackgroundColor(0xFF1a1a2e);
 
             configureSettings();
             onConfigureWebView(webView, webView.getSettings());
