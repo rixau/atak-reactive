@@ -157,8 +157,19 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                 FULL_WIDTH, HALF_HEIGHT, false, this);
 
         if (devMode) {
-            Log.d(TAG, "Dev mode: trying " + DEV_URL + " (fallback: bundled)");
-            webView.loadUrl(DEV_URL);
+            // Check if dev server is reachable before loading — avoids error flash
+            new Thread(() -> {
+                boolean reachable = isDevServerReachable();
+                webView.post(() -> {
+                    if (reachable) {
+                        Log.d(TAG, "Dev server reachable, loading from " + DEV_URL);
+                        webView.loadUrl(DEV_URL);
+                    } else {
+                        Log.d(TAG, "Dev server not running, loading bundled assets");
+                        webView.loadUrl(prodUrl);
+                    }
+                });
+            }).start();
         } else {
             webView.loadUrl(prodUrl);
         }
@@ -166,6 +177,17 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         if (eventEmitter != null) {
             eventEmitter.startListening();
             onStartListening(eventEmitter);
+        }
+    }
+
+    private static boolean isDevServerReachable() {
+        try {
+            java.net.Socket socket = new java.net.Socket();
+            socket.connect(new java.net.InetSocketAddress("localhost", 5173), 300);
+            socket.close();
+            return true;
+        } catch (Exception e) {
+            return false;
         }
     }
 
