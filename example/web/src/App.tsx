@@ -1,10 +1,20 @@
+import { useState } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { isNative } from '@atak-reactive/sdk';
 import { HomePage } from './pages/Home';
 import { MarkersPage } from './pages/Markers';
 import { SettingsPage } from './pages/Settings';
 
+export interface MarkerEntry {
+  uid: string;
+  title: string;
+  lat: number;
+  lng: number;
+}
+
 export function App() {
+  const [markers, setMarkers] = useState<MarkerEntry[]>([]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #16213e' }}>
@@ -17,14 +27,14 @@ export function App() {
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/markers" element={<MarkersPage />} />
+          <Route path="/markers" element={<MarkersPage markers={markers} setMarkers={setMarkers} />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </div>
 
       <nav style={{ display: 'flex', borderTop: '1px solid #16213e', background: '#0f0f23' }}>
         <Tab to="/" label="Home" />
-        <Tab to="/markers" label="Markers" />
+        <Tab to="/markers" label={`Markers${markers.length ? ` (${markers.length})` : ''}`} />
         <Tab to="/settings" label="Settings" />
       </nav>
     </div>

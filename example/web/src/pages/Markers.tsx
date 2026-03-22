@@ -1,10 +1,14 @@
-import { useState } from 'react';
 import { useSelfLocation, useMapEvent, addMarker, removeMarker, panTo } from '@atak-reactive/sdk';
+import type { MarkerEntry } from '../App';
 
-export function MarkersPage() {
+interface Props {
+  markers: MarkerEntry[];
+  setMarkers: React.Dispatch<React.SetStateAction<MarkerEntry[]>>;
+}
+
+export function MarkersPage({ markers, setMarkers }: Props) {
   const location = useSelfLocation();
   const lastClick = useMapEvent('mapClick');
-  const [markers, setMarkers] = useState<{ uid: string; title: string; lat: number; lng: number }[]>([]);
 
   const dropAtSelf = () => {
     if (!location) return;
