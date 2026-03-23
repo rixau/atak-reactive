@@ -29,12 +29,16 @@ public class AtakBridge {
     private final BridgeEventEmitter emitter;
     private final MarkerManager markerManager;
     private final MapItemEventRelay relay;
+    private final CotBridge cotBridge;
+    private final IntentBridge intentBridge;
 
     public AtakBridge(MapView mapView, BridgeEventEmitter emitter) {
         this.mapView = mapView;
         this.emitter = emitter;
         this.markerManager = new MarkerManager(mapView);
         this.relay = new MapItemEventRelay(mapView, emitter);
+        this.cotBridge = new CotBridge(emitter);
+        this.intentBridge = new IntentBridge(emitter);
     }
 
     @JavascriptInterface
@@ -372,8 +376,49 @@ public class AtakBridge {
         return json;
     }
 
+    // --- CoT delegation ---
+
+    @JavascriptInterface
+    public void startCotStream() {
+        cotBridge.startCotStream();
+    }
+
+    @JavascriptInterface
+    public void stopCotStream() {
+        cotBridge.stopCotStream();
+    }
+
+    @JavascriptInterface
+    public String sendCot(String cotJson, String dispatch) {
+        return cotBridge.sendCot(cotJson, dispatch);
+    }
+
+    @JavascriptInterface
+    public String sendCotToContacts(String cotJson, String contactUidsJson) {
+        return cotBridge.sendCotToContacts(cotJson, contactUidsJson);
+    }
+
+    // --- Intent delegation ---
+
+    @JavascriptInterface
+    public void registerAction(String action) {
+        intentBridge.registerAction(action);
+    }
+
+    @JavascriptInterface
+    public void unregisterAction(String action) {
+        intentBridge.unregisterAction(action);
+    }
+
+    @JavascriptInterface
+    public void sendBroadcast(String action, String extrasJson) {
+        intentBridge.sendBroadcast(action, extrasJson);
+    }
+
     public void dispose() {
         markerManager.removeAll();
         relay.dispose();
+        cotBridge.dispose();
+        intentBridge.dispose();
     }
 }

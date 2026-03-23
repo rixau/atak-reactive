@@ -57,12 +57,20 @@ export function MarkersPage() {
                   {m.type ? ` · ${m.type}` : ''}
                 </div>
               </div>
-              <button
-                onClick={() => remove(m.uid)}
-                style={{ ...btnStyle, background: '#3d0000', color: '#ff6b6b', border: '1px solid #5c0000', padding: '4px 12px' }}
-              >
-                Remove
-              </button>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => m.lat != null && m.lng != null && panTo(m.lat, m.lng)}
+                  style={{ ...btnStyle, padding: '4px 12px' }}
+                >
+                  Go To
+                </button>
+                <button
+                  onClick={() => remove(m.uid)}
+                  style={{ ...btnStyle, background: '#3d0000', color: '#ff6b6b', border: '1px solid #5c0000', padding: '4px 12px' }}
+                >
+                  Remove
+                </button>
+              </div>
             </div>
           ))}
         </div>
