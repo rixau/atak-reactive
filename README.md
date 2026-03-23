@@ -8,172 +8,66 @@ Your plugin's React UI runs in a WebView panel. A typed JavaScript bridge connec
 
 ## Quick Start
 
-### 1. Initialize
-
-From the root of any existing ATAK plugin:
-
 ```bash
+# 1. Initialize (from any existing ATAK plugin root)
 npx @atak-reactive/cli init
-```
 
-This sets up everything — Java bridge source, Gradle config, web project with React + TypeScript, and auto-registers a `ReactiveDropDown` in your MapComponent.
-
-### 2. Build and install
-
-```bash
+# 2. Build and install
 npx @atak-reactive/cli build
 ./gradlew assembleCivDebug
 adb install -r app/build/outputs/apk/civ/debug/*.apk
-```
 
-### 3. Develop
-
-```bash
+# 3. Develop with hot reload
 npx @atak-reactive/cli dev
 ```
 
-Edit `web/src/App.tsx` — changes appear instantly in ATAK.
+## React Hooks
 
-## Bridge API
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useMapItems(filter?)` | `MapItemData[]` | Live array of map items. Filters by `type`, `group`, `visible`, `meta`. Updates on add/remove/change. |
+| `useMapItem(uid)` | `MapItemData \| null` | Single item by UID with live updates. |
+| `useMapGroups()` | `MapGroupData[]` | Map group tree. Refreshes on structural changes only. |
+| `usePluginMarkers()` | `MapItemData[]` | Items created by this plugin via `addMarker()`. |
+| `useSelfLocation()` | `SelfLocation \| null` | GPS position, bearing, speed. Subscribes to updates. |
+| `useMapEvent(event)` | `EventPayload \| null` | Last received map event (`mapClick`, `mapLongPress`, `itemSelected`). |
+| `useAtakEvent(event, cb)` | `void` | Callback on each map event. |
+| `useCotStream(filter?)` | `CotEventData[]` | Live inbound CoT messages. Filter by type with wildcard. |
+| `useCotEvent(cb)` | `void` | Raw callback for every inbound CoT. No state, no dedup. |
+| `useIntent(action)` | `IntentData \| null` | Last received ATAK broadcast matching action. |
+| `useIntentCallback(action, cb)` | `void` | Callback on each matching broadcast. |
+| `useCoordinateFormat()` | `string` | User's preferred coordinate format (`dd`, `dm`, `dms`, `mgrs`, `utm`). |
 
-### Map Items (Reactive)
+## Functions
 
-Query and subscribe to all items on the map — markers, tracks, shapes, anything ATAK represents as a MapItem. Live updates via a shared subscription architecture.
+| Function | Description |
+|----------|-------------|
+| `addMarker(opts)` | Create a marker. Returns UID. |
+| `updateMarker(uid, opts)` | Update marker title, type, or position. |
+| `removeMarker(uid)` | Remove a marker from the map. |
+| `panTo(lat, lng, zoom?)` | Pan the map camera to a location. |
+| `getSelfLocation()` | One-shot GPS position. |
+| `getMapCenter()` | Current map center point. |
+| `getPreference(key)` | Read an ATAK preference. |
+| `setItemMeta(uid, key, value)` | Write string metadata on any map item. Triggers reactive update. |
+| `setItemMetaDouble(uid, key, value)` | Write double metadata. |
+| `setItemMetaBool(uid, key, value)` | Write boolean metadata. |
+| `getItemMeta(uid, key)` | Read metadata from any map item. |
+| `sendCot(event, dispatch)` | Send a CoT message. Dispatch: `'external'`, `'internal'`, or `'both'`. |
+| `sendCotToContacts(event, uids)` | Unicast CoT to specific contacts. |
+| `sendBroadcast(action, extras?)` | Send an ATAK internal broadcast. |
+| `registerAction(action)` | Register to receive an ATAK broadcast action. |
+| `unregisterAction(action)` | Unregister a broadcast action. |
+| `toMGRS(lat, lng)` | Convert to MGRS string. |
+| `toUTM(lat, lng)` | Convert to UTM string. |
+| `fromMGRS(mgrs)` | Parse MGRS to `{ lat, lng }`. |
+| `fromUTM(utm)` | Parse UTM to `{ lat, lng }`. |
+| `formatCoordinate(lat, lng)` | Format in user's preferred coordinate system. |
+| `distanceTo(p1, p2)` | Distance (meters) and bearing (degrees) between two points. |
+| `isNative()` | `true` when running inside ATAK, `false` in browser dev mode. |
+| `on(event, fn)` / `off(event, fn)` | Low-level event subscribe/unsubscribe. |
 
-```tsx
-import { useMapItems, useMapItem, useMapGroups } from '@atak-reactive/sdk';
-
-function MapItemList() {
-  const items = useMapItems({ visible: true });            // all visible items, live
-  const friendlies = useMapItems({ type: 'a-f-*' });      // CoT type filter
-  const selected = useMapItem('some-uid');                 // single item by UID
-  const groups = useMapGroups();                           // group tree
-
-  return <div>{items.length} items on map</div>;
-}
-```
-
-### Markers
-
-```tsx
-import { addMarker, updateMarker, removeMarker } from '@atak-reactive/sdk';
-
-const uid = addMarker({ lat: 38.89, lng: -77.03, title: 'Pin' });
-updateMarker(uid, { title: 'Updated' });
-removeMarker(uid);
-```
-
-### Location & Map Events
-
-```tsx
-import { useSelfLocation, useMapEvent, panTo } from '@atak-reactive/sdk';
-
-function MyScreen() {
-  const location = useSelfLocation();
-  const lastClick = useMapEvent('mapClick');
-  const selected = useMapEvent('itemSelected');
-
-  return (
-    <div>
-      <p>You are at: {location?.lat}, {location?.lng}</p>
-      <p>Selected: {selected?.title}</p>
-      <button onClick={() => location && panTo(location.lat, location.lng)}>
-        Pan to Self
-      </button>
-    </div>
-  );
-}
-```
-
-### CoT Messaging
-
-Send and receive Cursor-on-Target messages — ATAK's network protocol.
-
-```tsx
-import { useCotStream, useCotEvent, sendCot } from '@atak-reactive/sdk';
-
-function TeamTracker() {
-  const friendlies = useCotStream({ type: 'a-f-*' });     // live friendly tracks
-
-  useCotEvent((event) => {
-    console.log('Received CoT:', event.uid, event.callsign);
-  });
-
-  const sendPosition = () => {
-    sendCot({
-      uid: 'my-report',
-      type: 'a-f-G-U-C',
-      lat: 38.89,
-      lng: -77.03,
-      alt: null,
-      how: 'h-g-i-g-o',
-      time: Date.now(),
-      stale: Date.now() + 300000,
-      callsign: 'ALPHA-1',
-      team: 'Cyan',
-      detail: {},
-    }, 'external');  // 'external' | 'internal' | 'both'
-  };
-
-  return <div>{friendlies.length} friendlies tracked</div>;
-}
-```
-
-### Intent Broadcast (IPC)
-
-Send and receive ATAK internal broadcasts for inter-plugin communication.
-
-```tsx
-import { useIntent, sendBroadcast } from '@atak-reactive/sdk';
-
-function IntentDemo() {
-  const intent = useIntent('com.example.MY_ACTION');
-
-  const trigger = () => {
-    sendBroadcast('com.atakmap.android.maps.SHOW_DETAILS', { uid: 'some-uid' });
-  };
-
-  return <div>Last intent: {intent?.extras?.uid}</div>;
-}
-```
-
-### Coordinate Conversions
-
-Convert between lat/lng, MGRS, and UTM. Format in the user's preferred display.
-
-```tsx
-import { toMGRS, toUTM, fromMGRS, formatCoordinate, distanceTo, useCoordinateFormat } from '@atak-reactive/sdk';
-
-const mgrs = toMGRS(38.89, -77.03);           // "18S UJ 23394 07395"
-const utm = toUTM(38.89, -77.03);             // "18S 323371 4306519"
-const point = fromMGRS('18SUJ2339407395');     // { lat, lng }
-const display = formatCoordinate(38.89, -77.03); // user's preferred format
-const dist = distanceTo(
-  { lat: 38.89, lng: -77.03 },
-  { lat: 39.0, lng: -77.0 }
-);  // { distance: meters, bearing: degrees }
-```
-
-### Metadata
-
-Read and write arbitrary metadata on any map item.
-
-```tsx
-import { setItemMeta, getItemMeta, useMapItems } from '@atak-reactive/sdk';
-
-function TagItem({ uid }: { uid: string }) {
-  const items = useMapItems();
-
-  const tag = () => {
-    setItemMeta(uid, 'mission-status', 'complete');
-    // Triggers ITEM_REFRESH → reactive update → hook re-renders automatically
-  };
-
-  return <button onClick={tag}>Mark Complete</button>;
-}
-```
-
-### Events
+## Events
 
 | Event | Payload | Description |
 |-------|---------|-------------|
@@ -181,11 +75,11 @@ function TagItem({ uid }: { uid: string }) {
 | `mapClick` | `{ lat, lng }` | User tapped the map |
 | `mapLongPress` | `{ lat, lng }` | User long-pressed the map |
 | `itemSelected` | `{ uid, type, title, lat, lng }` | User tapped a map item |
-| `mapItemsChanged` | `{ added, removed, updated }` | Map items changed (managed by MapItemStore) |
+| `mapItemsChanged` | `{ added, removed, updated }` | Map items changed |
 | `cotReceived` | `CotEventData[]` | Inbound CoT messages |
 | `intentReceived` | `{ action, extras }` | ATAK broadcast received |
 
-### Custom Bridges
+## Custom Bridges
 
 Add plugin-specific functionality beyond the built-in bridge:
 
@@ -215,22 +109,18 @@ Java relay (MapItemEventRelay, CotBridge, IntentBridge)
 ATAK runtime (MapView, CotService, AtakBroadcast)
 ```
 
-One Java relay per domain, one JS store, N hooks. Debouncing on the Java side, filtering on the JS side.
+One Java relay per domain, one JS store, N hooks. Debouncing on the Java side, filtering on the JS side. The TypeScript SDK is version-independent — all ATAK API coupling is in the Java templates.
 
 ## Testing
 
 ```bash
-# Unit tests (headless, no emulator)
+# Unit tests (headless, no emulator needed)
 cd sdk && npm test          # 51 tests via vitest
 
-# Integration test (emulator, manual trigger)
+# Integration smoke test (emulator)
 # Open plugin in ATAK → tap Test tab
 cd example && ./scripts/integration-test.sh
 ```
-
-## Incremental Migration
-
-Convert screens one at a time. Your existing native screens keep working — React screens are registered alongside them as additional `DropDownReceiver` instances.
 
 ## Compatibility
 
