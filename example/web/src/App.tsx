@@ -3,6 +3,7 @@ import { isNative } from '@atak-reactive/sdk';
 import { HomePage } from './pages/Home';
 import { MarkersPage } from './pages/Markers';
 import { SettingsPage } from './pages/Settings';
+import { IntegrationTestPage } from './pages/IntegrationTest';
 
 export function App() {
   return (
@@ -19,6 +20,7 @@ export function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/markers" element={<MarkersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/test" element={<IntegrationTestPage />} />
         </Routes>
       </div>
 
@@ -26,6 +28,7 @@ export function App() {
         <Tab to="/" label="Home" />
         <Tab to="/markers" label="Map Items" />
         <Tab to="/settings" label="Settings" />
+        <Tab to="/test" label="Test" />
       </nav>
     </div>
   );

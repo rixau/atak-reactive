@@ -11,6 +11,9 @@ import com.atakmap.android.preference.AtakPreferences;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
+import com.atakmap.coremap.conversions.CoordinateFormat;
+import com.atakmap.coremap.conversions.CoordinateFormatUtilities;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -206,6 +209,47 @@ public class AtakBridge {
     }
 
     @JavascriptInterface
+    public String setItemMeta(String uid, String key, String value) {
+        MapItem item = mapView.getRootGroup().deepFindUID(uid);
+        if (item == null) return "false";
+        mapView.post(() -> {
+            item.setMetaString(key, value);
+            item.refresh(mapView.getMapEventDispatcher(), null, getClass());
+        });
+        return "true";
+    }
+
+    @JavascriptInterface
+    public String setItemMetaDouble(String uid, String key, double value) {
+        MapItem item = mapView.getRootGroup().deepFindUID(uid);
+        if (item == null) return "false";
+        mapView.post(() -> {
+            item.setMetaDouble(key, value);
+            item.refresh(mapView.getMapEventDispatcher(), null, getClass());
+        });
+        return "true";
+    }
+
+    @JavascriptInterface
+    public String setItemMetaBool(String uid, String key, boolean value) {
+        MapItem item = mapView.getRootGroup().deepFindUID(uid);
+        if (item == null) return "false";
+        mapView.post(() -> {
+            item.setMetaBoolean(key, value);
+            item.refresh(mapView.getMapEventDispatcher(), null, getClass());
+        });
+        return "true";
+    }
+
+    @JavascriptInterface
+    public String getItemMeta(String uid, String key) {
+        MapItem item = mapView.getRootGroup().deepFindUID(uid);
+        if (item == null) return "null";
+        String value = item.getMetaString(key, null);
+        return value != null ? value : "null";
+    }
+
+    @JavascriptInterface
     public void startMapItemStream() {
         relay.start();
     }
@@ -213,6 +257,105 @@ public class AtakBridge {
     @JavascriptInterface
     public void stopMapItemStream() {
         relay.stop();
+    }
+
+    @JavascriptInterface
+    public String toMGRS(double lat, double lng) {
+        try {
+            GeoPoint point = new GeoPoint(lat, lng);
+            return CoordinateFormatUtilities.formatToString(point, CoordinateFormat.MGRS);
+        } catch (Exception e) {
+            Log.e(TAG, "Error converting to MGRS", e);
+            return "";
+        }
+    }
+
+    @JavascriptInterface
+    public String toUTM(double lat, double lng) {
+        try {
+            GeoPoint point = new GeoPoint(lat, lng);
+            return CoordinateFormatUtilities.formatToString(point, CoordinateFormat.UTM);
+        } catch (Exception e) {
+            Log.e(TAG, "Error converting to UTM", e);
+            return "";
+        }
+    }
+
+    @JavascriptInterface
+    public String fromMGRS(String mgrs) {
+        try {
+            GeoPoint point = CoordinateFormatUtilities.convert(mgrs, CoordinateFormat.MGRS);
+            if (point == null) return "null";
+            JSONObject json = new JSONObject();
+            json.put("lat", point.getLatitude());
+            json.put("lng", point.getLongitude());
+            return json.toString();
+        } catch (Exception e) {
+            Log.e(TAG, "Error converting from MGRS", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String fromUTM(String utm) {
+        try {
+            GeoPoint point = CoordinateFormatUtilities.convert(utm, CoordinateFormat.UTM);
+            if (point == null) return "null";
+            JSONObject json = new JSONObject();
+            json.put("lat", point.getLatitude());
+            json.put("lng", point.getLongitude());
+            return json.toString();
+        } catch (Exception e) {
+            Log.e(TAG, "Error converting from UTM", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String getCoordinateFormat() {
+        try {
+            AtakPreferences prefs = AtakPreferences.getInstance(
+                    mapView.getContext());
+            return prefs.get("coordinateFormat", "dd");
+        } catch (Exception e) {
+            return "dd";
+        }
+    }
+
+    @JavascriptInterface
+    public String formatCoordinate(double lat, double lng) {
+        try {
+            GeoPoint point = new GeoPoint(lat, lng);
+            String format = getCoordinateFormat();
+            CoordinateFormat cf;
+            switch (format) {
+                case "mgrs": cf = CoordinateFormat.MGRS; break;
+                case "utm": cf = CoordinateFormat.UTM; break;
+                case "dm": cf = CoordinateFormat.DM; break;
+                case "dms": cf = CoordinateFormat.DMS; break;
+                default: cf = CoordinateFormat.DD; break;
+            }
+            return CoordinateFormatUtilities.formatToString(point, cf);
+        } catch (Exception e) {
+            return String.format("%.6f, %.6f", lat, lng);
+        }
+    }
+
+    @JavascriptInterface
+    public String distanceTo(double lat1, double lng1, double lat2, double lng2) {
+        try {
+            GeoPoint p1 = new GeoPoint(lat1, lng1);
+            GeoPoint p2 = new GeoPoint(lat2, lng2);
+            double distance = p1.distanceTo(p2);
+            double bearing = p1.bearingTo(p2);
+            JSONObject json = new JSONObject();
+            json.put("distance", distance);
+            json.put("bearing", bearing);
+            return json.toString();
+        } catch (Exception e) {
+            Log.e(TAG, "Error calculating distance", e);
+            return "null";
+        }
     }
 
     private JSONObject serializeGroup(MapGroup group) throws JSONException {

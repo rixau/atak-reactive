@@ -237,6 +237,15 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     public void onDropDownSizeChanged(double width, double height) {
     }
 
+    /**
+     * Evaluate JavaScript in the WebView. Must be called from UI thread.
+     */
+    public void evaluateJavascript(String script) {
+        if (webView != null) {
+            webView.post(() -> webView.evaluateJavascript(script, null));
+        }
+    }
+
     @Override
     public void disposeImpl() {
         if (eventEmitter != null) {

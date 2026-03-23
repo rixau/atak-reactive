@@ -1,4 +1,4 @@
-import type { MapItemData } from '../types';
+import type { MapItemData, CotEventData } from '../types';
 
 let counter = 0;
 
@@ -21,6 +21,24 @@ export function makeMapItem(overrides?: Partial<MapItemData>): MapItemData {
     how: 'h-g-i-g-o',
     editable: true,
     movable: true,
+    ...overrides,
+  };
+}
+
+export function makeCotEvent(overrides?: Partial<CotEventData>): CotEventData {
+  counter++;
+  return {
+    uid: `cot-${counter}`,
+    type: 'a-f-G-U-C',
+    lat: 38.8977,
+    lng: -77.0365,
+    alt: 15,
+    how: 'm-g',
+    time: Date.now(),
+    stale: Date.now() + 300000,
+    callsign: `UNIT-${counter}`,
+    team: 'Cyan',
+    detail: {},
     ...overrides,
   };
 }

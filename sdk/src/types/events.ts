@@ -1,5 +1,7 @@
 import type { SelfLocation } from './common';
 import type { MapItemsChangedEvent } from './mapItems';
+import type { IntentData } from './intents';
+import type { CotEventData } from './cot';
 
 export interface MapClickEvent {
   lat: number;
@@ -20,6 +22,8 @@ export type AtakEventMap = {
   mapLongPress: MapClickEvent;
   itemSelected: ItemSelectedEvent;
   mapItemsChanged: MapItemsChangedEvent;
+  intentReceived: IntentData;
+  cotReceived: CotEventData[];
 };
 
 export type AtakEventName = keyof AtakEventMap;

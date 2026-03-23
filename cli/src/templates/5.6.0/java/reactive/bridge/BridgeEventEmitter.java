@@ -172,7 +172,7 @@ public class BridgeEventEmitter {
         }
     }
 
-    private void emit(String eventName, String jsonPayload) {
+    public void emit(String eventName, String jsonPayload) {
         String js = "window.__atakBridge && window.__atakBridge.emit('"
                 + eventName + "', " + jsonPayload + ")";
         webView.post(() -> webView.evaluateJavascript(js, null));

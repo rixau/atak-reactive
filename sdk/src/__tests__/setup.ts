@@ -1,6 +1,7 @@
 import { beforeEach } from 'vitest';
 import type { NativeBridge } from '../types';
 import { mapItemStore } from '../MapItemStore';
+import { cotStore } from '../cot';
 
 export function createMockBridge(overrides?: Partial<NativeBridge>): NativeBridge {
   return {
@@ -17,13 +18,32 @@ export function createMockBridge(overrides?: Partial<NativeBridge>): NativeBridg
     getMapItem: () => 'null',
     getMapGroups: () => '[]',
     getPluginMarkers: () => '[]',
+    startCotStream: () => {},
+    stopCotStream: () => {},
+    sendCot: () => 'true',
+    sendCotToContacts: () => 'true',
+    registerAction: () => {},
+    unregisterAction: () => {},
+    sendBroadcast: () => {},
+    toMGRS: () => '18SUJ2337106519',
+    toUTM: () => '18S 323371 4306519',
+    fromMGRS: () => JSON.stringify({ lat: 38.8977, lng: -77.0365 }),
+    fromUTM: () => JSON.stringify({ lat: 38.8977, lng: -77.0365 }),
+    getCoordinateFormat: () => 'dd',
+    formatCoordinate: (lat: number, lng: number) => `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+    distanceTo: () => JSON.stringify({ distance: 1000, bearing: 45 }),
     startMapItemStream: () => {},
     stopMapItemStream: () => {},
+    setItemMeta: () => 'true',
+    setItemMetaDouble: () => 'true',
+    setItemMetaBool: () => 'true',
+    getItemMeta: () => 'null',
     ...overrides,
   };
 }
 
 beforeEach(() => {
   mapItemStore.reset();
+  cotStore.reset();
   delete window._atak;
 });

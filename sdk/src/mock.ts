@@ -76,11 +76,89 @@ export const mockBridge: NativeBridge = {
     return '[]';
   },
 
+  startCotStream() {
+    console.log('[atak mock] startCotStream');
+  },
+
+  stopCotStream() {
+    console.log('[atak mock] stopCotStream');
+  },
+
+  sendCot(_cotJson: string, dispatch: string) {
+    console.log('[atak mock] sendCot:', dispatch);
+    return 'true';
+  },
+
+  sendCotToContacts(_cotJson: string, _contactUidsJson: string) {
+    console.log('[atak mock] sendCotToContacts');
+    return 'true';
+  },
+
+  registerAction(action: string) {
+    console.log('[atak mock] registerAction:', action);
+  },
+
+  unregisterAction(action: string) {
+    console.log('[atak mock] unregisterAction:', action);
+  },
+
+  sendBroadcast(action: string, extrasJson: string) {
+    console.log('[atak mock] sendBroadcast:', action, extrasJson);
+  },
+
+  toMGRS(_lat: number, _lng: number) {
+    return '18SUJ2337106519';
+  },
+
+  toUTM(_lat: number, _lng: number) {
+    return '18S 323371 4306519';
+  },
+
+  fromMGRS(_mgrs: string) {
+    return JSON.stringify({ lat: 38.8977, lng: -77.0365 });
+  },
+
+  fromUTM(_utm: string) {
+    return JSON.stringify({ lat: 38.8977, lng: -77.0365 });
+  },
+
+  getCoordinateFormat() {
+    return 'dd';
+  },
+
+  formatCoordinate(lat: number, lng: number) {
+    return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  },
+
+  distanceTo(_lat1: number, _lng1: number, _lat2: number, _lng2: number) {
+    return JSON.stringify({ distance: 0, bearing: 0 });
+  },
+
   startMapItemStream() {
     console.log('[atak mock] startMapItemStream');
   },
 
   stopMapItemStream() {
     console.log('[atak mock] stopMapItemStream');
+  },
+
+  setItemMeta(uid: string, key: string, value: string) {
+    console.log('[atak mock] setItemMeta:', uid, key, value);
+    return 'true';
+  },
+
+  setItemMetaDouble(uid: string, key: string, value: number) {
+    console.log('[atak mock] setItemMetaDouble:', uid, key, value);
+    return 'true';
+  },
+
+  setItemMetaBool(uid: string, key: string, value: boolean) {
+    console.log('[atak mock] setItemMetaBool:', uid, key, value);
+    return 'true';
+  },
+
+  getItemMeta(uid: string, key: string) {
+    console.log('[atak mock] getItemMeta:', uid, key);
+    return 'null';
   },
 };

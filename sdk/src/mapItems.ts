@@ -36,3 +36,21 @@ export function startMapItemStream(): void {
 export function stopMapItemStream(): void {
   getBridge().stopMapItemStream();
 }
+
+export function setItemMeta(uid: string, key: string, value: string): boolean {
+  return getBridge().setItemMeta(uid, key, value) === 'true';
+}
+
+export function setItemMetaDouble(uid: string, key: string, value: number): boolean {
+  return getBridge().setItemMetaDouble(uid, key, value) === 'true';
+}
+
+export function setItemMetaBool(uid: string, key: string, value: boolean): boolean {
+  return getBridge().setItemMetaBool(uid, key, value) === 'true';
+}
+
+export function getItemMeta(uid: string, key: string): string | null {
+  const raw = getBridge().getItemMeta(uid, key);
+  if (raw === 'null') return null;
+  return raw;
+}
