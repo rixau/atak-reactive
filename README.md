@@ -117,8 +117,8 @@ public class PlatformSimBridge {
 Register it alongside the built-in bridge:
 
 ```java
-ReactiveDropDown view = new ReactiveDropDown(mapView, ctx, "web/index.html",
-    true, new PlatformSimBridge(simulator, emitter));
+ReactiveDropDown view = new ReactiveDropDown(mapView, ctx, "web/index.html");
+view.addBridge(new PlatformSimBridge(simulator, emitter));
 ```
 
 React side — same reactive pattern as built-in hooks:

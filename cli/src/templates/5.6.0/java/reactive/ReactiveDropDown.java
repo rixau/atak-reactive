@@ -55,15 +55,40 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private AtakBridge bridge;
     private BridgeEventEmitter eventEmitter;
 
+    private final java.util.List<Object> pendingBridges = new java.util.ArrayList<>();
+
     /**
-     * Create a reactive dropdown with default bridge.
+     * Create a reactive dropdown.
      *
-     * @param mapView     the ATAK MapView
-     * @param pluginContext the plugin's context (for theme/resources)
-     * @param assetPath   path to the HTML file relative to assets/ (e.g. "web/index.html")
+     * @param mapView       the ATAK MapView
+     * @param pluginContext  the plugin's context (for theme/resources)
+     * @param assetPath     path to the HTML file relative to assets/ (e.g. "web/index.html")
      */
     public ReactiveDropDown(MapView mapView, Context pluginContext, String assetPath) {
         this(mapView, pluginContext, assetPath, true);
+    }
+
+    /**
+     * Add a custom bridge that will be accessible from JS as window._className.
+     * Call before the dropdown is first shown.
+     *
+     * @param bridge object with @JavascriptInterface methods
+     * @return this, for chaining
+     */
+    public ReactiveDropDown addBridge(Object bridge) {
+        pendingBridges.add(bridge);
+        // If WebView is already created, register immediately
+        if (webView != null) {
+            String name = bridgeName(bridge);
+            webView.addJavascriptInterface(bridge, name);
+            Log.d(TAG, "Registered bridge: " + name);
+        }
+        return this;
+    }
+
+    private static String bridgeName(Object bridge) {
+        String simple = bridge.getClass().getSimpleName();
+        return "_" + simple.substring(0, 1).toLowerCase() + simple.substring(1);
     }
 
     public ReactiveDropDown(MapView mapView, Context pluginContext,
@@ -101,11 +126,18 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
             bridge = new AtakBridge(mapView, eventEmitter);
             webView.addJavascriptInterface(bridge, "_atak");
 
+            // Register bridges passed via constructor varargs (legacy)
             for (Object extra : additionalBridges) {
-                String name = "_" + extra.getClass().getSimpleName().substring(0, 1).toLowerCase()
-                        + extra.getClass().getSimpleName().substring(1);
+                String name = bridgeName(extra);
                 webView.addJavascriptInterface(extra, name);
-                Log.d(TAG, "Registered additional bridge: " + name);
+                Log.d(TAG, "Registered bridge: " + name);
+            }
+
+            // Register bridges added via addBridge()
+            for (Object extra : pendingBridges) {
+                String name = bridgeName(extra);
+                webView.addJavascriptInterface(extra, name);
+                Log.d(TAG, "Registered bridge: " + name);
             }
 
             webView.setWebViewClient(new ReactiveWebViewClient());
@@ -235,6 +267,15 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
     @Override
     public void onDropDownSizeChanged(double width, double height) {
+    }
+
+    /**
+     * Evaluate JavaScript in the WebView. Must be called from UI thread.
+     */
+    public void evaluateJavascript(String script) {
+        if (webView != null) {
+            webView.post(() -> webView.evaluateJavascript(script, null));
+        }
     }
 
     @Override
