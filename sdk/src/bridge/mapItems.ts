@@ -1,5 +1,5 @@
-import type { MapItemData, MapGroupData, MarkerIconOptions, NativeBridge } from './types';
-import { mockBridge } from './mock';
+import type { MapItemData, MapGroupData, MarkerIconOptions, NativeBridge } from '../types';
+import { mockBridge } from '../mock';
 
 function getBridge(): NativeBridge {
   return window._atak ?? mockBridge;

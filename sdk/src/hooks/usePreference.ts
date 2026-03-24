@@ -3,7 +3,7 @@ import { on, off } from '../events';
 import {
   getPreference,
   setPreference as bridgeSetPreference,
-} from '../bridge';
+} from '../bridge/core';
 
 /**
  * Read/write a single ATAK preference by key.

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { NavigationState } from '../types';
-import { getNavigationState, onNavigationStateChanged } from '../routes';
+import { getNavigationState, onNavigationStateChanged } from '../bridge/routes';
 
 export function useNavigationState(): NavigationState {
   const [state, setState] = useState<NavigationState>(getNavigationState);

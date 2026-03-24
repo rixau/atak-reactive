@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import type { IntentData } from '../types';
-import { registerAction, unregisterAction } from '../intents';
+import { registerAction, unregisterAction } from '../bridge/intents';
 import { on, off } from '../events';
 
 /**

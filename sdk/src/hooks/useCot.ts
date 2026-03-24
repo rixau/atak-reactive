@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import type { CotEventData } from '../types';
-import { cotStore } from '../cot';
+import { cotStore } from '../stores/CotStore';
 
 /**
  * Hook that subscribes to inbound CoT events and returns the latest state per UID.

@@ -4,8 +4,8 @@ import type {
   MarkerUpdateOptions,
   NativeBridge,
   SelfLocation,
-} from './types';
-import { mockBridge } from './mock';
+} from '../types';
+import { mockBridge } from '../mock';
 
 function getBridge(): NativeBridge {
   return window._atak ?? mockBridge;

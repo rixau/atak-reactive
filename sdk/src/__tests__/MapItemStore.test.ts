@@ -4,7 +4,7 @@ import { makeMapItem, emitFromNative } from './helpers';
 
 // Fresh import each test
 async function loadModules() {
-  const mod = await import('../MapItemStore');
+  const mod = await import('../stores/MapItemStore');
   return mod;
 }
 

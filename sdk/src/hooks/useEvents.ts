@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import type { AtakEventMap, AtakEventName, SelfLocation } from '../types';
-import { getSelfLocation as bridgeGetSelfLocation } from '../bridge';
+import { getSelfLocation as bridgeGetSelfLocation } from '../bridge/core';
 import { on, off } from '../events';
 
 /**

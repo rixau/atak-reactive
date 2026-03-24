@@ -1,5 +1,5 @@
-import type { GeofenceOptions, NativeBridge } from './types';
-import { mockBridge } from './mock';
+import type { GeofenceOptions, NativeBridge } from '../types';
+import { mockBridge } from '../mock';
 
 function getBridge(): NativeBridge {
   return window._atak ?? mockBridge;

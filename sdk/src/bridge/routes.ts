@@ -5,9 +5,9 @@ import type {
   NavigationState,
   NativeBridge,
   MapItemData,
-} from './types';
-import { mockBridge } from './mock';
-import { on, off } from './events';
+} from '../types';
+import { mockBridge } from '../mock';
+import { on, off } from '../events';
 
 function getBridge(): NativeBridge {
   return window._atak ?? mockBridge;

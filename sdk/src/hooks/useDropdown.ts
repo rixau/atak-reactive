@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { on, off } from '../events';
-import { getDropdownSize, getNavVisible, setNavVisible } from '../dropdown';
+import { getDropdownSize, getNavVisible, setNavVisible } from '../bridge/dropdown';
 
 /**
  * Returns whether the dropdown is currently visible.

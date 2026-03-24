@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import type { MapGroupData, MapItemData, MapItemFilter } from '../types';
-import { getManagedUids } from '../bridge';
-import { getMapGroups as bridgeGetMapGroups } from '../mapItems';
-import { mapItemStore } from '../MapItemStore';
+import { getManagedUids } from '../bridge/core';
+import { getMapGroups as bridgeGetMapGroups } from '../bridge/mapItems';
+import { mapItemStore } from '../stores/MapItemStore';
 
 /**
  * Stabilizes a filter object reference so it only changes when the content changes.

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createMockBridge } from './setup';
 
 async function loadModules() {
-  const shapes = await import('../shapes');
+  const shapes = await import('../bridge/shapes');
   return shapes;
 }
 

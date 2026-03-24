@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ContactData } from '../types';
-import { contactStore } from '../contactStore';
+import { contactStore } from '../stores/contactStore';
 
 export function useContact(uid: string): ContactData | null {
   const [contact, setContact] = useState<ContactData | null>(null);

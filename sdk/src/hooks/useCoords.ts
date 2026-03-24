@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getCoordinateFormat, type CoordinateFormat } from '../coords';
+import { getCoordinateFormat, type CoordinateFormat } from '../bridge/coords';
 
 /**
  * Hook that returns the user's preferred coordinate display format.

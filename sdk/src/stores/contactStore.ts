@@ -1,5 +1,5 @@
-import type { ContactData, ContactFilter } from './types';
-import { on, off } from './events';
+import type { ContactData, ContactFilter } from '../types';
+import { on, off } from '../events';
 
 type ContactCallback = (contacts: ContactData[]) => void;
 

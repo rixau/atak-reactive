@@ -1,33 +1,5 @@
-import type { CotEventData, CotDispatchTarget, NativeBridge } from './types';
-import { mockBridge } from './mock';
-import { on, off } from './events';
-
-function getBridge(): NativeBridge {
-  return window._atak ?? mockBridge;
-}
-
-export function startCotStream(): void {
-  getBridge().startCotStream();
-}
-
-export function stopCotStream(): void {
-  getBridge().stopCotStream();
-}
-
-export function sendCot(event: CotEventData, dispatch: CotDispatchTarget): boolean {
-  const result = getBridge().sendCot(JSON.stringify(event), dispatch);
-  return result === 'true';
-}
-
-export function sendCotToContacts(event: CotEventData, contactUids: string[]): boolean {
-  const result = getBridge().sendCotToContacts(
-    JSON.stringify(event),
-    JSON.stringify(contactUids),
-  );
-  return result === 'true';
-}
-
-// --- CoT Store ---
+import type { CotEventData } from '../types';
+import { on, off } from '../events';
 
 type CotCallback = (items: CotEventData[]) => void;
 type CotRawCallback = (event: CotEventData) => void;
@@ -45,6 +17,10 @@ class CotStore {
   private rawCallbacks = new Set<CotRawCallback>();
   private streamActive = false;
   private refCount = 0;
+
+  private getBridge() {
+    return window._atak;
+  }
 
   subscribe(
     filter: { type?: string } | undefined,
@@ -88,7 +64,7 @@ class CotStore {
     this.streamActive = true;
     this.refCount++;
 
-    getBridge().startCotStream();
+    this.getBridge()?.startCotStream();
     on('cotReceived', this.handleEvent);
   }
 
@@ -97,7 +73,7 @@ class CotStore {
 
     this.streamActive = false;
     off('cotReceived', this.handleEvent);
-    getBridge().stopCotStream();
+    this.getBridge()?.stopCotStream();
   }
 
   private handleEvent = (batch: CotEventData[]) => {
@@ -117,7 +93,7 @@ class CotStore {
   reset() {
     if (this.streamActive) {
       off('cotReceived', this.handleEvent);
-      getBridge().stopCotStream();
+      this.getBridge()?.stopCotStream();
       this.streamActive = false;
     }
     this.items.clear();

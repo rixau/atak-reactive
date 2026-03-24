@@ -1,4 +1,4 @@
-// Bridge functions
+// Bridge functions (all domains)
 export {
   isNative,
   getSelfLocation,
@@ -11,35 +11,20 @@ export {
   setPreference,
   removePreference,
   getManagedUids,
-} from './bridge';
-
-// Dropdown / nav
-export {
-  setDropdownSize,
-  getDropdownSize,
-  setNavVisible,
-  getNavVisible,
-  type DropdownDimension,
-} from './dropdown';
-
-// Map item queries and metadata
-export {
   getMapItemsSnapshot,
   getMapItem,
   getMapGroups,
   getPluginMarkers,
+  startMapItemStream,
+  stopMapItemStream,
   setItemMeta,
   setItemMetaDouble,
   setItemMetaBool,
   getItemMeta,
   setMarkerIcon,
-} from './mapItems';
-
-// Map group management
-export { createMapGroup, removeMapGroup, setGroupVisible } from './mapGroups';
-
-// Shape CRUD
-export {
+  createMapGroup,
+  removeMapGroup,
+  setGroupVisible,
   addShape,
   addCircle,
   addEllipse,
@@ -48,10 +33,6 @@ export {
   removeShape,
   getManagedShapeUids,
   getPluginShapes,
-} from './shapes';
-
-// Route CRUD + navigation
-export {
   addRoute,
   updateRoute,
   addWaypoint,
@@ -63,26 +44,11 @@ export {
   getPluginRoutes,
   getNavigationState,
   onNavigationStateChanged,
-} from './routes';
-
-// CoT messaging
-export { sendCot, sendCotToContacts, cotStore } from './cot';
-
-// Contacts
-export { contactStore, matchesContactFilter } from './contactStore';
-
-// Chat
-export { chatStore } from './chatStore';
-export { sendMessage, openConversation, getChatHistory, getConversations } from './chat';
-
-// Geofence
-export { createGeofence, removeGeofence, dismissGeofenceAlert } from './geofence';
-
-// Intent broadcast
-export { registerAction, unregisterAction, sendBroadcast } from './intents';
-
-// Coordinate conversions
-export {
+  sendCot,
+  sendCotToContacts,
+  registerAction,
+  unregisterAction,
+  sendBroadcast,
   toMGRS,
   toUTM,
   fromMGRS,
@@ -91,10 +57,29 @@ export {
   formatCoordinate,
   distanceTo,
   type CoordinateFormat,
-} from './coords';
+  setDropdownSize,
+  getDropdownSize,
+  setNavVisible,
+  getNavVisible,
+  type DropdownDimension,
+  sendMessage,
+  openConversation,
+  getChatHistory,
+  getConversations,
+  createGeofence,
+  removeGeofence,
+  dismissGeofenceAlert,
+} from './bridge';
 
-// Map item store
-export { mapItemStore, matchesFilter } from './MapItemStore';
+// Stores
+export {
+  mapItemStore,
+  matchesFilter,
+  cotStore,
+  contactStore,
+  matchesContactFilter,
+  chatStore,
+} from './stores';
 
 // Event system
 export { on, off } from './events';

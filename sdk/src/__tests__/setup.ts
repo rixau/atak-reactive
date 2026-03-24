@@ -1,9 +1,9 @@
 import { beforeEach } from 'vitest';
 import type { NativeBridge } from '../types';
-import { mapItemStore } from '../MapItemStore';
-import { cotStore } from '../cot';
-import { contactStore } from '../contactStore';
-import { chatStore } from '../chatStore';
+import { mapItemStore } from '../stores/MapItemStore';
+import { cotStore } from '../stores/CotStore';
+import { contactStore } from '../stores/contactStore';
+import { chatStore } from '../stores/chatStore';
 
 export function createMockBridge(overrides?: Partial<NativeBridge>): NativeBridge {
   return {

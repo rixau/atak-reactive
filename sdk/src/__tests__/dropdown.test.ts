@@ -7,7 +7,7 @@ describe('setDropdownSize', () => {
   it('calls bridge with width and height strings', async () => {
     const spy = vi.fn();
     window._atak = createMockBridge({ setDropdownSize: spy });
-    const { setDropdownSize } = await import('../dropdown');
+    const { setDropdownSize } = await import('../bridge/dropdown');
     setDropdownSize('half', 'full');
     expect(spy).toHaveBeenCalledWith('half', 'full');
   });
@@ -18,7 +18,7 @@ describe('getDropdownSize', () => {
     window._atak = createMockBridge({
       getDropdownSize: () => '{"width":0.33,"height":1.0}',
     });
-    const { getDropdownSize } = await import('../dropdown');
+    const { getDropdownSize } = await import('../bridge/dropdown');
     expect(getDropdownSize()).toEqual({ width: 0.33, height: 1.0 });
   });
 });
@@ -26,13 +26,13 @@ describe('getDropdownSize', () => {
 describe('getNavVisible', () => {
   it('returns true when bridge returns "true"', async () => {
     window._atak = createMockBridge({ getNavVisible: () => 'true' });
-    const { getNavVisible } = await import('../dropdown');
+    const { getNavVisible } = await import('../bridge/dropdown');
     expect(getNavVisible()).toBe(true);
   });
 
   it('returns false when bridge returns "false"', async () => {
     window._atak = createMockBridge({ getNavVisible: () => 'false' });
-    const { getNavVisible } = await import('../dropdown');
+    const { getNavVisible } = await import('../bridge/dropdown');
     expect(getNavVisible()).toBe(false);
   });
 });
@@ -41,7 +41,7 @@ describe('setNavVisible', () => {
   it('calls bridge with boolean', async () => {
     const spy = vi.fn();
     window._atak = createMockBridge({ setNavVisible: spy });
-    const { setNavVisible } = await import('../dropdown');
+    const { setNavVisible } = await import('../bridge/dropdown');
     setNavVisible(false);
     expect(spy).toHaveBeenCalledWith(false);
   });

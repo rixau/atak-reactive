@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createMockBridge } from './setup';
 
 async function loadModules() {
-  return await import('../routes');
+  return await import('../bridge/routes');
 }
 
 describe('addRoute', () => {

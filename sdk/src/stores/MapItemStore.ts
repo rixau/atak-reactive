@@ -1,5 +1,5 @@
-import type { MapItemData, MapItemFilter, MapItemsChangedEvent } from './types';
-import { on, off } from './events';
+import type { MapItemData, MapItemFilter, MapItemsChangedEvent } from '../types';
+import { on, off } from '../events';
 
 type ItemCallback = (items: MapItemData[]) => void;
 type StructuralCallback = () => void;

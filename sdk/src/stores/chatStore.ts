@@ -1,5 +1,5 @@
-import type { ChatMessageData } from './types';
-import { on, off } from './events';
+import type { ChatMessageData } from '../types';
+import { on, off } from '../events';
 
 type ChatCallback = (messages: ChatMessageData[]) => void;
 

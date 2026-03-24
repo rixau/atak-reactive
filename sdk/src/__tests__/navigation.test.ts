@@ -9,7 +9,7 @@ async function loadHook() {
 }
 
 async function loadFunctions() {
-  return await import('../routes');
+  return await import('../bridge/routes');
 }
 
 describe('onNavigationStateChanged', () => {

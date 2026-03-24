@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import type { ContactData, ContactFilter } from '../types';
-import { contactStore } from '../contactStore';
+import { contactStore } from '../stores/contactStore';
 
 function useStableContactFilter(filter: ContactFilter | undefined): ContactFilter | undefined {
   const serialized = useMemo(() => JSON.stringify(filter), [filter]);
