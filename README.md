@@ -41,6 +41,8 @@ npx @atak-reactive/cli dev
 | `useDropdownVisible()` | `boolean` | Whether the dropdown panel is currently visible. Use to pause work when backgrounded. |
 | `useDropdownSize()` | `{ width, height }` | Current dropdown dimensions as screen fractions. Updates on resize. |
 | `useNavVisible()` | `[boolean, setter]` | ATAK nav button visibility + setter. Reactive to changes from any source. |
+| `useMenuAction(actionId, cb)` | `void` | Callback when a radial menu button is clicked. Filters by action ID. |
+| `useMenuAction(cb)` | `void` | Callback for any radial menu button click. No filter. |
 
 ## Functions
 
@@ -97,6 +99,7 @@ npx @atak-reactive/cli dev
 | `dropDownSizeChanged` | `{ width, height }` | Dropdown panel resized |
 | `navVisible` | `boolean` | ATAK nav buttons shown/hidden |
 | `preferenceChanged` | `{ key, value }` | Any ATAK preference changed |
+| `menuAction` | `{ actionId, itemUid, itemType, title }` | Radial menu button clicked |
 
 ## Custom Bridges
 
@@ -202,7 +205,7 @@ One Java relay per domain, one JS store, N hooks. Debouncing on the Java side, f
 
 ```bash
 # Unit tests (headless, no emulator needed)
-cd sdk && npm test          # 71 tests via vitest
+cd sdk && npm test          # 88 tests via vitest
 
 # Integration smoke test (emulator)
 # Open plugin in ATAK → tap Test tab
