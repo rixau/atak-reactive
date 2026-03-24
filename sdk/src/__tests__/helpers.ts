@@ -21,6 +21,7 @@ export function makeMapItem(overrides?: Partial<MapItemData>): MapItemData {
     how: 'h-g-i-g-o',
     editable: true,
     movable: true,
+    iconUri: null,
     ...overrides,
   };
 }

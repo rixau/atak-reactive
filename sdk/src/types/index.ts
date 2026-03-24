@@ -1,5 +1,5 @@
 export type { GeoPoint, SelfLocation } from './common';
-export type { MarkerOptions, MarkerUpdateOptions } from './markers';
+export type { MarkerOptions, MarkerUpdateOptions, MarkerIconOptions } from './markers';
 export type {
   MapItemData,
   MapItemFilter,

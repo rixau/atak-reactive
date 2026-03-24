@@ -1,4 +1,4 @@
-import type { MapItemData, MapGroupData, NativeBridge } from './types';
+import type { MapItemData, MapGroupData, MarkerIconOptions, NativeBridge } from './types';
 import { mockBridge } from './mock';
 
 function getBridge(): NativeBridge {
@@ -53,4 +53,8 @@ export function getItemMeta(uid: string, key: string): string | null {
   const raw = getBridge().getItemMeta(uid, key);
   if (raw === 'null') return null;
   return raw;
+}
+
+export function setMarkerIcon(uid: string, options: MarkerIconOptions): boolean {
+  return getBridge().setMarkerIcon(uid, JSON.stringify(options)) === 'true';
 }

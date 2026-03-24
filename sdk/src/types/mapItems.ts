@@ -15,6 +15,7 @@ export interface MapItemData {
   how: string;
   editable: boolean;
   movable: boolean;
+  iconUri: string | null;
 }
 
 export interface MapItemFilter {

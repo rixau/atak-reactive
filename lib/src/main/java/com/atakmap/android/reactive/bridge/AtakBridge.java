@@ -38,6 +38,7 @@ public class AtakBridge {
     private final MapItemEventRelay relay;
     private final CotBridge cotBridge;
     private final IntentBridge intentBridge;
+    private final MapGroupBridge mapGroupBridge;
     private ReactiveDropDown dropDown;
 
     public AtakBridge(MapView mapView, BridgeEventEmitter emitter) {
@@ -47,6 +48,7 @@ public class AtakBridge {
         this.relay = new MapItemEventRelay(mapView, emitter);
         this.cotBridge = new CotBridge(emitter);
         this.intentBridge = new IntentBridge(emitter);
+        this.mapGroupBridge = new MapGroupBridge(mapView);
     }
 
     @JavascriptInterface
@@ -87,16 +89,21 @@ public class AtakBridge {
     public String addMarker(String optionsJson) {
         try {
             JSONObject opts = new JSONObject(optionsJson);
-            double lat = opts.getDouble("lat");
-            double lng = opts.getDouble("lng");
-            String title = opts.optString("title", "Marker");
-            String type = opts.optString("type", "a-u-G");
-            String uid = opts.optString("uid", UUID.randomUUID().toString());
-
-            return markerManager.addMarker(uid, title, type, lat, lng);
+            return markerManager.addMarker(opts);
         } catch (JSONException e) {
             Log.e(TAG, "Error adding marker", e);
             return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String setMarkerIcon(String uid, String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return String.valueOf(markerManager.setMarkerIcon(uid, opts));
+        } catch (JSONException e) {
+            Log.e(TAG, "Error setting marker icon", e);
+            return "false";
         }
     }
 
@@ -494,6 +501,24 @@ public class AtakBridge {
         return cotBridge.sendCotToContacts(cotJson, contactUidsJson);
     }
 
+    // --- Map group delegation ---
+
+    @JavascriptInterface
+    public String createMapGroup(String name, String parentName) {
+        return String.valueOf(mapGroupBridge.createMapGroup(name, parentName));
+    }
+
+    @JavascriptInterface
+    public String removeMapGroup(String name) {
+        return String.valueOf(mapGroupBridge.removeMapGroup(name));
+    }
+
+    @JavascriptInterface
+    public String setGroupVisible(String name, String visible) {
+        return String.valueOf(mapGroupBridge.setGroupVisible(name,
+                Boolean.parseBoolean(visible)));
+    }
+
     // --- Intent delegation ---
 
     @JavascriptInterface
@@ -516,5 +541,6 @@ public class AtakBridge {
         relay.dispose();
         cotBridge.dispose();
         intentBridge.dispose();
+        mapGroupBridge.dispose();
     }
 }

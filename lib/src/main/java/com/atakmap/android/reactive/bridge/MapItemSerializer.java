@@ -1,7 +1,9 @@
 package com.atakmap.android.reactive.bridge;
 
+import com.atakmap.android.maps.Icon;
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapItem;
+import com.atakmap.android.maps.Marker;
 import com.atakmap.android.maps.PointMapItem;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
@@ -39,6 +41,18 @@ public class MapItemSerializer {
         json.put("movable", item.getMetaBoolean("movable", false));
         json.put("speed", safeDouble(item.getMetaDouble("Speed.value", 0)));
         json.put("bearing", safeDouble(item.getMetaDouble("Speed.heading", 0)));
+
+        if (item instanceof Marker) {
+            Icon icon = ((Marker) item).getIcon();
+            if (icon != null) {
+                String iconUri = icon.getImageUri(Icon.STATE_DEFAULT);
+                json.put("iconUri", iconUri != null ? iconUri : JSONObject.NULL);
+            } else {
+                json.put("iconUri", JSONObject.NULL);
+            }
+        } else {
+            json.put("iconUri", JSONObject.NULL);
+        }
 
         return json;
     }

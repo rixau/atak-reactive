@@ -38,6 +38,10 @@ export interface NativeBridge {
   getDropdownSize(): string;
   setNavVisible(visible: boolean): void;
   getNavVisible(): string;
+  setMarkerIcon(uid: string, optionsJson: string): string;
+  createMapGroup(name: string, parentName: string): string;
+  removeMapGroup(name: string): string;
+  setGroupVisible(name: string, visible: string): string;
 }
 
 declare global {

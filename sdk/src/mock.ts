@@ -189,4 +189,24 @@ export const mockBridge: NativeBridge = {
   getNavVisible() {
     return 'true';
   },
+
+  setMarkerIcon(uid: string, optionsJson: string) {
+    console.log('[atak mock] setMarkerIcon:', uid, JSON.parse(optionsJson));
+    return 'true';
+  },
+
+  createMapGroup(name: string, parentName: string) {
+    console.log('[atak mock] createMapGroup:', name, parentName || '(root)');
+    return 'true';
+  },
+
+  removeMapGroup(name: string) {
+    console.log('[atak mock] removeMapGroup:', name);
+    return 'true';
+  },
+
+  setGroupVisible(name: string, visible: string) {
+    console.log('[atak mock] setGroupVisible:', name, visible);
+    return 'true';
+  },
 };

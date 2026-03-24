@@ -4,6 +4,9 @@ export interface MarkerOptions {
   title: string;
   type?: string;
   uid?: string;
+  iconUri?: string;
+  iconColor?: number;
+  group?: string;
 }
 
 export interface MarkerUpdateOptions {
@@ -11,4 +14,11 @@ export interface MarkerUpdateOptions {
   lng?: number;
   title?: string;
   type?: string;
+  iconUri?: string;
+  iconColor?: number;
+}
+
+export interface MarkerIconOptions {
+  iconUri: string;
+  iconColor?: number;
 }

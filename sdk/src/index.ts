@@ -32,7 +32,11 @@ export {
   setItemMetaDouble,
   setItemMetaBool,
   getItemMeta,
+  setMarkerIcon,
 } from './mapItems';
+
+// Map group management
+export { createMapGroup, removeMapGroup, setGroupVisible } from './mapGroups';
 
 // CoT messaging
 export { sendCot, sendCotToContacts, cotStore } from './cot';
@@ -95,4 +99,5 @@ export type {
   IntentData,
   CotEventData,
   CotDispatchTarget,
+  MarkerIconOptions,
 } from './types';

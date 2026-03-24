@@ -44,6 +44,10 @@ export function createMockBridge(overrides?: Partial<NativeBridge>): NativeBridg
     getDropdownSize: () => '{"width":0.5,"height":1.0}',
     setNavVisible: () => {},
     getNavVisible: () => 'true',
+    setMarkerIcon: () => 'true',
+    createMapGroup: () => 'true',
+    removeMapGroup: () => 'true',
+    setGroupVisible: () => 'true',
     ...overrides,
   };
 }
