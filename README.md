@@ -42,9 +42,10 @@ npx @atak-reactive/cli dev
 
 | Function | Description |
 |----------|-------------|
-| `addMarker(opts)` | Create a marker. Returns UID. |
-| `updateMarker(uid, opts)` | Update marker title, type, or position. |
+| `addMarker(opts)` | Create a marker. Returns UID. Options: `lat`, `lng`, `title`, `type?`, `uid?`, `iconUri?`, `iconColor?`, `group?`. |
+| `updateMarker(uid, opts)` | Update marker title, type, position, or icon. |
 | `removeMarker(uid)` | Remove a marker from the map. |
+| `setMarkerIcon(uid, opts)` | Set or change a marker's icon. Options: `iconUri`, `iconColor?`. |
 | `panTo(lat, lng, zoom?)` | Pan the map camera to a location. |
 | `getSelfLocation()` | One-shot GPS position. |
 | `getMapCenter()` | Current map center point. |
@@ -65,6 +66,9 @@ npx @atak-reactive/cli dev
 | `formatCoordinate(lat, lng)` | Format in user's preferred coordinate system. |
 | `distanceTo(p1, p2)` | Distance (meters) and bearing (degrees) between two points. |
 | `isNative()` | `true` when running inside ATAK, `false` in browser dev mode. |
+| `createMapGroup(name, parent?)` | Create a map group. Registers overlay in Overlay Manager. |
+| `removeMapGroup(name)` | Remove a map group and unregister its overlay. |
+| `setGroupVisible(name, visible)` | Show/hide a group and all its children. |
 | `on(event, fn)` / `off(event, fn)` | Low-level event subscribe/unsubscribe. |
 
 ## Events
@@ -183,7 +187,7 @@ One Java relay per domain, one JS store, N hooks. Debouncing on the Java side, f
 
 ```bash
 # Unit tests (headless, no emulator needed)
-cd sdk && npm test          # 51 tests via vitest
+cd sdk && npm test          # 82 tests via vitest
 
 # Integration smoke test (emulator)
 # Open plugin in ATAK → tap Test tab
