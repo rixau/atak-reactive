@@ -80,6 +80,7 @@ export {
   useDropdownSize,
   useNavVisible,
   usePreference,
+  useMenuAction,
 } from './hooks';
 
 // Types
@@ -100,4 +101,5 @@ export type {
   CotEventData,
   CotDispatchTarget,
   MarkerIconOptions,
+  MenuActionEvent,
 } from './types';

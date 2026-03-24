@@ -1,4 +1,4 @@
-import type { MapItemData, CotEventData } from '../types';
+import type { MapItemData, CotEventData, MenuActionEvent } from '../types';
 
 let counter = 0;
 
@@ -40,6 +40,19 @@ export function makeCotEvent(overrides?: Partial<CotEventData>): CotEventData {
     callsign: `UNIT-${counter}`,
     team: 'Cyan',
     detail: {},
+    ...overrides,
+  };
+}
+
+export function makeMenuAction(
+  overrides?: Partial<MenuActionEvent>,
+): MenuActionEvent {
+  counter++;
+  return {
+    actionId: `action-${counter}`,
+    itemUid: `item-${counter}`,
+    itemType: 'a-f-G',
+    title: `Item ${counter}`,
     ...overrides,
   };
 }

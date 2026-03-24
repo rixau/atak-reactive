@@ -2,6 +2,7 @@ import type { SelfLocation } from './common';
 import type { MapItemsChangedEvent } from './mapItems';
 import type { IntentData } from './intents';
 import type { CotEventData } from './cot';
+import type { MenuActionEvent } from './menu';
 
 export interface MapClickEvent {
   lat: number;
@@ -29,6 +30,7 @@ export type AtakEventMap = {
   dropDownSizeChanged: { width: number; height: number };
   navVisible: boolean;
   preferenceChanged: { key: string; value: string | null };
+  menuAction: MenuActionEvent;
 };
 
 export type AtakEventName = keyof AtakEventMap;
