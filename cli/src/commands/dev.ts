@@ -29,13 +29,45 @@ export function dev(): void {
 
   // Start vite
   log('Starting Vite dev server...\n');
-  const vite = spawn('npx', ['vite'], {
+  const vite = spawn('npx', ['vite', '--host'], {
     cwd: webDir,
     stdio: 'inherit',
     shell: true,
+    detached: false,
   });
 
+  // Ensure Vite is killed on exit
+  const cleanup = () => {
+    try {
+      vite.kill('SIGTERM');
+    } catch {
+      // Already dead
+    }
+    // Also kill anything left on port 5173
+    try {
+      execSync('kill $(lsof -t -i :5173) 2>/dev/null', { stdio: 'pipe' });
+    } catch {
+      // Nothing on port
+    }
+    try {
+      execSync('adb reverse --remove tcp:5173', { stdio: 'pipe' });
+    } catch {
+      // Ignore
+    }
+  };
+
+  process.on('SIGINT', () => {
+    cleanup();
+    process.exit(0);
+  });
+  process.on('SIGTERM', () => {
+    cleanup();
+    process.exit(0);
+  });
+  process.on('exit', cleanup);
+
   vite.on('exit', (code) => {
+    cleanup();
     process.exit(code ?? 0);
   });
 }
