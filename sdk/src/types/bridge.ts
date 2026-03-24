@@ -64,6 +64,23 @@ export interface NativeBridge {
   startNavigation(routeUid: string, optionsJson: string): string;
   stopNavigation(): string;
   getNavigationState(): string;
+
+  // Contacts
+  subscribeContacts(): void;
+  unsubscribeContacts(): void;
+
+  // Chat
+  subscribeChat(): void;
+  unsubscribeChat(): void;
+  sendChatMessage(conversationId: string, text: string): void;
+  getChatHistory(conversationId: string, limit: number): string;
+  getConversations(): string;
+  openConversation(contactUid: string): void;
+
+  // Geofence
+  createGeofence(optionsJson: string): string;
+  removeGeofence(shapeUid: string): void;
+  dismissGeofenceAlert(fenceUid: string, itemUid: string): void;
 }
 
 declare global {

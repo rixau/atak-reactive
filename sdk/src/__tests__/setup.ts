@@ -2,6 +2,8 @@ import { beforeEach } from 'vitest';
 import type { NativeBridge } from '../types';
 import { mapItemStore } from '../MapItemStore';
 import { cotStore } from '../cot';
+import { contactStore } from '../contactStore';
+import { chatStore } from '../chatStore';
 
 export function createMockBridge(overrides?: Partial<NativeBridge>): NativeBridge {
   return {
@@ -73,6 +75,20 @@ export function createMockBridge(overrides?: Partial<NativeBridge>): NativeBridg
         currentWaypointIndex: -1,
         gpsLost: false,
       }),
+    // Contacts
+    subscribeContacts: () => {},
+    unsubscribeContacts: () => {},
+    // Chat
+    subscribeChat: () => {},
+    unsubscribeChat: () => {},
+    sendChatMessage: () => {},
+    getChatHistory: () => '[]',
+    getConversations: () => '[]',
+    openConversation: () => {},
+    // Geofence
+    createGeofence: () => 'true',
+    removeGeofence: () => {},
+    dismissGeofenceAlert: () => {},
     ...overrides,
   };
 }
@@ -80,5 +96,7 @@ export function createMockBridge(overrides?: Partial<NativeBridge>): NativeBridg
 beforeEach(() => {
   mapItemStore.reset();
   cotStore.reset();
+  contactStore.reset();
+  chatStore.reset();
   delete window._atak;
 });

@@ -324,4 +324,51 @@ export const mockBridge: NativeBridge = {
       gpsLost: false,
     });
   },
+
+  // Contacts
+  subscribeContacts() {
+    console.log('[atak mock] subscribeContacts');
+  },
+
+  unsubscribeContacts() {
+    console.log('[atak mock] unsubscribeContacts');
+  },
+
+  // Chat
+  subscribeChat() {
+    console.log('[atak mock] subscribeChat');
+  },
+
+  unsubscribeChat() {
+    console.log('[atak mock] unsubscribeChat');
+  },
+
+  sendChatMessage(conversationId: string, text: string) {
+    console.log('[atak mock] sendChatMessage:', conversationId, text);
+  },
+
+  getChatHistory(_conversationId: string, _limit: number) {
+    return '[]';
+  },
+
+  getConversations() {
+    return '[]';
+  },
+
+  openConversation(contactUid: string) {
+    console.log('[atak mock] openConversation:', contactUid);
+  },
+
+  // Geofence
+  createGeofence(_optionsJson: string) {
+    return 'true';
+  },
+
+  removeGeofence(_shapeUid: string) {
+    console.log('[atak mock] removeGeofence');
+  },
+
+  dismissGeofenceAlert(_fenceUid: string, _itemUid: string) {
+    console.log('[atak mock] dismissGeofenceAlert');
+  },
 };

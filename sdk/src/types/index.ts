@@ -16,6 +16,9 @@ export type { IntentData } from './intents';
 export type { CotEventData, CotDispatchTarget } from './cot';
 export type { NativeBridge } from './bridge';
 export type { MenuActionEvent } from './menu';
+export type { ContactData, ContactFilter } from './contacts';
+export type { ChatMessageData, ConversationInfo } from './chat';
+export type { GeofenceAlertData, GeofenceOptions } from './geofence';
 export type {
   ShapeOptions,
   CircleOptions,

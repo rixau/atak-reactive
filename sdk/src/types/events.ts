@@ -4,6 +4,9 @@ import type { IntentData } from './intents';
 import type { CotEventData } from './cot';
 import type { MenuActionEvent } from './menu';
 import type { NavigationState } from './routes';
+import type { ContactData } from './contacts';
+import type { ChatMessageData } from './chat';
+import type { GeofenceAlertData } from './geofence';
 
 export interface MapClickEvent {
   lat: number;
@@ -33,6 +36,9 @@ export type AtakEventMap = {
   preferenceChanged: { key: string; value: string | null };
   menuAction: MenuActionEvent;
   navigationStateChanged: NavigationState;
+  contactsChanged: ContactData[];
+  chatMessage: ChatMessageData;
+  geofenceAlert: GeofenceAlertData;
 };
 
 export type AtakEventName = keyof AtakEventMap;

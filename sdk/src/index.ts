@@ -68,6 +68,16 @@ export {
 // CoT messaging
 export { sendCot, sendCotToContacts, cotStore } from './cot';
 
+// Contacts
+export { contactStore, matchesContactFilter } from './contactStore';
+
+// Chat
+export { chatStore } from './chatStore';
+export { sendMessage, openConversation, getChatHistory, getConversations } from './chat';
+
+// Geofence
+export { createGeofence, removeGeofence, dismissGeofenceAlert } from './geofence';
+
 // Intent broadcast
 export { registerAction, unregisterAction, sendBroadcast } from './intents';
 
@@ -109,6 +119,10 @@ export {
   usePreference,
   useMenuAction,
   useNavigationState,
+  useContacts,
+  useContact,
+  useChat,
+  useGeofenceAlerts,
 } from './hooks';
 
 // Types
@@ -141,4 +155,10 @@ export type {
   NavigationState,
   RouteMethod,
   RouteDirection,
+  ContactData,
+  ContactFilter,
+  ChatMessageData,
+  ConversationInfo,
+  GeofenceAlertData,
+  GeofenceOptions,
 } from './types';

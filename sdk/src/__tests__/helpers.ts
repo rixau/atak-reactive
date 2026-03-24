@@ -3,6 +3,9 @@ import type {
   CotEventData,
   MenuActionEvent,
   NavigationState,
+  ContactData,
+  ChatMessageData,
+  GeofenceAlertData,
 } from '../types';
 
 let counter = 0;
@@ -168,6 +171,56 @@ export function makeNavState(
     routeUid: null,
     currentWaypointIndex: -1,
     gpsLost: false,
+    ...overrides,
+  };
+}
+
+export function makeContact(overrides?: Partial<ContactData>): ContactData {
+  counter++;
+  return {
+    uid: `contact-${counter}`,
+    name: `User ${counter}`,
+    status: 'current',
+    team: 'Cyan',
+    role: null,
+    type: 'individual',
+    connectorTypes: ['connector.ip'],
+    unreadCount: 0,
+    hasLocation: true,
+    lat: 38.8977,
+    lng: -77.0365,
+    ...overrides,
+  };
+}
+
+export function makeChatMessage(overrides?: Partial<ChatMessageData>): ChatMessageData {
+  counter++;
+  return {
+    conversationId: `conv-${counter}`,
+    conversationName: `Conversation ${counter}`,
+    messageId: `msg-${counter}`,
+    message: `Hello ${counter}`,
+    senderUid: `sender-${counter}`,
+    senderName: `Sender ${counter}`,
+    timeSent: Date.now(),
+    timeReceived: Date.now(),
+    status: 'none',
+    ...overrides,
+  };
+}
+
+export function makeGeofenceAlert(overrides?: Partial<GeofenceAlertData>): GeofenceAlertData {
+  counter++;
+  return {
+    itemUid: `item-${counter}`,
+    itemCallsign: `UNIT-${counter}`,
+    fenceUid: `fence-${counter}`,
+    fenceTitle: `Fence ${counter}`,
+    entered: true,
+    timestamp: Date.now(),
+    lat: 38.8977,
+    lng: -77.0365,
+    alt: 15,
     ...overrides,
   };
 }

@@ -16,3 +16,7 @@ export {
 export { usePreference } from './usePreference';
 export { useMenuAction } from './useMenuAction';
 export { useNavigationState } from './useNavigationState';
+export { useContacts } from './useContacts';
+export { useContact } from './useContact';
+export { useChat } from './useChat';
+export { useGeofenceAlerts } from './useGeofenceAlerts';

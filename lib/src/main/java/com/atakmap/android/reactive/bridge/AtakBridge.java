@@ -42,6 +42,9 @@ public class AtakBridge {
     private final CotBridge cotBridge;
     private final IntentBridge intentBridge;
     private final MapGroupBridge mapGroupBridge;
+    private final ContactBridge contactBridge;
+    private final ChatBridge chatBridge;
+    private final GeofenceBridge geofenceBridge;
     private ReactiveDropDown dropDown;
 
     public AtakBridge(MapView mapView, BridgeEventEmitter emitter) {
@@ -55,6 +58,9 @@ public class AtakBridge {
         this.cotBridge = new CotBridge(emitter);
         this.intentBridge = new IntentBridge(emitter);
         this.mapGroupBridge = new MapGroupBridge(mapView);
+        this.contactBridge = new ContactBridge(emitter);
+        this.chatBridge = new ChatBridge(mapView, emitter);
+        this.geofenceBridge = new GeofenceBridge(mapView, emitter);
         this.navigationRelay.start();
     }
 
@@ -709,11 +715,75 @@ public class AtakBridge {
         return navigationRelay.getNavigationState();
     }
 
+    // --- Contact delegation ---
+
+    @JavascriptInterface
+    public void subscribeContacts() {
+        contactBridge.start();
+    }
+
+    @JavascriptInterface
+    public void unsubscribeContacts() {
+        contactBridge.stop();
+    }
+
+    // --- Chat delegation ---
+
+    @JavascriptInterface
+    public void subscribeChat() {
+        chatBridge.start();
+    }
+
+    @JavascriptInterface
+    public void unsubscribeChat() {
+        chatBridge.stop();
+    }
+
+    @JavascriptInterface
+    public void sendChatMessage(String conversationId, String text) {
+        chatBridge.sendMessage(conversationId, text);
+    }
+
+    @JavascriptInterface
+    public String getChatHistory(String conversationId, int limit) {
+        return chatBridge.getHistory(conversationId, limit);
+    }
+
+    @JavascriptInterface
+    public String getConversations() {
+        return chatBridge.getConversations();
+    }
+
+    @JavascriptInterface
+    public void openConversation(String contactUid) {
+        chatBridge.openConversation(contactUid);
+    }
+
+    // --- Geofence delegation ---
+
+    @JavascriptInterface
+    public String createGeofence(String optionsJson) {
+        return geofenceBridge.createGeofence(optionsJson);
+    }
+
+    @JavascriptInterface
+    public void removeGeofence(String shapeUid) {
+        geofenceBridge.removeGeofence(shapeUid);
+    }
+
+    @JavascriptInterface
+    public void dismissGeofenceAlert(String fenceUid, String itemUid) {
+        geofenceBridge.dismissGeofenceAlert(fenceUid, itemUid);
+    }
+
     public void dispose() {
         markerManager.removeAll();
         shapeManager.removeAll();
         routeManager.removeAll();
         navigationRelay.stop();
+        contactBridge.stop();
+        chatBridge.stop();
+        geofenceBridge.stop();
         relay.dispose();
         cotBridge.dispose();
         intentBridge.dispose();
