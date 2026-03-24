@@ -4,7 +4,7 @@ Build ATAK plugin UIs with React. Add React screens to any existing plugin — o
 
 ## How It Works
 
-Your plugin's React UI runs in a WebView panel. A typed JavaScript bridge connects it to ATAK's map engine — markers, map items, GPS, CoT messaging, intents, coordinates, and preferences. During development, Vite serves the UI with hot module replacement. For release, assets are bundled into the APK.
+Your plugin's React UI runs in a WebView panel. A typed JavaScript bridge connects it to ATAK's map engine — markers, shapes, routes, map items, GPS, CoT messaging, intents, coordinates, preferences, and navigation. During development, Vite serves the UI with hot module replacement. For release, assets are bundled into the APK.
 
 ## Quick Start
 
@@ -25,7 +25,7 @@ npx @atak-reactive/cli dev
 
 | Hook | Returns | Description |
 |------|---------|-------------|
-| `useMapItems(filter?)` | `MapItemData[]` | Live array of map items. Filters by `type`, `group`, `visible`, `meta`. Updates on add/remove/change. |
+| `useMapItems(filter?)` | `MapItemData[]` | Live array of map items (markers, shapes, routes). Filters by `type`, `group`, `visible`, `meta`. Updates on add/remove/change. Shape fields (`points`, `strokeColor`, `radius`, etc.) included when present. |
 | `useMapItem(uid)` | `MapItemData \| null` | Single item by UID with live updates. |
 | `useMapGroups()` | `MapGroupData[]` | Map group tree. Refreshes on structural changes only. |
 | `usePluginMarkers()` | `MapItemData[]` | Items created by this plugin via `addMarker()`. |
@@ -43,6 +43,7 @@ npx @atak-reactive/cli dev
 | `useNavVisible()` | `[boolean, setter]` | ATAK nav button visibility + setter. Reactive to changes from any source. |
 | `useMenuAction(actionId, cb)` | `void` | Callback when a radial menu button is clicked. Filters by action ID. |
 | `useMenuAction(cb)` | `void` | Callback for any radial menu button click. No filter. |
+| `useNavigationState()` | `NavigationState` | Route navigation state: `active`, `routeUid`, `currentWaypointIndex`, `gpsLost`. Updates reactively as navigation progresses. |
 
 ## Functions
 
@@ -81,6 +82,25 @@ npx @atak-reactive/cli dev
 | `createMapGroup(name, parent?)` | Create a map group. Registers overlay in Overlay Manager. |
 | `removeMapGroup(name)` | Remove a map group and unregister its overlay. |
 | `setGroupVisible(name, visible)` | Show/hide a group and all its children. |
+| `addShape(opts)` | Create a polygon/polyline. Returns UID. Options: `points`, `closed?`, `title?`, `strokeColor?`, `fillColor?`, `strokeWeight?`, `editable?`, `archive?`. |
+| `addCircle(opts)` | Create a circle. Returns UID. Options: `center`, `radius`, `title?`, `strokeColor?`, `fillColor?`, `rings?`, `editable?`, `archive?`. |
+| `addEllipse(opts)` | Create an ellipse. Returns UID. Options: `center`, `width`, `length`, `angle?`, `title?`, colors, `editable?`, `archive?`. |
+| `addRectangle(opts)` | Create a rectangle. Returns UID. Options: `points` (4 corners), `title?`, colors, `editable?`, `archive?`. |
+| `updateShape(uid, opts)` | Update shape geometry, style, or title. Type-dispatched — wrong-type fields are silently ignored. |
+| `removeShape(uid)` | Remove any shape from the map. Handles child cleanup per shape type. |
+| `getPluginShapes()` | Get all shapes created by this plugin. |
+| `getManagedShapeUids()` | Get the Set of shape UIDs created by this plugin. |
+| `addRoute(opts)` | Create a route with waypoints. Returns UID. Options: `waypoints`, `title?`, `color?`, `prefix?`, `method?`, `direction?`. |
+| `updateRoute(uid, opts)` | Update route title, color, method, or direction. |
+| `addWaypoint(routeUid, opts)` | Add a waypoint to a route. Options: `lat`, `lng`, `alt?`, `index?`, `title?`. |
+| `removeWaypoint(routeUid, waypointUid)` | Remove a waypoint from a route. |
+| `removeRoute(uid)` | Remove a route and all its waypoints. |
+| `startNavigation(routeUid, opts?)` | Start navigating a route. Options: `startIndex?`. |
+| `stopNavigation()` | Stop active navigation. |
+| `getNavigationState()` | One-shot navigation state. |
+| `getPluginRoutes()` | Get all routes created by this plugin. |
+| `getManagedRouteUids()` | Get the Set of route UIDs created by this plugin. |
+| `onNavigationStateChanged(cb)` | Subscribe to navigation state changes. Returns unsubscribe function. |
 | `on(event, fn)` / `off(event, fn)` | Low-level event subscribe/unsubscribe. |
 
 ## Events
@@ -100,6 +120,7 @@ npx @atak-reactive/cli dev
 | `navVisible` | `boolean` | ATAK nav buttons shown/hidden |
 | `preferenceChanged` | `{ key, value }` | Any ATAK preference changed |
 | `menuAction` | `{ actionId, itemUid, itemType, title }` | Radial menu button clicked |
+| `navigationStateChanged` | `{ active, routeUid, currentWaypointIndex, gpsLost }` | Route navigation state changed |
 
 ## Custom Bridges
 
@@ -205,7 +226,7 @@ One Java relay per domain, one JS store, N hooks. Debouncing on the Java side, f
 
 ```bash
 # Unit tests (headless, no emulator needed)
-cd sdk && npm test          # 88 tests via vitest
+cd sdk && npm test          # 153 tests via vitest
 
 # Integration smoke test (emulator)
 # Open plugin in ATAK → tap Test tab
