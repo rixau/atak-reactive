@@ -1,4 +1,7 @@
 .env
+android_keystore
+*.keystore
+
 # Gradle
 .gradle/
 build/
