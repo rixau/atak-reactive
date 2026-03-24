@@ -29,7 +29,7 @@ export function dev(): void {
 
   // Start vite
   log('Starting Vite dev server...\n');
-  const vite = spawn('npx', ['vite', '--host'], {
+  const vite = spawn('npx', ['vite', '--host', '--port', '5173', '--strictPort'], {
     cwd: webDir,
     stdio: 'inherit',
     shell: true,
