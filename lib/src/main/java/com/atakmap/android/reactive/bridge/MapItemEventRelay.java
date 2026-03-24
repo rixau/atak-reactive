@@ -8,7 +8,9 @@ import com.atakmap.android.maps.MapEventDispatcher;
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;
+import com.atakmap.android.maps.Polyline;
 import com.atakmap.android.maps.PointMapItem;
+import com.atakmap.android.maps.Shape;
 import com.atakmap.coremap.log.Log;
 
 import org.json.JSONArray;
@@ -30,6 +32,9 @@ public class MapItemEventRelay {
 
     private final Map<String, PointMapItem.OnPointChangedListener> pointListeners = new ConcurrentHashMap<>();
     private final Map<String, WeakReference<PointMapItem>> pointItems = new ConcurrentHashMap<>();
+
+    private final Map<String, Polyline.OnPointsChangedListener> shapeListeners = new ConcurrentHashMap<>();
+    private final Map<String, WeakReference<Polyline>> shapeItems = new ConcurrentHashMap<>();
 
     private PendingUpdate pending = new PendingUpdate();
 
@@ -123,6 +128,9 @@ public class MapItemEventRelay {
             if (item instanceof PointMapItem) {
                 attachPointListener((PointMapItem) item);
             }
+            if (item instanceof Polyline) {
+                attachShapeListener((Polyline) item);
+            }
         } catch (JSONException e) {
             Log.e(TAG, "Error serializing added item", e);
         }
@@ -137,6 +145,15 @@ public class MapItemEventRelay {
             PointMapItem pmi = ref.get();
             if (pmi != null) {
                 pmi.removeOnPointChangedListener(listener);
+            }
+        }
+
+        Polyline.OnPointsChangedListener shapeListener = shapeListeners.remove(uid);
+        WeakReference<Polyline> shapeRef = shapeItems.remove(uid);
+        if (shapeListener != null && shapeRef != null) {
+            Polyline poly = shapeRef.get();
+            if (poly != null) {
+                poly.removeOnPointsChangedListener(shapeListener);
             }
         }
 
@@ -167,6 +184,19 @@ public class MapItemEventRelay {
         item.addOnPointChangedListener(listener);
     }
 
+    private void attachShapeListener(Polyline polyline) {
+        String uid = polyline.getUID();
+        if (shapeListeners.containsKey(uid)) return;
+
+        Polyline.OnPointsChangedListener listener = changedPolyline -> {
+            onItemUpdated((MapItem) changedPolyline);
+        };
+
+        shapeListeners.put(uid, listener);
+        shapeItems.put(uid, new WeakReference<>(polyline));
+        polyline.addOnPointsChangedListener(listener);
+    }
+
     private void attachPointListenersForExisting() {
         MapGroup root = mapView.getRootGroup();
         if (root == null) return;
@@ -175,6 +205,9 @@ public class MapItemEventRelay {
             public boolean onItemFunction(MapItem item) {
                 if (item instanceof PointMapItem) {
                     attachPointListener((PointMapItem) item);
+                }
+                if (item instanceof Polyline) {
+                    attachShapeListener((Polyline) item);
                 }
                 return false;
             }
@@ -193,6 +226,18 @@ public class MapItemEventRelay {
         }
         pointListeners.clear();
         pointItems.clear();
+
+        for (Map.Entry<String, Polyline.OnPointsChangedListener> entry : shapeListeners.entrySet()) {
+            WeakReference<Polyline> ref = shapeItems.get(entry.getKey());
+            if (ref != null) {
+                Polyline poly = ref.get();
+                if (poly != null) {
+                    poly.removeOnPointsChangedListener(entry.getValue());
+                }
+            }
+        }
+        shapeListeners.clear();
+        shapeItems.clear();
     }
 
     private final Runnable flushRunnable = this::flush;

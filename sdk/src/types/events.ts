@@ -3,6 +3,7 @@ import type { MapItemsChangedEvent } from './mapItems';
 import type { IntentData } from './intents';
 import type { CotEventData } from './cot';
 import type { MenuActionEvent } from './menu';
+import type { NavigationState } from './routes';
 
 export interface MapClickEvent {
   lat: number;
@@ -31,6 +32,7 @@ export type AtakEventMap = {
   navVisible: boolean;
   preferenceChanged: { key: string; value: string | null };
   menuAction: MenuActionEvent;
+  navigationStateChanged: NavigationState;
 };
 
 export type AtakEventName = keyof AtakEventMap;

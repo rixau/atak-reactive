@@ -48,6 +48,31 @@ export function createMockBridge(overrides?: Partial<NativeBridge>): NativeBridg
     createMapGroup: () => 'true',
     removeMapGroup: () => 'true',
     setGroupVisible: () => 'true',
+    // Shapes
+    addShape: () => 'null',
+    addCircle: () => 'null',
+    addEllipse: () => 'null',
+    addRectangle: () => 'null',
+    updateShape: () => 'false',
+    removeShape: () => 'false',
+    getPluginShapes: () => '[]',
+    // Routes
+    addRoute: () => 'null',
+    updateRoute: () => 'false',
+    addWaypoint: () => 'false',
+    removeWaypoint: () => 'false',
+    removeRoute: () => 'false',
+    getPluginRoutes: () => '[]',
+    // Navigation
+    startNavigation: () => 'false',
+    stopNavigation: () => 'false',
+    getNavigationState: () =>
+      JSON.stringify({
+        active: false,
+        routeUid: null,
+        currentWaypointIndex: -1,
+        gpsLost: false,
+      }),
     ...overrides,
   };
 }

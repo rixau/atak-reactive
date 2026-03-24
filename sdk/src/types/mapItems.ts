@@ -1,3 +1,5 @@
+import type { GeoPoint } from './common';
+
 export interface MapItemData {
   uid: string;
   type: string;
@@ -16,6 +18,23 @@ export interface MapItemData {
   editable: boolean;
   movable: boolean;
   iconUri: string | null;
+
+  // Shape fields (present when item is a shape)
+  points?: GeoPoint[];
+  closed?: boolean;
+  strokeColor?: string;
+  fillColor?: string;
+  strokeWeight?: number;
+  radius?: number;
+  rings?: number;
+  width?: number;
+  length?: number;
+  angle?: number;
+
+  // Route fields (present when item is a route)
+  routeMethod?: string;
+  routeDirection?: string;
+  routeType?: string;
 }
 
 export interface MapItemFilter {

@@ -16,3 +16,18 @@ export type { IntentData } from './intents';
 export type { CotEventData, CotDispatchTarget } from './cot';
 export type { NativeBridge } from './bridge';
 export type { MenuActionEvent } from './menu';
+export type {
+  ShapeOptions,
+  CircleOptions,
+  EllipseOptions,
+  RectangleOptions,
+  ShapeUpdateOptions,
+} from './shapes';
+export type {
+  RouteOptions,
+  RouteUpdateOptions,
+  WaypointOptions,
+  NavigationState,
+  RouteMethod,
+  RouteDirection,
+} from './routes';

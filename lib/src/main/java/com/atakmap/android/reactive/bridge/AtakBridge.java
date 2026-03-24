@@ -35,6 +35,9 @@ public class AtakBridge {
     private final MapView mapView;
     private final BridgeEventEmitter emitter;
     private final MarkerManager markerManager;
+    private final ShapeManager shapeManager;
+    private final RouteManager routeManager;
+    private final NavigationRelay navigationRelay;
     private final MapItemEventRelay relay;
     private final CotBridge cotBridge;
     private final IntentBridge intentBridge;
@@ -45,10 +48,14 @@ public class AtakBridge {
         this.mapView = mapView;
         this.emitter = emitter;
         this.markerManager = new MarkerManager(mapView);
+        this.shapeManager = new ShapeManager(mapView);
+        this.routeManager = new RouteManager(mapView);
+        this.navigationRelay = new NavigationRelay(emitter);
         this.relay = new MapItemEventRelay(mapView, emitter);
         this.cotBridge = new CotBridge(emitter);
         this.intentBridge = new IntentBridge(emitter);
         this.mapGroupBridge = new MapGroupBridge(mapView);
+        this.navigationRelay.start();
     }
 
     @JavascriptInterface
@@ -536,8 +543,177 @@ public class AtakBridge {
         intentBridge.sendBroadcast(action, extrasJson);
     }
 
+    // --- Shape delegation ---
+
+    @JavascriptInterface
+    public String addShape(String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return shapeManager.addShape(opts);
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding shape", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String addCircle(String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return shapeManager.addCircle(opts);
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding circle", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String addEllipse(String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return shapeManager.addEllipse(opts);
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding ellipse", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String addRectangle(String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return shapeManager.addRectangle(opts);
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding rectangle", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String updateShape(String uid, String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return String.valueOf(shapeManager.updateShape(uid, opts));
+        } catch (JSONException e) {
+            Log.e(TAG, "Error updating shape", e);
+            return "false";
+        }
+    }
+
+    @JavascriptInterface
+    public String removeShape(String uid) {
+        return String.valueOf(shapeManager.removeShape(uid));
+    }
+
+    @JavascriptInterface
+    public String getPluginShapes() {
+        try {
+            JSONArray result = new JSONArray();
+            List<String> uids = shapeManager.getManagedUids();
+            for (String uid : uids) {
+                MapItem item = mapView.getRootGroup().deepFindUID(uid);
+                if (item != null) {
+                    result.put(MapItemSerializer.serialize(item));
+                }
+            }
+            return result.toString();
+        } catch (JSONException e) {
+            Log.e(TAG, "Error getting plugin shapes", e);
+            return "[]";
+        }
+    }
+
+    // --- Route delegation ---
+
+    @JavascriptInterface
+    public String addRoute(String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return routeManager.addRoute(opts);
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding route", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String updateRoute(String uid, String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return String.valueOf(routeManager.updateRoute(uid, opts));
+        } catch (JSONException e) {
+            Log.e(TAG, "Error updating route", e);
+            return "false";
+        }
+    }
+
+    @JavascriptInterface
+    public String addWaypoint(String routeUid, String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return String.valueOf(routeManager.addWaypoint(routeUid, opts));
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding waypoint", e);
+            return "false";
+        }
+    }
+
+    @JavascriptInterface
+    public String removeWaypoint(String routeUid, String waypointUid) {
+        return String.valueOf(routeManager.removeWaypoint(routeUid, waypointUid));
+    }
+
+    @JavascriptInterface
+    public String removeRoute(String uid) {
+        return String.valueOf(routeManager.removeRoute(uid));
+    }
+
+    @JavascriptInterface
+    public String getPluginRoutes() {
+        try {
+            JSONArray result = new JSONArray();
+            List<String> uids = routeManager.getManagedUids();
+            for (String uid : uids) {
+                MapItem item = mapView.getRootGroup().deepFindUID(uid);
+                if (item != null) {
+                    result.put(MapItemSerializer.serialize(item));
+                }
+            }
+            return result.toString();
+        } catch (JSONException e) {
+            Log.e(TAG, "Error getting plugin routes", e);
+            return "[]";
+        }
+    }
+
+    // --- Navigation delegation ---
+
+    @JavascriptInterface
+    public String startNavigation(String routeUid, String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return String.valueOf(routeManager.startNavigation(routeUid, opts));
+        } catch (JSONException e) {
+            Log.e(TAG, "Error starting navigation", e);
+            return "false";
+        }
+    }
+
+    @JavascriptInterface
+    public String stopNavigation() {
+        return String.valueOf(routeManager.stopNavigation());
+    }
+
+    @JavascriptInterface
+    public String getNavigationState() {
+        return navigationRelay.getNavigationState();
+    }
+
     public void dispose() {
         markerManager.removeAll();
+        shapeManager.removeAll();
+        routeManager.removeAll();
+        navigationRelay.stop();
         relay.dispose();
         cotBridge.dispose();
         intentBridge.dispose();

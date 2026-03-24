@@ -42,6 +42,28 @@ export interface NativeBridge {
   createMapGroup(name: string, parentName: string): string;
   removeMapGroup(name: string): string;
   setGroupVisible(name: string, visible: string): string;
+
+  // Shapes
+  addShape(optionsJson: string): string;
+  addCircle(optionsJson: string): string;
+  addEllipse(optionsJson: string): string;
+  addRectangle(optionsJson: string): string;
+  updateShape(uid: string, optionsJson: string): string;
+  removeShape(uid: string): string;
+  getPluginShapes(): string;
+
+  // Routes
+  addRoute(optionsJson: string): string;
+  updateRoute(uid: string, optionsJson: string): string;
+  addWaypoint(routeUid: string, optionsJson: string): string;
+  removeWaypoint(routeUid: string, waypointUid: string): string;
+  removeRoute(uid: string): string;
+  getPluginRoutes(): string;
+
+  // Navigation
+  startNavigation(routeUid: string, optionsJson: string): string;
+  stopNavigation(): string;
+  getNavigationState(): string;
 }
 
 declare global {

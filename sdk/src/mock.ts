@@ -209,4 +209,119 @@ export const mockBridge: NativeBridge = {
     console.log('[atak mock] setGroupVisible:', name, visible);
     return 'true';
   },
+
+  // Shapes
+  addShape(optionsJson: string) {
+    const opts = JSON.parse(optionsJson) as Record<string, unknown>;
+    const uid =
+      (opts['uid'] as string | undefined) ??
+      `mock-shape-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    console.log('[atak mock] addShape:', opts, '→ uid:', uid);
+    return uid;
+  },
+
+  addCircle(optionsJson: string) {
+    const opts = JSON.parse(optionsJson) as Record<string, unknown>;
+    const uid =
+      (opts['uid'] as string | undefined) ??
+      `mock-circle-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    console.log('[atak mock] addCircle:', opts, '→ uid:', uid);
+    return uid;
+  },
+
+  addEllipse(optionsJson: string) {
+    const opts = JSON.parse(optionsJson) as Record<string, unknown>;
+    const uid =
+      (opts['uid'] as string | undefined) ??
+      `mock-ellipse-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    console.log('[atak mock] addEllipse:', opts, '→ uid:', uid);
+    return uid;
+  },
+
+  addRectangle(optionsJson: string) {
+    const opts = JSON.parse(optionsJson) as Record<string, unknown>;
+    const uid =
+      (opts['uid'] as string | undefined) ??
+      `mock-rect-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    console.log('[atak mock] addRectangle:', opts, '→ uid:', uid);
+    return uid;
+  },
+
+  updateShape(uid: string, optionsJson: string) {
+    console.log('[atak mock] updateShape:', uid, JSON.parse(optionsJson));
+    return 'true';
+  },
+
+  removeShape(uid: string) {
+    console.log('[atak mock] removeShape:', uid);
+    return 'true';
+  },
+
+  getPluginShapes() {
+    console.log('[atak mock] getPluginShapes');
+    return '[]';
+  },
+
+  // Routes
+  addRoute(optionsJson: string) {
+    const opts = JSON.parse(optionsJson) as Record<string, unknown>;
+    const uid =
+      (opts['uid'] as string | undefined) ??
+      `mock-route-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    console.log('[atak mock] addRoute:', opts, '→ uid:', uid);
+    return uid;
+  },
+
+  updateRoute(uid: string, optionsJson: string) {
+    console.log('[atak mock] updateRoute:', uid, JSON.parse(optionsJson));
+    return 'true';
+  },
+
+  addWaypoint(routeUid: string, optionsJson: string) {
+    console.log(
+      '[atak mock] addWaypoint:',
+      routeUid,
+      JSON.parse(optionsJson),
+    );
+    return 'true';
+  },
+
+  removeWaypoint(routeUid: string, waypointUid: string) {
+    console.log('[atak mock] removeWaypoint:', routeUid, waypointUid);
+    return 'true';
+  },
+
+  removeRoute(uid: string) {
+    console.log('[atak mock] removeRoute:', uid);
+    return 'true';
+  },
+
+  getPluginRoutes() {
+    console.log('[atak mock] getPluginRoutes');
+    return '[]';
+  },
+
+  // Navigation
+  startNavigation(routeUid: string, optionsJson: string) {
+    console.log(
+      '[atak mock] startNavigation:',
+      routeUid,
+      JSON.parse(optionsJson),
+    );
+    return 'true';
+  },
+
+  stopNavigation() {
+    console.log('[atak mock] stopNavigation');
+    return 'true';
+  },
+
+  getNavigationState() {
+    return JSON.stringify({
+      active: false,
+      routeUid: null,
+      currentWaypointIndex: -1,
+      gpsLost: false,
+    });
+  },
 };
