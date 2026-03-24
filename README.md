@@ -37,6 +37,10 @@ npx @atak-reactive/cli dev
 | `useIntent(action)` | `IntentData \| null` | Last received ATAK broadcast matching action. |
 | `useIntentCallback(action, cb)` | `void` | Callback on each matching broadcast. |
 | `useCoordinateFormat()` | `string` | User's preferred coordinate format (`dd`, `dm`, `dms`, `mgrs`, `utm`). |
+| `usePreference(key)` | `[string \| null, setter]` | Read/write a single ATAK preference. Reactive to changes from any source. |
+| `useDropdownVisible()` | `boolean` | Whether the dropdown panel is currently visible. Use to pause work when backgrounded. |
+| `useDropdownSize()` | `{ width, height }` | Current dropdown dimensions as screen fractions. Updates on resize. |
+| `useNavVisible()` | `[boolean, setter]` | ATAK nav button visibility + setter. Reactive to changes from any source. |
 
 ## Functions
 
@@ -50,6 +54,12 @@ npx @atak-reactive/cli dev
 | `getSelfLocation()` | One-shot GPS position. |
 | `getMapCenter()` | Current map center point. |
 | `getPreference(key)` | Read an ATAK preference. |
+| `setPreference(key, value)` | Write an ATAK preference. |
+| `removePreference(key)` | Remove an ATAK preference. |
+| `setDropdownSize(width, height)` | Resize the dropdown panel. Width/height: `'third'`, `'half'`, or `'full'`. |
+| `getDropdownSize()` | Current dropdown dimensions as `{ width, height }` fractions. |
+| `setNavVisible(visible)` | Show or hide ATAK's nav buttons. |
+| `getNavVisible()` | Whether ATAK's nav buttons are visible. |
 | `setItemMeta(uid, key, value)` | Write string metadata on any map item. Triggers reactive update. |
 | `setItemMetaDouble(uid, key, value)` | Write double metadata. |
 | `setItemMetaBool(uid, key, value)` | Write boolean metadata. |
@@ -82,6 +92,11 @@ npx @atak-reactive/cli dev
 | `mapItemsChanged` | `{ added, removed, updated }` | Map items changed |
 | `cotReceived` | `CotEventData[]` | Inbound CoT messages |
 | `intentReceived` | `{ action, extras }` | ATAK broadcast received |
+| `dropDownVisible` | `boolean` | Dropdown panel shown/hidden |
+| `dropDownClose` | `{}` | Dropdown panel closed |
+| `dropDownSizeChanged` | `{ width, height }` | Dropdown panel resized |
+| `navVisible` | `boolean` | ATAK nav buttons shown/hidden |
+| `preferenceChanged` | `{ key, value }` | Any ATAK preference changed |
 
 ## Custom Bridges
 
@@ -187,7 +202,7 @@ One Java relay per domain, one JS store, N hooks. Debouncing on the Java side, f
 
 ```bash
 # Unit tests (headless, no emulator needed)
-cd sdk && npm test          # 82 tests via vitest
+cd sdk && npm test          # 71 tests via vitest
 
 # Integration smoke test (emulator)
 # Open plugin in ATAK → tap Test tab
