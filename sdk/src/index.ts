@@ -8,8 +8,19 @@ export {
   removeMarker,
   panTo,
   getPreference,
+  setPreference,
+  removePreference,
   getManagedUids,
 } from './bridge';
+
+// Dropdown / nav
+export {
+  setDropdownSize,
+  getDropdownSize,
+  setNavVisible,
+  getNavVisible,
+  type DropdownDimension,
+} from './dropdown';
 
 // Map item queries and metadata
 export {
@@ -61,6 +72,10 @@ export {
   useIntentCallback,
   useCotStream,
   useCotEvent,
+  useDropdownVisible,
+  useDropdownSize,
+  useNavVisible,
+  usePreference,
 } from './hooks';
 
 // Types

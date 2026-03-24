@@ -38,6 +38,12 @@ export function createMockBridge(overrides?: Partial<NativeBridge>): NativeBridg
     setItemMetaDouble: () => 'true',
     setItemMetaBool: () => 'true',
     getItemMeta: () => 'null',
+    setPreference: () => 'true',
+    removePreference: () => 'true',
+    setDropdownSize: () => {},
+    getDropdownSize: () => '{"width":0.5,"height":1.0}',
+    setNavVisible: () => {},
+    getNavVisible: () => 'true',
     ...overrides,
   };
 }

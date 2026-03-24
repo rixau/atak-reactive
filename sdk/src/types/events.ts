@@ -24,6 +24,11 @@ export type AtakEventMap = {
   mapItemsChanged: MapItemsChangedEvent;
   intentReceived: IntentData;
   cotReceived: CotEventData[];
+  dropDownVisible: boolean;
+  dropDownClose: Record<string, never>;
+  dropDownSizeChanged: { width: number; height: number };
+  navVisible: boolean;
+  preferenceChanged: { key: string; value: string | null };
 };
 
 export type AtakEventName = keyof AtakEventMap;

@@ -19,9 +19,13 @@ import androidx.webkit.WebViewAssetLoader;
 import com.atakmap.android.dropdown.DropDown.OnStateListener;
 import com.atakmap.android.dropdown.DropDownReceiver;
 import com.atakmap.android.maps.MapView;
+import com.atakmap.android.navigation.views.NavView;
+import com.atakmap.android.preference.AtakPreferences;
 import com.atakmap.android.reactive.bridge.AtakBridge;
 import com.atakmap.android.reactive.bridge.BridgeEventEmitter;
 import com.atakmap.coremap.log.Log;
+
+import android.content.SharedPreferences;
 
 /**
  * A DropDownReceiver that hosts a WebView with a React UI.
@@ -56,6 +60,10 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private BridgeEventEmitter eventEmitter;
 
     private final java.util.List<Object> pendingBridges = new java.util.ArrayList<>();
+    private SharedPreferences.OnSharedPreferenceChangeListener prefListener;
+    private NavView.NavButtonsVisibilityListener navListener;
+    private double currentWidth = HALF_WIDTH;
+    private double currentHeight = FULL_HEIGHT;
 
     /**
      * Create a reactive dropdown.
@@ -124,6 +132,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
             eventEmitter = new BridgeEventEmitter(webView);
             bridge = new AtakBridge(mapView, eventEmitter);
+            bridge.setDropDown(ReactiveDropDown.this);
             webView.addJavascriptInterface(bridge, "_atak");
 
             // Register bridges passed via constructor varargs (legacy)
@@ -224,6 +233,8 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
         if (eventEmitter != null) {
             eventEmitter.startListening();
+            startPreferenceListener();
+            startNavListener();
             onStartListening(eventEmitter);
         }
     }
@@ -248,11 +259,17 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                 webView.onPause();
             }
         }
+        if (eventEmitter != null) {
+            eventEmitter.emit("dropDownVisible", String.valueOf(visible));
+        }
     }
 
     @Override
     public void onDropDownClose() {
         if (eventEmitter != null) {
+            eventEmitter.emit("dropDownClose", "{}");
+            stopPreferenceListener();
+            stopNavListener();
             onStopListening(eventEmitter);
             eventEmitter.stopListening();
         }
@@ -267,6 +284,12 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
     @Override
     public void onDropDownSizeChanged(double width, double height) {
+        currentWidth = width;
+        currentHeight = height;
+        if (eventEmitter != null) {
+            eventEmitter.emit("dropDownSizeChanged",
+                    "{\"width\":" + width + ",\"height\":" + height + "}");
+        }
     }
 
     /**
@@ -278,8 +301,82 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         }
     }
 
+    private void startPreferenceListener() {
+        try {
+            AtakPreferences prefs = AtakPreferences.getInstance(
+                    getMapView().getContext());
+            prefListener = (sp, key) -> {
+                if (key == null || eventEmitter == null) return;
+                String value = prefs.get(key, (String) null);
+                String payload = "{\"key\":\"" + key.replace("\"", "\\\"")
+                        + "\",\"value\":"
+                        + (value == null ? "null"
+                                : "\"" + value.replace("\"", "\\\"") + "\"")
+                        + "}";
+                eventEmitter.emit("preferenceChanged", payload);
+            };
+            prefs.registerListener(prefListener);
+        } catch (Exception e) {
+            Log.e(TAG, "Error starting preference listener", e);
+        }
+    }
+
+    private void stopPreferenceListener() {
+        if (prefListener != null) {
+            try {
+                AtakPreferences prefs = AtakPreferences.getInstance(
+                        getMapView().getContext());
+                prefs.unregisterListener(prefListener);
+            } catch (Exception e) {
+                Log.e(TAG, "Error stopping preference listener", e);
+            }
+            prefListener = null;
+        }
+    }
+
+    private void startNavListener() {
+        try {
+            NavView nav = NavView.getInstance();
+            if (nav == null) return;
+            navListener = visible -> {
+                if (eventEmitter != null) {
+                    eventEmitter.emit("navVisible", String.valueOf(visible));
+                }
+            };
+            nav.addButtonVisibilityListener(navListener);
+        } catch (Exception e) {
+            Log.e(TAG, "Error starting nav listener", e);
+        }
+    }
+
+    private void stopNavListener() {
+        if (navListener != null) {
+            try {
+                NavView nav = NavView.getInstance();
+                if (nav != null) {
+                    nav.removeButtonVisibilityListener(navListener);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error stopping nav listener", e);
+            }
+            navListener = null;
+        }
+    }
+
+    // --- Dropdown dimension accessors for AtakBridge ---
+
+    double getDropDownWidth() {
+        return currentWidth;
+    }
+
+    double getDropDownHeight() {
+        return currentHeight;
+    }
+
     @Override
     public void disposeImpl() {
+        stopPreferenceListener();
+        stopNavListener();
         if (eventEmitter != null) {
             eventEmitter.stopListening();
         }

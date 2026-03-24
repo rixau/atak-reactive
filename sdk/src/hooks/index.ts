@@ -8,3 +8,9 @@ export {
 export { useCoordinateFormat } from './useCoords';
 export { useIntent, useIntentCallback } from './useIntents';
 export { useCotStream, useCotEvent } from './useCot';
+export {
+  useDropdownVisible,
+  useDropdownSize,
+  useNavVisible,
+} from './useDropdown';
+export { usePreference } from './usePreference';

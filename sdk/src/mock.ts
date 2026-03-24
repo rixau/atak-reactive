@@ -45,7 +45,7 @@ export const mockBridge: NativeBridge = {
 
   getPreference(key: string) {
     console.log('[atak mock] getPreference:', key);
-    return 'null';
+    return localStorage.getItem('mock_pref_' + key) ?? 'null';
   },
 
   subscribe(eventName: string) {
@@ -160,5 +160,33 @@ export const mockBridge: NativeBridge = {
   getItemMeta(uid: string, key: string) {
     console.log('[atak mock] getItemMeta:', uid, key);
     return 'null';
+  },
+
+  setPreference(key: string, value: string) {
+    localStorage.setItem('mock_pref_' + key, value);
+    console.log('[atak mock] setPreference:', key, value);
+    return 'true';
+  },
+
+  removePreference(key: string) {
+    localStorage.removeItem('mock_pref_' + key);
+    console.log('[atak mock] removePreference:', key);
+    return 'true';
+  },
+
+  setDropdownSize(width: string, height: string) {
+    console.log('[atak mock] setDropdownSize:', width, height);
+  },
+
+  getDropdownSize() {
+    return JSON.stringify({ width: 0.5, height: 1.0 });
+  },
+
+  setNavVisible(visible: boolean) {
+    console.log('[atak mock] setNavVisible:', visible);
+  },
+
+  getNavVisible() {
+    return 'true';
   },
 };

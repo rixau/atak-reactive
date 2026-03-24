@@ -11,8 +11,15 @@ import com.atakmap.android.preference.AtakPreferences;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
+import com.atakmap.android.dropdown.DropDownReceiver;
+import com.atakmap.android.navigation.views.NavView;
+import com.atakmap.android.ipc.AtakBroadcast;
+import android.content.Intent;
+
 import com.atakmap.coremap.conversions.CoordinateFormat;
 import com.atakmap.coremap.conversions.CoordinateFormatUtilities;
+
+import com.atakmap.android.reactive.ReactiveDropDown;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -31,6 +38,7 @@ public class AtakBridge {
     private final MapItemEventRelay relay;
     private final CotBridge cotBridge;
     private final IntentBridge intentBridge;
+    private ReactiveDropDown dropDown;
 
     public AtakBridge(MapView mapView, BridgeEventEmitter emitter) {
         this.mapView = mapView;
@@ -130,6 +138,94 @@ public class AtakBridge {
         } catch (Exception e) {
             Log.e(TAG, "Error getting preference: " + key, e);
             return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String setPreference(String key, String value) {
+        try {
+            AtakPreferences.getInstance(mapView.getContext()).set(key, value);
+            return "true";
+        } catch (Exception e) {
+            Log.e(TAG, "Error setting preference: " + key, e);
+            return "false";
+        }
+    }
+
+    @JavascriptInterface
+    public String removePreference(String key) {
+        try {
+            AtakPreferences.getInstance(mapView.getContext()).remove(key);
+            return "true";
+        } catch (Exception e) {
+            Log.e(TAG, "Error removing preference: " + key, e);
+            return "false";
+        }
+    }
+
+    // --- Dropdown sizing ---
+
+    public void setDropDown(ReactiveDropDown dropDown) {
+        this.dropDown = dropDown;
+    }
+
+    @JavascriptInterface
+    public void setDropdownSize(String width, String height) {
+        if (dropDown == null) return;
+        double w = parseSizeFraction(width);
+        double h = parseSizeFraction(height);
+        if (w < 0 || h < 0) return;
+        mapView.post(() -> dropDown.resize(w, h));
+    }
+
+    @JavascriptInterface
+    public String getDropdownSize() {
+        if (dropDown == null) return "{\"width\":0.5,\"height\":1.0}";
+        try {
+            JSONObject json = new JSONObject();
+            json.put("width", dropDown.getDropDownWidth());
+            json.put("height", dropDown.getDropDownHeight());
+            return json.toString();
+        } catch (JSONException e) {
+            return "{\"width\":0.5,\"height\":1.0}";
+        }
+    }
+
+    // --- Nav visibility ---
+
+    @JavascriptInterface
+    public void setNavVisible(boolean visible) {
+        mapView.post(() -> {
+            try {
+                NavView nav = NavView.getInstance();
+                if (nav != null && nav.buttonsVisible() != visible) {
+                    AtakBroadcast.getInstance().sendBroadcast(
+                            new Intent(NavView.TOGGLE_BUTTONS));
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error setting nav visibility", e);
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public String getNavVisible() {
+        try {
+            NavView nav = NavView.getInstance();
+            if (nav == null) return "true";
+            return String.valueOf(nav.buttonsVisible());
+        } catch (Exception e) {
+            return "true";
+        }
+    }
+
+    private static double parseSizeFraction(String name) {
+        if (name == null) return -1;
+        switch (name) {
+            case "third": return DropDownReceiver.THIRD_WIDTH;
+            case "half":  return DropDownReceiver.HALF_WIDTH;
+            case "full":  return DropDownReceiver.FULL_WIDTH;
+            default:      return -1;
         }
     }
 

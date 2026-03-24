@@ -15,6 +15,12 @@ import {
   distanceTo,
   useCoordinateFormat,
   getPreference,
+  setPreference,
+  removePreference,
+  setDropdownSize,
+  getDropdownSize,
+  setNavVisible,
+  getNavVisible,
   setItemMeta,
   getItemMeta,
   isNative,
@@ -122,6 +128,49 @@ export function IntegrationTestPage() {
       log(true, 'sendBroadcast no crash');
     } catch (e) {
       log(false, 'sendBroadcast', String(e));
+    }
+
+    // --- Preferences write/read roundtrip ---
+    const prefKey = 'test.spike1.integration';
+    const setPrefResult = setPreference(prefKey, 'test_value');
+    log(setPrefResult, 'setPreference returns true', String(setPrefResult));
+
+    const readBack = getPreference(prefKey);
+    log(readBack === 'test_value', 'getPreference reads back written value', readBack ?? 'null');
+
+    const removePrefResult = removePreference(prefKey);
+    log(removePrefResult, 'removePreference returns true', String(removePrefResult));
+
+    const afterRemove = getPreference(prefKey);
+    log(afterRemove === null, 'getPreference returns null after remove', afterRemove ?? 'null');
+
+    // --- Dropdown sizing ---
+    try {
+      setDropdownSize('full', 'full');
+      const size = getDropdownSize();
+      log(size.width === 1.0 && size.height === 1.0, 'setDropdownSize + getDropdownSize',
+        `${size.width}x${size.height}`);
+      // Restore default
+      setDropdownSize('half', 'full');
+    } catch (e) {
+      log(false, 'dropdown sizing', String(e));
+    }
+
+    // --- Nav visibility ---
+    try {
+      const initialNav = getNavVisible();
+      log(typeof initialNav === 'boolean', 'getNavVisible returns boolean', String(initialNav));
+
+      setNavVisible(false);
+      // Small delay needed for intent broadcast round-trip
+      setTimeout(() => {
+        const afterHide = getNavVisible();
+        log(afterHide === false, 'setNavVisible(false) hides nav', String(afterHide));
+        // Restore
+        setNavVisible(true);
+      }, 200);
+    } catch (e) {
+      log(false, 'nav visibility', String(e));
     }
 
     setResults([

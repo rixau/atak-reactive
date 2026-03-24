@@ -61,3 +61,13 @@ export function getPreference(key: string): string | null {
   if (raw === 'null') return null;
   return raw;
 }
+
+export function setPreference(key: string, value: string): boolean {
+  const raw = getBridge().setPreference(key, value);
+  return raw === 'true';
+}
+
+export function removePreference(key: string): boolean {
+  const raw = getBridge().removePreference(key);
+  return raw === 'true';
+}

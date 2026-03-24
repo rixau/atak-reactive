@@ -32,6 +32,12 @@ export interface NativeBridge {
   setItemMetaDouble(uid: string, key: string, value: number): string;
   setItemMetaBool(uid: string, key: string, value: boolean): string;
   getItemMeta(uid: string, key: string): string;
+  setPreference(key: string, value: string): string;
+  removePreference(key: string): string;
+  setDropdownSize(width: string, height: string): void;
+  getDropdownSize(): string;
+  setNavVisible(visible: boolean): void;
+  getNavVisible(): string;
 }
 
 declare global {
