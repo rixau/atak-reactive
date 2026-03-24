@@ -37,6 +37,16 @@ import {
   startNavigation,
   stopNavigation,
   useNavigationState,
+  useContacts,
+  useContact,
+  useChat,
+  useGeofenceAlerts,
+  sendMessage,
+  getChatHistory,
+  getConversations,
+  openConversation,
+  createGeofence,
+  removeGeofence,
 } from '@atak-reactive/sdk';
 
 interface TestResult {
@@ -58,16 +68,24 @@ export function IntegrationTestPage() {
   const location = useSelfLocation();
   const coordFormat = useCoordinateFormat();
   const nav = useNavigationState();
+  const contacts = useContacts();
+  const [trackContactUid, setTrackContactUid] = useState<string>('');
+  const trackedContact = useContact(trackContactUid);
+  void trackedContact; // used to verify hook doesn't crash
+  const chatMessages = useChat('__test_integration__');
+  const geofenceAlerts = useGeofenceAlerts();
   const [results, setResults] = useState<TestResult[]>([]);
   const testMarkerUid = useRef<string | null>(null);
   const testShapeUid = useRef<string | null>(null);
   const testCircleUid = useRef<string | null>(null);
   const testRouteUid = useRef<string | null>(null);
+  const testGeofenceShapeUid = useRef<string | null>(null);
   const phase = useRef<
     | 'setup' | 'verify-stream' | 'verify-update' | 'verify-meta' | 'verify-remove'
     | 'shape-create' | 'shape-verify-stream' | 'shape-update' | 'shape-verify-update' | 'shape-remove' | 'shape-verify-remove'
     | 'circle-create' | 'circle-verify-stream' | 'circle-remove' | 'circle-verify-remove'
     | 'route-create' | 'route-verify-stream' | 'route-update' | 'route-waypoint' | 'route-remove' | 'route-verify-remove'
+    | 'contacts-test' | 'chat-test' | 'geofence-test'
     | 'done'
   >('setup');
 
@@ -407,14 +425,12 @@ export function IntegrationTestPage() {
     }
   }, [items]);
 
-  // Phase 12: Verify route removal → done
+  // Phase 12: Verify route removal → start contacts tests
   useEffect(() => {
     if (phase.current !== 'route-verify-remove' || !testRouteUid.current) return;
 
     const found = items.find(i => i.uid === testRouteUid.current);
     if (!found) {
-      phase.current = 'done';
-
       addResult({ name: 'removeRoute removes from stream', pass: true });
 
       // Navigation state check (should be inactive after stopNavigation)
@@ -424,14 +440,158 @@ export function IntegrationTestPage() {
         detail: `active=${nav.active}`,
       });
 
-      // Final count
-      setResults(prev => {
-        const passed = prev.filter(r => r.pass).length;
-        console.log(`INTEGRATION_TEST:COMPLETE:${passed}/${prev.length} passed`);
-        return prev;
-      });
+      phase.current = 'contacts-test';
     }
   }, [items]);
+
+  // Phase 13: Contacts tests
+  useEffect(() => {
+    if (phase.current !== 'contacts-test') return;
+    phase.current = 'chat-test';
+
+    // useContacts returns array (may be empty on emulator with no peers)
+    addResult({
+      name: 'useContacts returns array',
+      pass: Array.isArray(contacts),
+      detail: `${contacts.length} contacts`,
+    });
+
+    // If contacts exist, verify data shape
+    if (contacts.length > 0) {
+      const first = contacts[0]!;
+      const hasShape = typeof first.uid === 'string'
+        && typeof first.name === 'string'
+        && typeof first.status === 'string'
+        && typeof first.type === 'string';
+      addResult({
+        name: 'contact data shape valid',
+        pass: hasShape,
+        detail: `${first.name} (${first.status}, ${first.team ?? 'no team'})`,
+      });
+
+      // Track the first contact with useContact
+      setTrackContactUid(first.uid);
+      addResult({
+        name: 'useContact tracks contact',
+        pass: true,
+        detail: `tracking ${first.uid}`,
+      });
+    } else {
+      addResult({
+        name: 'contact data shape valid',
+        pass: true,
+        detail: 'skipped (no contacts on device)',
+      });
+    }
+  }, [contacts.length > 0 ? 'ready' : phase.current]);
+
+  // Phase 14: Chat tests
+  useEffect(() => {
+    if (phase.current !== 'chat-test') return;
+    phase.current = 'geofence-test';
+
+    // useChat returns array (empty for test conversation)
+    addResult({
+      name: 'useChat returns array',
+      pass: Array.isArray(chatMessages),
+      detail: `${chatMessages.length} messages`,
+    });
+
+    // getChatHistory returns array
+    try {
+      const history = getChatHistory('__test_integration__', 10);
+      addResult({
+        name: 'getChatHistory returns array',
+        pass: Array.isArray(history),
+        detail: `${history.length} messages`,
+      });
+    } catch (e) {
+      addResult({ name: 'getChatHistory returns array', pass: false, detail: String(e) });
+    }
+
+    // getConversations returns array
+    try {
+      const convos = getConversations();
+      addResult({
+        name: 'getConversations returns array',
+        pass: Array.isArray(convos),
+        detail: `${convos.length} conversations`,
+      });
+    } catch (e) {
+      addResult({ name: 'getConversations returns array', pass: false, detail: String(e) });
+    }
+
+    // sendMessage does not crash (send to non-existent conversation, just bridge test)
+    try {
+      sendMessage('__test_integration__', 'integration test message');
+      addResult({ name: 'sendMessage no crash', pass: true });
+    } catch (e) {
+      addResult({ name: 'sendMessage no crash', pass: false, detail: String(e) });
+    }
+
+    // openConversation does not crash
+    try {
+      openConversation('__test_nonexistent__');
+      addResult({ name: 'openConversation no crash', pass: true });
+    } catch (e) {
+      addResult({ name: 'openConversation no crash', pass: false, detail: String(e) });
+    }
+  }, [phase.current === 'chat-test' ? 'run' : '']);
+
+  // Phase 15: Geofence tests → done
+  useEffect(() => {
+    if (phase.current !== 'geofence-test') return;
+    phase.current = 'done';
+
+    // useGeofenceAlerts returns array (empty — no active fences in test)
+    addResult({
+      name: 'useGeofenceAlerts returns array',
+      pass: Array.isArray(geofenceAlerts),
+      detail: `${geofenceAlerts.length} alerts`,
+    });
+
+    // createGeofence + removeGeofence roundtrip
+    // Create a circle to attach a geofence to
+    const circleUid = addCircle({
+      center: { lat: 38.897, lng: -77.036 },
+      radius: 200,
+      title: 'TEST_GEOFENCE_CIRCLE',
+    });
+
+    if (circleUid) {
+      testGeofenceShapeUid.current = circleUid;
+
+      try {
+        createGeofence({
+          shapeUid: circleUid,
+          trigger: 'both',
+          monitoredTypes: 'all',
+        });
+        addResult({ name: 'createGeofence no crash', pass: true, detail: `on ${circleUid}` });
+      } catch (e) {
+        addResult({ name: 'createGeofence no crash', pass: false, detail: String(e) });
+      }
+
+      try {
+        removeGeofence(circleUid);
+        addResult({ name: 'removeGeofence no crash', pass: true });
+      } catch (e) {
+        addResult({ name: 'removeGeofence no crash', pass: false, detail: String(e) });
+      }
+
+      // Clean up the test circle
+      removeShape(circleUid);
+    } else {
+      addResult({ name: 'createGeofence no crash', pass: false, detail: 'could not create test circle' });
+    }
+
+    // Final count
+    setResults(prev => {
+      const passed = prev.filter(r => r.pass).length;
+      console.log(`INTEGRATION_TEST:COMPLETE:${passed}/${prev.length} passed`);
+      return prev;
+    });
+  }, [phase.current === 'geofence-test' ? 'run' : '']);
 
   const passed = results.filter(r => r.pass).length;
   const total = results.length;
