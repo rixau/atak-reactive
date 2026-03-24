@@ -26,6 +26,17 @@ import {
   isNative,
   sendCot,
   sendBroadcast,
+  addShape,
+  addCircle,
+  updateShape,
+  removeShape,
+  addRoute,
+  addWaypoint,
+  updateRoute,
+  removeRoute,
+  startNavigation,
+  stopNavigation,
+  useNavigationState,
 } from '@atak-reactive/sdk';
 
 interface TestResult {
@@ -46,9 +57,19 @@ export function IntegrationTestPage() {
   const groups = useMapGroups();
   const location = useSelfLocation();
   const coordFormat = useCoordinateFormat();
+  const nav = useNavigationState();
   const [results, setResults] = useState<TestResult[]>([]);
   const testMarkerUid = useRef<string | null>(null);
-  const phase = useRef<'setup' | 'verify-stream' | 'verify-update' | 'verify-meta' | 'verify-remove' | 'done'>('setup');
+  const testShapeUid = useRef<string | null>(null);
+  const testCircleUid = useRef<string | null>(null);
+  const testRouteUid = useRef<string | null>(null);
+  const phase = useRef<
+    | 'setup' | 'verify-stream' | 'verify-update' | 'verify-meta' | 'verify-remove'
+    | 'shape-create' | 'shape-verify-stream' | 'shape-update' | 'shape-verify-update' | 'shape-remove' | 'shape-verify-remove'
+    | 'circle-create' | 'circle-verify-stream' | 'circle-remove' | 'circle-verify-remove'
+    | 'route-create' | 'route-verify-stream' | 'route-update' | 'route-waypoint' | 'route-remove' | 'route-verify-remove'
+    | 'done'
+  >('setup');
 
   const addResult = (r: TestResult) => {
     log(r.pass, r.name, r.detail);
@@ -237,22 +258,177 @@ export function IntegrationTestPage() {
     }
   }, [items]);
 
-  // Phase 5: Verify removal
+  // Phase 5: Verify marker removal → start shape tests
   useEffect(() => {
     if (phase.current !== 'verify-remove' || !testMarkerUid.current) return;
 
     const found = items.find(i => i.uid === testMarkerUid.current);
     if (!found) {
+      phase.current = 'shape-create';
+      addResult({ name: 'removeMarker removes from stream', pass: true });
+
+      // --- Shape: create polygon ---
+      const uid = addShape({
+        points: [
+          { lat: 38.897, lng: -77.036 },
+          { lat: 38.898, lng: -77.035 },
+          { lat: 38.897, lng: -77.034 },
+        ],
+        closed: true,
+        title: 'TEST_SHAPE',
+        strokeColor: '#FFFF0000',
+        fillColor: '#3300FF00',
+      });
+      addResult({ name: 'addShape returns uid', pass: !!uid, detail: uid ?? 'null' });
+      if (uid) {
+        testShapeUid.current = uid;
+        phase.current = 'shape-verify-stream';
+      }
+    }
+  }, [items]);
+
+  // Phase 6: Verify shape appears in stream
+  useEffect(() => {
+    if (phase.current !== 'shape-verify-stream' || !testShapeUid.current) return;
+
+    const found = items.find(i => i.uid === testShapeUid.current);
+    if (found) {
+      phase.current = 'shape-update';
+      addResult({ name: 'useMapItems sees shape', pass: true, detail: found.type });
+
+      const ok = updateShape(testShapeUid.current!, { strokeColor: '#FF00FF00', title: 'UPDATED_SHAPE' });
+      addResult({ name: 'updateShape returns true', pass: ok });
+      if (ok) phase.current = 'shape-verify-update';
+    }
+  }, [items]);
+
+  // Phase 7: Verify shape update in stream
+  useEffect(() => {
+    if (phase.current !== 'shape-verify-update' || !testShapeUid.current) return;
+
+    const found = items.find(i => i.uid === testShapeUid.current);
+    if (found && found.title === 'UPDATED_SHAPE') {
+      phase.current = 'shape-remove';
+      addResult({ name: 'useMapItems sees shape update', pass: true, detail: found.title });
+
+      removeShape(testShapeUid.current!);
+      phase.current = 'shape-verify-remove';
+    }
+  }, [items]);
+
+  // Phase 8: Verify shape removal
+  useEffect(() => {
+    if (phase.current !== 'shape-verify-remove' || !testShapeUid.current) return;
+
+    const found = items.find(i => i.uid === testShapeUid.current);
+    if (!found) {
+      phase.current = 'circle-create';
+      addResult({ name: 'removeShape removes from stream', pass: true });
+
+      // --- Circle: create ---
+      const uid = addCircle({
+        center: { lat: 38.897, lng: -77.036 },
+        radius: 500,
+        title: 'TEST_CIRCLE',
+      });
+      addResult({ name: 'addCircle returns uid', pass: !!uid, detail: uid ?? 'null' });
+      if (uid) {
+        testCircleUid.current = uid;
+        phase.current = 'circle-verify-stream';
+      }
+    }
+  }, [items]);
+
+  // Phase 9: Verify circle in stream → remove
+  useEffect(() => {
+    if (phase.current !== 'circle-verify-stream' || !testCircleUid.current) return;
+
+    const found = items.find(i => i.uid === testCircleUid.current);
+    if (found) {
+      addResult({ name: 'useMapItems sees circle', pass: true, detail: `radius=${found.radius}` });
+
+      removeShape(testCircleUid.current!);
+      phase.current = 'circle-verify-remove';
+    }
+  }, [items]);
+
+  // Phase 10: Verify circle removal → start route tests
+  useEffect(() => {
+    if (phase.current !== 'circle-verify-remove' || !testCircleUid.current) return;
+
+    const found = items.find(i => i.uid === testCircleUid.current);
+    if (!found) {
+      phase.current = 'route-create';
+      addResult({ name: 'removeShape(circle) removes from stream', pass: true });
+
+      // --- Route: create ---
+      const uid = addRoute({
+        waypoints: [
+          { lat: 38.88, lng: -77.03 },
+          { lat: 38.89, lng: -77.02 },
+          { lat: 38.90, lng: -77.01 },
+        ],
+        title: 'TEST_ROUTE',
+        method: 'Driving',
+        direction: 'Infil',
+      });
+      addResult({ name: 'addRoute returns uid', pass: !!uid, detail: uid ?? 'null' });
+      if (uid) {
+        testRouteUid.current = uid;
+        phase.current = 'route-verify-stream';
+      }
+    }
+  }, [items]);
+
+  // Phase 11: Verify route in stream → update + waypoint
+  useEffect(() => {
+    if (phase.current !== 'route-verify-stream' || !testRouteUid.current) return;
+
+    const found = items.find(i => i.uid === testRouteUid.current);
+    if (found) {
+      addResult({ name: 'useMapItems sees route', pass: true, detail: found.routeMethod ?? '' });
+
+      const upOk = updateRoute(testRouteUid.current!, { title: 'UPDATED_ROUTE' });
+      addResult({ name: 'updateRoute returns true', pass: upOk });
+
+      const wpOk = addWaypoint(testRouteUid.current!, { lat: 38.91, lng: -77.0 });
+      addResult({ name: 'addWaypoint returns true', pass: wpOk });
+
+      // Navigation: start then immediately stop (just verify bridge calls work)
+      const navStart = startNavigation(testRouteUid.current!);
+      addResult({ name: 'startNavigation returns true', pass: navStart });
+
+      const navStop = stopNavigation();
+      addResult({ name: 'stopNavigation returns true', pass: navStop });
+
+      // Remove route
+      removeRoute(testRouteUid.current!);
+      phase.current = 'route-verify-remove';
+    }
+  }, [items]);
+
+  // Phase 12: Verify route removal → done
+  useEffect(() => {
+    if (phase.current !== 'route-verify-remove' || !testRouteUid.current) return;
+
+    const found = items.find(i => i.uid === testRouteUid.current);
+    if (!found) {
       phase.current = 'done';
 
-      addResult({ name: 'removeMarker removes from stream', pass: true });
+      addResult({ name: 'removeRoute removes from stream', pass: true });
+
+      // Navigation state check (should be inactive after stopNavigation)
+      addResult({
+        name: 'useNavigationState returns state',
+        pass: typeof nav.active === 'boolean',
+        detail: `active=${nav.active}`,
+      });
 
       // Final count
       setResults(prev => {
-        const all = prev;
-        const passed = all.filter(r => r.pass).length;
-        console.log(`INTEGRATION_TEST:COMPLETE:${passed}/${all.length} passed`);
-        return all;
+        const passed = prev.filter(r => r.pass).length;
+        console.log(`INTEGRATION_TEST:COMPLETE:${passed}/${prev.length} passed`);
+        return prev;
       });
     }
   }, [items]);

@@ -4,7 +4,6 @@ import { HomePage } from './pages/Home';
 import { MarkersPage } from './pages/Markers';
 import { SettingsPage } from './pages/Settings';
 import { IntegrationTestPage } from './pages/IntegrationTest';
-import { ShapesRoutesPage } from './pages/ShapesRoutes';
 
 export function App() {
   return (
@@ -22,7 +21,6 @@ export function App() {
           <Route path="/markers" element={<MarkersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/test" element={<IntegrationTestPage />} />
-          <Route path="/shapes" element={<ShapesRoutesPage />} />
         </Routes>
       </div>
 
@@ -31,7 +29,6 @@ export function App() {
         <Tab to="/markers" label="Map Items" />
         <Tab to="/settings" label="Settings" />
         <Tab to="/test" label="Test" />
-        <Tab to="/shapes" label="Shapes" />
       </nav>
     </div>
   );
