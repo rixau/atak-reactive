@@ -1,14 +1,14 @@
 package com.atakmap.android.reactive.bridge;
 
-import com.atakmap.android.maps.Icon;
+import com.atakmap.coremap.maps.assets.Icon;
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.Marker;
 import com.atakmap.android.maps.PointMapItem;
 import com.atakmap.android.maps.Polyline;
 import com.atakmap.android.maps.Shape;
-import com.atakmap.android.drawing.DrawingCircle;
-import com.atakmap.android.maps.Ellipse;
+import com.atakmap.android.drawing.mapItems.DrawingCircle;
+import com.atakmap.android.drawing.mapItems.DrawingEllipse;
 import com.atakmap.android.routes.Route;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.GeoPointMetaData;
@@ -92,8 +92,8 @@ public class MapItemSerializer {
             json.put("radius", c.getRadius());
             json.put("rings", c.getNumRings());
         }
-        if (item instanceof Ellipse) {
-            Ellipse e = (Ellipse) item;
+        if (item instanceof DrawingEllipse) {
+            DrawingEllipse e = (DrawingEllipse) item;
             json.put("width", e.getWidth());
             json.put("length", e.getLength());
             json.put("angle", e.getAngle());

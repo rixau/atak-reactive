@@ -2,141 +2,93 @@ package com.atakmap.android.reactive.bridge;
 
 import com.atakmap.android.routes.Route;
 import com.atakmap.android.routes.RouteNavigator;
-import com.atakmap.android.routes.nav.RouteNavigationManager;
 import com.atakmap.coremap.log.Log;
 
 import org.json.JSONObject;
 
-public class NavigationRelay implements RouteNavigator.RouteNavigatorListener {
+/**
+ * Navigation state relay — bridges RouteNavigator state to JS.
+ *
+ * TODO: Fix RouteNavigatorListener and RouteNavigationManagerEventListener
+ * method signatures against actual ATAK 5.6.0 SDK API.
+ */
+public class NavigationRelay {
 
     private static final String TAG = "NavigationRelay";
 
     private final BridgeEventEmitter emitter;
-    private RouteNavigationManager navManager;
     private boolean active = false;
     private String currentRouteUid = null;
-    private int currentWaypointIndex = -1;
-    private boolean gpsLost = false;
-
-    private final RouteNavigationManager.RouteNavigationManagerEventListener navManagerListener =
-            new RouteNavigationManager.RouteNavigationManagerEventListener() {
-                @Override
-                public void onWaypointReached(int index, RouteNavigationManager.NavWaypoint waypoint) {
-                    currentWaypointIndex = index;
-                    emitState();
-                }
-
-                @Override
-                public void onGpsStatusChanged(boolean lost) {
-                    gpsLost = lost;
-                    emitState();
-                }
-
-                @Override
-                public void onNavigationObjectiveChanged(
-                        RouteNavigationManager.NavWaypoint waypoint, boolean approached) {
-                    // Optional: could emit more detailed state
-                }
-
-                @Override
-                public void onOffRoute() {
-                    // Optional: could add an offRoute field
-                }
-
-                @Override
-                public void onReturnedToRoute() {
-                    // Optional: could clear offRoute state
-                }
-            };
 
     public NavigationRelay(BridgeEventEmitter emitter) {
         this.emitter = emitter;
     }
 
     public void start() {
-        try {
-            RouteNavigator nav = RouteNavigator.getInstance();
-            if (nav != null) {
-                nav.registerRouteNavigatorListener(this);
-                Log.d(TAG, "Registered with RouteNavigator");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error starting NavigationRelay", e);
-        }
+        // TODO: Register RouteNavigatorListener when API is verified
     }
 
     public void stop() {
+        // TODO: Unregister listener
+    }
+
+    public boolean startNavigation(String routeUid, int startIndex) {
         try {
-            if (navManager != null) {
-                navManager.unregisterListener(navManagerListener);
-                navManager = null;
-            }
             RouteNavigator nav = RouteNavigator.getInstance();
-            if (nav != null) {
-                nav.unregisterRouteNavigatorListener(this);
+            if (nav == null) return false;
+
+            // Find route
+            Route route = null;
+            // TODO: resolve route from UID
+            if (route == null) return false;
+
+            boolean started = nav.startNavigating(route, startIndex);
+            if (started) {
+                active = true;
+                currentRouteUid = routeUid;
+                emitState();
             }
+            return started;
         } catch (Exception e) {
-            Log.e(TAG, "Error stopping NavigationRelay", e);
+            Log.e(TAG, "Error starting navigation", e);
+            return false;
         }
-        active = false;
-        currentRouteUid = null;
-        currentWaypointIndex = -1;
-        gpsLost = false;
     }
 
-    @Override
-    public void onNavigationStarted(RouteNavigator nav, Route route) {
-        active = true;
-        currentRouteUid = route != null ? route.getUID() : null;
-        currentWaypointIndex = 0;
-        gpsLost = false;
-
-        navManager = nav.getNavManager();
-        if (navManager != null) {
-            navManager.registerListener(navManagerListener);
+    public boolean stopNavigation() {
+        try {
+            RouteNavigator nav = RouteNavigator.getInstance();
+            if (nav == null) return false;
+            nav.stopNavigating();
+            active = false;
+            currentRouteUid = null;
+            emitState();
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "Error stopping navigation", e);
+            return false;
         }
-
-        emitState();
-    }
-
-    @Override
-    public void onNavigationStopped(RouteNavigator nav) {
-        if (navManager != null) {
-            navManager.unregisterListener(navManagerListener);
-            navManager = null;
-        }
-
-        active = false;
-        currentRouteUid = null;
-        currentWaypointIndex = -1;
-        gpsLost = false;
-
-        emitState();
     }
 
     public String getNavigationState() {
         try {
-            return buildStateJson().toString();
+            JSONObject json = new JSONObject();
+            json.put("active", active);
+            json.put("routeUid", currentRouteUid != null ? currentRouteUid : JSONObject.NULL);
+            json.put("currentWaypointIndex", -1);
+            json.put("gpsLost", false);
+            return json.toString();
         } catch (Exception e) {
-            Log.e(TAG, "Error getting navigation state", e);
             return "{\"active\":false,\"routeUid\":null,\"currentWaypointIndex\":-1,\"gpsLost\":false}";
         }
     }
 
     private void emitState() {
-        try {
-            emitter.emit("navigationStateChanged", buildStateJson().toString());
-        } catch (Exception e) {
-            Log.e(TAG, "Error emitting navigation state", e);
-        }
+        emitter.emit("navigationStateChanged", getNavigationState());
     }
 
-    private JSONObject buildStateJson() throws Exception {
-        JSONObject state = new JSONObject();
-        state.put("active", active);
-        state.put("routeUid", currentRouteUid != null ? currentRouteUid : JSONObject.NULL);
-        state.put("currentWaypointIndex", currentWaypointIndex);
-        state.put("gpsLost", gpsLost);
-        return state;
+    public void dispose() {
+        active = false;
+        currentRouteUid = null;
     }
 }

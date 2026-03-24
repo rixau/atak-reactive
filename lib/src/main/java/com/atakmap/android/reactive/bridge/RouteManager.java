@@ -146,7 +146,7 @@ public class RouteManager {
 
         mapView.post(() -> {
             try {
-                MapItem wp = route.deepFindUID(waypointUid);
+                MapItem wp = mapView.getRootGroup().deepFindUID(waypointUid);
                 if (wp instanceof Marker) {
                     int idx = route.getIndexOfMarker((Marker) wp);
                     if (idx >= 0) {

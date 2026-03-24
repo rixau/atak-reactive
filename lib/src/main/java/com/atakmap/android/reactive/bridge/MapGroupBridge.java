@@ -3,7 +3,7 @@ package com.atakmap.android.reactive.bridge;
 import com.atakmap.android.maps.DefaultMapGroup;
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapView;
-import com.atakmap.android.hierarchy.maps.DefaultMapGroupOverlay;
+import com.atakmap.android.overlay.DefaultMapGroupOverlay;
 import com.atakmap.coremap.log.Log;
 
 import java.util.Map;
@@ -37,11 +37,11 @@ public class MapGroupBridge {
 
         DefaultMapGroup group = new DefaultMapGroup(name);
         DefaultMapGroupOverlay overlay = new DefaultMapGroupOverlay(
-                mapView, group, null);
+                mapView, group);
 
         mapView.post(() -> {
             parent.addGroup(group);
-            mapView.getMapOverlayManager().addOverlay(overlay);
+            mapView.getMapOverlayManager().addOtherOverlay(overlay);
         });
 
         managedGroups.put(name, group);
@@ -57,7 +57,7 @@ public class MapGroupBridge {
 
         mapView.post(() -> {
             if (overlay != null) {
-                mapView.getMapOverlayManager().removeOverlay(overlay);
+                mapView.getMapOverlayManager().removeOverlay(overlay.getIdentifier());
             }
             MapGroup parent = group.getParentGroup();
             if (parent != null) {

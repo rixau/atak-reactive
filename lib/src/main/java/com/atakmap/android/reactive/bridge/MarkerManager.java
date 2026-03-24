@@ -1,6 +1,6 @@
 package com.atakmap.android.reactive.bridge;
 
-import com.atakmap.android.maps.Icon;
+import com.atakmap.coremap.maps.assets.Icon;
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;

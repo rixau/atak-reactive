@@ -195,7 +195,7 @@ public class AtakBridge {
         double w = parseSizeFraction(width);
         double h = parseSizeFraction(height);
         if (w < 0 || h < 0) return;
-        mapView.post(() -> dropDown.resize(w, h));
+        mapView.post(() -> dropDown.callResize(w, h));
     }
 
     @JavascriptInterface

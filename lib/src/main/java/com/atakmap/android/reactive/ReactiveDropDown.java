@@ -61,7 +61,6 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
     private final java.util.List<Object> pendingBridges = new java.util.ArrayList<>();
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener;
-    private NavView.NavButtonsVisibilityListener navListener;
     private double currentWidth = HALF_WIDTH;
     private double currentHeight = FULL_HEIGHT;
 
@@ -234,7 +233,6 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         if (eventEmitter != null) {
             eventEmitter.startListening();
             startPreferenceListener();
-            startNavListener();
             onStartListening(eventEmitter);
         }
     }
@@ -269,7 +267,6 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         if (eventEmitter != null) {
             eventEmitter.emit("dropDownClose", "{}");
             stopPreferenceListener();
-            stopNavListener();
             onStopListening(eventEmitter);
             eventEmitter.stopListening();
         }
@@ -334,49 +331,19 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         }
     }
 
-    private void startNavListener() {
-        try {
-            NavView nav = NavView.getInstance();
-            if (nav == null) return;
-            navListener = visible -> {
-                if (eventEmitter != null) {
-                    eventEmitter.emit("navVisible", String.valueOf(visible));
-                }
-            };
-            nav.addButtonVisibilityListener(navListener);
-        } catch (Exception e) {
-            Log.e(TAG, "Error starting nav listener", e);
-        }
-    }
-
-    private void stopNavListener() {
-        if (navListener != null) {
-            try {
-                NavView nav = NavView.getInstance();
-                if (nav != null) {
-                    nav.removeButtonVisibilityListener(navListener);
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Error stopping nav listener", e);
-            }
-            navListener = null;
-        }
-    }
-
     // --- Dropdown dimension accessors for AtakBridge ---
 
-    double getDropDownWidth() {
+    public double getDropDownWidth() {
         return currentWidth;
     }
 
-    double getDropDownHeight() {
+    public double getDropDownHeight() {
         return currentHeight;
     }
 
     @Override
     public void disposeImpl() {
         stopPreferenceListener();
-        stopNavListener();
         if (eventEmitter != null) {
             eventEmitter.stopListening();
         }

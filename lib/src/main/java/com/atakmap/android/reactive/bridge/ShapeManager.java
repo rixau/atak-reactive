@@ -2,10 +2,10 @@ package com.atakmap.android.reactive.bridge;
 
 import android.graphics.Color;
 
-import com.atakmap.android.drawing.DrawingCircle;
-import com.atakmap.android.drawing.DrawingRectangle;
+import com.atakmap.android.drawing.mapItems.DrawingCircle;
+import com.atakmap.android.drawing.mapItems.DrawingRectangle;
 import com.atakmap.android.drawing.mapItems.DrawingShape;
-import com.atakmap.android.maps.Ellipse;
+import com.atakmap.android.drawing.mapItems.DrawingEllipse;
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;
@@ -153,7 +153,7 @@ public class ShapeManager {
             GeoPoint center = new GeoPoint(
                     centerObj.optDouble("lat"), centerObj.optDouble("lng"));
 
-            final Ellipse ellipse = new Ellipse(mapView, uid);
+            final DrawingEllipse ellipse = new DrawingEllipse(mapView, uid);
             ellipse.setCenterPoint(GeoPointMetaData.wrap(center));
             ellipse.setWidth(width);
             ellipse.setLength(length);
@@ -287,8 +287,8 @@ public class ShapeManager {
                 }
 
                 // Ellipse-specific
-                if (item instanceof Ellipse) {
-                    Ellipse e = (Ellipse) item;
+                if (item instanceof DrawingEllipse) {
+                    DrawingEllipse e = (DrawingEllipse) item;
                     if (opts.has("center")) {
                         JSONObject c = opts.getJSONObject("center");
                         e.setCenterPoint(GeoPointMetaData.wrap(
