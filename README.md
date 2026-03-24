@@ -44,6 +44,10 @@ npx @atak-reactive/cli dev
 | `useMenuAction(actionId, cb)` | `void` | Callback when a radial menu button is clicked. Filters by action ID. |
 | `useMenuAction(cb)` | `void` | Callback for any radial menu button click. No filter. |
 | `useNavigationState()` | `NavigationState` | Route navigation state: `active`, `routeUid`, `currentWaypointIndex`, `gpsLost`. Updates reactively as navigation progresses. |
+| `useContacts(filter?)` | `ContactData[]` | Live contact list. Filter by `team`, `role`, `status`, `type`. Updates on contact online/offline/change. |
+| `useContact(uid)` | `ContactData \| null` | Single contact by UID with live updates. Stable reference when unchanged. |
+| `useChat(conversationId)` | `ChatMessageData[]` | Live message stream for a conversation. Loads history on mount, appends new messages. |
+| `useGeofenceAlerts(fenceUid?)` | `GeofenceAlertData[]` | Accumulates geofence entry/exit alerts. Optional filter by fence UID. |
 
 ## Functions
 
@@ -101,6 +105,13 @@ npx @atak-reactive/cli dev
 | `getPluginRoutes()` | Get all routes created by this plugin. |
 | `getManagedRouteUids()` | Get the Set of route UIDs created by this plugin. |
 | `onNavigationStateChanged(cb)` | Subscribe to navigation state changes. Returns unsubscribe function. |
+| `sendMessage(conversationId, text)` | Send a chat message to a contact or group. |
+| `openConversation(contactUid)` | Open ATAK's native GeoChat UI for a contact. |
+| `getChatHistory(conversationId, limit?)` | Load chat message history. Default limit: 100. |
+| `getConversations()` | List all conversations with IDs, names, and unread counts. |
+| `createGeofence(opts)` | Attach a geofence to an existing shape. Options: `shapeUid`, `trigger` (`entry`/`exit`/`both`), `monitoredTypes` (`all`/`friendly`/`hostile`/`tak_users`), `rangeKm?`, `minElevation?`, `maxElevation?`. |
+| `removeGeofence(shapeUid)` | Remove a geofence from a shape. |
+| `dismissGeofenceAlert(fenceUid, itemUid)` | Dismiss a geofence alert. |
 | `on(event, fn)` / `off(event, fn)` | Low-level event subscribe/unsubscribe. |
 
 ## Events
@@ -121,6 +132,9 @@ npx @atak-reactive/cli dev
 | `preferenceChanged` | `{ key, value }` | Any ATAK preference changed |
 | `menuAction` | `{ actionId, itemUid, itemType, title }` | Radial menu button clicked |
 | `navigationStateChanged` | `{ active, routeUid, currentWaypointIndex, gpsLost }` | Route navigation state changed |
+| `contactsChanged` | `ContactData[]` | Contact list updated (online/offline/changed) |
+| `chatMessage` | `ChatMessageData` | New chat message received |
+| `geofenceAlert` | `GeofenceAlertData` | Geofence entry/exit detected |
 
 ## Custom Bridges
 
@@ -211,11 +225,11 @@ The simulation engine stays in Java. The config form and live status list are Re
 ```
 React hooks (useMapItems, useCotStream, ...)
     ↕ subscribe/notify
-MapItemStore / CotStore (in-memory cache, fan-out)
+MapItemStore / CotStore / ContactStore / ChatStore (in-memory cache, fan-out)
     ↕ on/off events
 WebView bridge (window._atak ↔ window.__atakBridge)
     ↕ @JavascriptInterface + evaluateJavascript
-Java relay (MapItemEventRelay, CotBridge, IntentBridge)
+Java relay (MapItemEventRelay, CotBridge, IntentBridge, ContactBridge, ChatBridge, GeofenceBridge)
     ↕ ATAK listeners
 ATAK runtime (MapView, CotService, AtakBroadcast)
 ```
