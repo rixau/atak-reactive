@@ -81,19 +81,87 @@ npx @atak-reactive/cli dev
 
 ## Custom Bridges
 
-Add plugin-specific functionality beyond the built-in bridge:
+Every plugin has domain-specific data beyond markers and CoT. Custom bridges expose your Java managers to React with the same reactive pattern as the built-in hooks.
+
+**Example: Platform Simulator** — a plugin that spawns simulated aircraft tracks with configurable orbits.
+
+Java side — expose your domain logic:
 
 ```java
-public class MyPluginBridge {
+public class PlatformSimBridge {
+    private final PlatformSimulator simulator;
+    private final BridgeEventEmitter emitter;
+
     @JavascriptInterface
-    public String getCustomData() {
-        return "{\"status\": \"ok\"}";
+    public String getActivePlatforms() {
+        return simulator.getAllAsJson();
+    }
+
+    @JavascriptInterface
+    public String startSimulation(String configJson) {
+        return simulator.start(new JSONObject(configJson));
+    }
+
+    @JavascriptInterface
+    public void stopSimulation(String platformId) {
+        simulator.stop(platformId);
+    }
+
+    // Called by simulator when platform state changes
+    public void onPlatformUpdated(Platform p) {
+        emitter.emit("platformUpdated", serializePlatform(p));
     }
 }
-
-ReactiveDropDown view = new ReactiveDropDown(mapView, ctx, "web/index.html",
-    true, new MyPluginBridge());
 ```
+
+Register it alongside the built-in bridge:
+
+```java
+ReactiveDropDown view = new ReactiveDropDown(mapView, ctx, "web/index.html",
+    true, new PlatformSimBridge(simulator, emitter));
+```
+
+React side — same reactive pattern as built-in hooks:
+
+```tsx
+import { on, off } from '@atak-reactive/sdk';
+
+function usePlatforms(): SimPlatform[] {
+  const [platforms, setPlatforms] = useState<SimPlatform[]>([]);
+
+  useEffect(() => {
+    setPlatforms(JSON.parse(window._platformSimBridge.getActivePlatforms()));
+    const handler = (p: SimPlatform) =>
+      setPlatforms(prev => prev.map(x => x.uid === p.uid ? p : x));
+    on('platformUpdated', handler);
+    return () => off('platformUpdated', handler);
+  }, []);
+
+  return platforms;
+}
+
+function PlatformSimulator() {
+  const platforms = usePlatforms();
+
+  const launch = () => {
+    window._platformSimBridge.startSimulation(JSON.stringify({
+      lat: 38.89, lng: -77.03, altitude: 5000,
+      orbit: 'racetrack', speed: 120,
+    }));
+  };
+
+  return (
+    <div>
+      <button onClick={launch}>Launch Platform</button>
+      {platforms.map(p => (
+        <div key={p.uid}>{p.callsign} — {p.altitude}ft — {p.speed}kts</div>
+      ))}
+    </div>
+  );
+}
+```
+
+The simulation engine stays in Java. The config form and live status list are React. Simulated tracks also appear on the ATAK map as CoT items, visible via `useMapItems()`.
 
 ## Architecture
 
