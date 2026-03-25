@@ -142,6 +142,24 @@ export function init(): void {
     }
   }
 
+  // 4b. Patch build.gradle — auto-build web assets before APK
+  const gradleAfterAssets = readFileSync(buildGradle, 'utf-8');
+  if (gradleAfterAssets.includes('buildWebAssets')) {
+    log('Gradle web build task already present');
+  } else {
+    const webBuildTask = `
+// atak-reactive: build web assets before assembling APK
+task buildWebAssets(type: Exec) {
+    workingDir "\${rootDir}/web"
+    commandLine 'npm', 'run', 'build'
+}
+preBuild.dependsOn buildWebAssets
+`;
+    // Append at end of file
+    writeFileSync(buildGradle, gradleAfterAssets.trimEnd() + '\n' + webBuildTask);
+    log('Added Gradle task to auto-build web assets before APK');
+  }
+
   // 5. Patch proguard
   logStep('Patching proguard-gradle.txt...');
   if (existsSync(proguardFile)) {
