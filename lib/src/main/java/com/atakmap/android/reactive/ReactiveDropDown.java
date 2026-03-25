@@ -214,13 +214,23 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
             "<div style='font-size:14px'>Connecting to dev server...</div>" +
             "</body></html>";
 
+    private static final String DEV_SERVER_ERROR_HTML =
+            "data:text/html;charset=utf-8," +
+            "<html><body style='margin:0;background:%231a1a2e;display:flex;" +
+            "flex-direction:column;align-items:center;justify-content:center;" +
+            "height:100vh;font-family:sans-serif;color:%238d99ae'>" +
+            "<div style='font-size:13px;letter-spacing:1px;text-transform:uppercase;" +
+            "opacity:0.5;margin-bottom:8px'>atak-reactive dev</div>" +
+            "<div style='font-size:14px;color:%23f87171'>Dev server not running</div>" +
+            "<div style='font-size:12px;margin-top:12px;opacity:0.7'>Run: npx @atak-reactive/cli dev</div>" +
+            "</body></html>";
+
     @Override
     public void onReceive(Context context, Intent intent) {
         showDropDown(container, HALF_WIDTH, FULL_HEIGHT,
                 FULL_WIDTH, HALF_HEIGHT, false, this);
 
         if (devMode) {
-            // Show loading screen while checking dev server
             webView.loadUrl(LOADING_HTML);
 
             new Thread(() -> {
@@ -230,8 +240,8 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                         Log.d(TAG, "Dev server reachable, loading from " + DEV_URL);
                         webView.loadUrl(DEV_URL);
                     } else {
-                        Log.d(TAG, "Dev server not running, loading bundled assets");
-                        webView.loadUrl(prodUrl);
+                        Log.w(TAG, "Dev server not running — run: npx @atak-reactive/cli dev");
+                        webView.loadUrl(DEV_SERVER_ERROR_HTML);
                     }
                 });
             }).start();
@@ -385,8 +395,8 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                 WebResourceError error) {
             if (devMode && !devFallbackTriggered && request.isForMainFrame()) {
                 devFallbackTriggered = true;
-                Log.w(TAG, "Dev server unreachable, falling back to bundled assets");
-                view.loadUrl(prodUrl);
+                Log.w(TAG, "Dev server connection lost");
+                view.loadUrl(DEV_SERVER_ERROR_HTML);
                 return;
             }
             super.onReceivedError(view, request, error);
