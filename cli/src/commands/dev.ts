@@ -3,7 +3,7 @@ import { join } from 'path';
 import { execSync, spawn } from 'child_process';
 import { findProjectRoot, log, logError } from '../utils.js';
 
-export function dev(): void {
+export function dev(flavor: string = 'civ'): void {
   const root = findProjectRoot();
   if (!root) {
     logError('Could not find settings.gradle. Run this from an ATAK plugin project root.');
@@ -16,7 +16,7 @@ export function dev(): void {
     process.exit(1);
   }
 
-  console.log('\n  atak-reactive dev\n');
+  console.log(`\n  atak-reactive dev (flavor: ${flavor})\n`);
 
   // Step 1: Build web assets
   log('Building web assets...');
@@ -28,10 +28,11 @@ export function dev(): void {
   }
 
   // Step 2: Build debug APK
-  log('Building debug APK...');
+  const capFlavor = flavor.charAt(0).toUpperCase() + flavor.slice(1);
+  log(`Building debug APK (${capFlavor}Debug)...`);
   try {
     const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
-    execSync(`${gradlew} assembleCivDebug`, { cwd: root, stdio: 'inherit' });
+    execSync(`${gradlew} assemble${capFlavor}Debug`, { cwd: root, stdio: 'inherit' });
   } catch {
     logError('Gradle build failed.');
     process.exit(1);
@@ -40,7 +41,7 @@ export function dev(): void {
   // Step 3: Install APK
   log('Installing APK...');
   try {
-    const apkDir = join(root, 'app', 'build', 'outputs', 'apk', 'civ', 'debug');
+    const apkDir = join(root, 'app', 'build', 'outputs', 'apk', flavor, 'debug');
     if (existsSync(apkDir)) {
       const apks = readdirSync(apkDir).filter(f => f.endsWith('.apk'));
       if (apks.length > 0) {
