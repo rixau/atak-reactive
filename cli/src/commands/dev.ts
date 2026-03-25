@@ -1,4 +1,4 @@
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { execSync, spawn } from 'child_process';
 import { findProjectRoot, log, logError } from '../utils.js';
@@ -16,8 +16,45 @@ export function dev(): void {
     process.exit(1);
   }
 
-  // adb reverse
   console.log('\n  atak-reactive dev\n');
+
+  // Step 1: Build web assets
+  log('Building web assets...');
+  try {
+    execSync('npm run build', { cwd: webDir, stdio: 'inherit' });
+  } catch {
+    logError('Web build failed.');
+    process.exit(1);
+  }
+
+  // Step 2: Build debug APK
+  log('Building debug APK...');
+  try {
+    const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
+    execSync(`${gradlew} assembleCivDebug`, { cwd: root, stdio: 'inherit' });
+  } catch {
+    logError('Gradle build failed.');
+    process.exit(1);
+  }
+
+  // Step 3: Install APK
+  log('Installing APK...');
+  try {
+    const apkDir = join(root, 'app', 'build', 'outputs', 'apk', 'civ', 'debug');
+    if (existsSync(apkDir)) {
+      const apks = readdirSync(apkDir).filter(f => f.endsWith('.apk'));
+      if (apks.length > 0) {
+        execSync(`adb install -r "${join(apkDir, apks[0])}"`, { stdio: 'inherit' });
+        log('APK installed.');
+      } else {
+        log('Warning: No APK found in build output.');
+      }
+    }
+  } catch {
+    log('Warning: APK install failed — is a device/emulator connected?');
+  }
+
+  // Step 4: ADB port forward
   try {
     execSync('adb reverse tcp:5173 tcp:5173', { stdio: 'pipe' });
     log('adb reverse tcp:5173 — port forwarding active');
@@ -27,7 +64,7 @@ export function dev(): void {
     log('  adb reverse tcp:5173 tcp:5173');
   }
 
-  // Start vite
+  // Step 5: Start Vite dev server
   log('Starting Vite dev server...\n');
   const vite = spawn('npx', ['vite', '--host', '--port', '5173', '--strictPort'], {
     cwd: webDir,
@@ -43,7 +80,6 @@ export function dev(): void {
     } catch {
       // Already dead
     }
-    // Also kill anything left on port 5173
     try {
       execSync('kill $(lsof -t -i :5173) 2>/dev/null', { stdio: 'pipe' });
     } catch {

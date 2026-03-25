@@ -72,7 +72,16 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
      * @param assetPath     path to the HTML file relative to assets/ (e.g. "web/index.html")
      */
     public ReactiveDropDown(MapView mapView, Context pluginContext, String assetPath) {
-        this(mapView, pluginContext, assetPath, true);
+        this(mapView, pluginContext, assetPath, isDebugBuild(pluginContext));
+    }
+
+    private static boolean isDebugBuild(Context context) {
+        try {
+            return (context.getApplicationInfo().flags
+                    & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

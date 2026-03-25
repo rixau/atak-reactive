@@ -596,11 +596,28 @@ export function IntegrationTestPage() {
   const passed = results.filter(r => r.pass).length;
   const total = results.length;
 
+  const failed = total - passed;
+
   return (
     <div>
-      <h2 style={{ margin: '0 0 12px', fontSize: 14, color: '#8d99ae' }}>
-        Integration Tests {phase.current === 'done' ? `— ${passed}/${total}` : '— running...'}
-      </h2>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '10px 12px', marginBottom: 12, borderRadius: 8,
+        background: phase.current === 'done'
+          ? (failed === 0 ? '#1a3a2a' : '#3a1a1a')
+          : '#16213e',
+      }}>
+        <span style={{ color: '#edf2f4', fontSize: 14, fontWeight: 600 }}>
+          {phase.current === 'done' ? (failed === 0 ? 'All Passed' : `${failed} Failed`) : 'Running...'}
+        </span>
+        <span style={{
+          fontSize: 20, fontWeight: 700,
+          color: phase.current !== 'done' ? '#8d99ae'
+            : failed === 0 ? '#4ade80' : '#f87171',
+        }}>
+          {passed}/{total}
+        </span>
+      </div>
       {results.map((r, i) => (
         <div key={i} style={{
           padding: '6px 10px', marginBottom: 3, borderRadius: 4,
