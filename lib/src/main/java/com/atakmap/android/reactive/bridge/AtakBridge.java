@@ -53,7 +53,7 @@ public class AtakBridge {
         this.markerManager = new MarkerManager(mapView);
         this.shapeManager = new ShapeManager(mapView);
         this.routeManager = new RouteManager(mapView);
-        this.navigationRelay = new NavigationRelay(emitter);
+        this.navigationRelay = new NavigationRelay(mapView, emitter);
         this.relay = new MapItemEventRelay(mapView, emitter);
         this.cotBridge = new CotBridge(emitter);
         this.intentBridge = new IntentBridge(emitter);

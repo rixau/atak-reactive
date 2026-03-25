@@ -79,10 +79,22 @@ public class ChatBridge implements ChatManagerMapComponent.ChatMessageListener {
         try {
             Contact contact = Contacts.getInstance().getContactByUuid(conversationId);
             if (contact instanceof IndividualContact) {
+                String selfUid = MapView.getDeviceUid();
+                String selfCallsign = mapView.getDeviceCallsign();
+
                 Bundle msgBundle = new Bundle();
-                msgBundle.putString("message", text);
                 msgBundle.putString("conversationId", conversationId);
+                msgBundle.putString("conversationName", contact.getName());
                 msgBundle.putString("messageId", UUID.randomUUID().toString());
+                msgBundle.putString("message", text);
+                msgBundle.putString("senderUid", selfUid);
+                msgBundle.putString("senderCallsign", selfCallsign);
+                msgBundle.putString("uid", selfUid);
+                msgBundle.putStringArray("destinations",
+                        new String[] { conversationId });
+                msgBundle.putString("parent", "RootContactGroup");
+                msgBundle.putString("status", "NONE");
+                msgBundle.putLong("sentTime", System.currentTimeMillis());
 
                 com.atakmap.android.chat.GeoChatService.getInstance()
                         .sendMessage(msgBundle, (IndividualContact) contact);
@@ -103,7 +115,7 @@ public class ChatBridge implements ChatManagerMapComponent.ChatMessageListener {
                 info.put("conversationId", id);
                 Contact c = Contacts.getInstance().getContactByUuid(id);
                 info.put("conversationName", c != null ? c.getName() : id);
-                info.put("unreadCount", 0);
+                info.put("unreadCount", c != null ? c.getUnreadCount() : 0);
                 arr.put(info);
             }
             return arr.toString();
