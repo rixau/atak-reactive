@@ -1,4 +1,4 @@
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { findProjectRoot, log, logError, logDone } from '../utils.js';
@@ -17,13 +17,32 @@ export function build(): void {
   }
 
   console.log('\n  atak-reactive build\n');
-  log('Building web assets...');
 
+  // Step 1: Build web assets
+  log('Building web assets...');
   try {
     execSync('npm run build', { cwd: webDir, stdio: 'inherit' });
-    logDone('Web assets built to web/dist-assets/web/\n    Gradle will bundle them into the APK automatically.');
   } catch {
-    logError('Build failed. Check the output above.');
+    logError('Web build failed.');
     process.exit(1);
+  }
+
+  // Step 2: Build release APK
+  log('Building release APK...');
+  try {
+    const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
+    execSync(`${gradlew} assembleCivRelease`, { cwd: root, stdio: 'inherit' });
+  } catch {
+    logError('Gradle build failed.');
+    process.exit(1);
+  }
+
+  // Step 3: Report APK location
+  const releaseDir = join(root, 'app', 'build', 'outputs', 'apk', 'civ', 'release');
+  if (existsSync(releaseDir)) {
+    const apks = readdirSync(releaseDir).filter(f => f.endsWith('.apk'));
+    if (apks.length > 0) {
+      logDone(`Release APK: ${join(releaseDir, apks[0])}`);
+    }
   }
 }
