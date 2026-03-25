@@ -1,5 +1,6 @@
 package com.atakmap.android.reactive.bridge;
 
+import com.atakmap.coremap.maps.assets.Icon;
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;
@@ -25,8 +26,16 @@ public class MarkerManager {
         this.mapView = mapView;
     }
 
-    public String addMarker(String uid, String title, String type,
-            double lat, double lng) {
+    public String addMarker(JSONObject opts) {
+        String uid = opts.optString("uid", java.util.UUID.randomUUID().toString());
+        String title = opts.optString("title", "Marker");
+        String type = opts.optString("type", "a-u-G");
+        double lat = opts.optDouble("lat");
+        double lng = opts.optDouble("lng");
+        String groupName = opts.optString("group", null);
+        String iconUri = opts.optString("iconUri", null);
+        int iconColor = opts.optInt("iconColor", 0);
+
         final Marker marker = new Marker(uid);
         marker.setPoint(new GeoPoint(lat, lng));
         marker.setTitle(title);
@@ -39,14 +48,13 @@ public class MarkerManager {
         marker.setMetaBoolean("removable", true);
         marker.setMetaString("entry", "user");
 
+        if (iconUri != null) {
+            applyIcon(marker, iconUri, iconColor);
+        }
+
         mapView.post(() -> {
-            MapGroup group = mapView.getRootGroup()
-                    .findMapGroup("Cursor on Target");
-            if (group != null) {
-                group.addItem(marker);
-            } else {
-                mapView.getRootGroup().addItem(marker);
-            }
+            MapGroup group = resolveGroup(groupName);
+            group.addItem(marker);
         });
 
         managedMarkers.put(uid, marker);
@@ -55,15 +63,8 @@ public class MarkerManager {
     }
 
     public boolean updateMarker(String uid, JSONObject opts) {
-        Marker marker = managedMarkers.get(uid);
-        if (marker == null) {
-            MapItem item = mapView.getRootGroup().deepFindUID(uid);
-            if (item instanceof Marker) {
-                marker = (Marker) item;
-            } else {
-                return false;
-            }
-        }
+        Marker marker = findMarker(uid);
+        if (marker == null) return false;
 
         final Marker m = marker;
         mapView.post(() -> {
@@ -77,8 +78,25 @@ public class MarkerManager {
             if (opts.has("type")) {
                 m.setType(opts.optString("type"));
             }
+            if (opts.has("iconUri")) {
+                applyIcon(m, opts.optString("iconUri"),
+                        opts.optInt("iconColor", 0));
+            }
         });
 
+        return true;
+    }
+
+    public boolean setMarkerIcon(String uid, JSONObject opts) {
+        Marker marker = findMarker(uid);
+        if (marker == null) return false;
+
+        String iconUri = opts.optString("iconUri", null);
+        if (iconUri == null) return false;
+
+        int iconColor = opts.optInt("iconColor", 0);
+
+        mapView.post(() -> applyIcon(marker, iconUri, iconColor));
         return true;
     }
 
@@ -94,7 +112,6 @@ public class MarkerManager {
             return true;
         }
 
-        // Try to find it in the map even if we don't manage it
         MapItem item = mapView.getRootGroup().deepFindUID(uid);
         if (item != null) {
             mapView.post(() -> {
@@ -124,5 +141,35 @@ public class MarkerManager {
             });
         }
         managedMarkers.clear();
+    }
+
+    private Marker findMarker(String uid) {
+        Marker marker = managedMarkers.get(uid);
+        if (marker != null) return marker;
+
+        MapItem item = mapView.getRootGroup().deepFindUID(uid);
+        if (item instanceof Marker) {
+            return (Marker) item;
+        }
+        return null;
+    }
+
+    private MapGroup resolveGroup(String groupName) {
+        if (groupName != null) {
+            MapGroup named = mapView.getRootGroup().findMapGroup(groupName);
+            if (named != null) return named;
+        }
+        MapGroup cot = mapView.getRootGroup().findMapGroup("Cursor on Target");
+        if (cot != null) return cot;
+        return mapView.getRootGroup();
+    }
+
+    private void applyIcon(Marker marker, String iconUri, int iconColor) {
+        Icon.Builder builder = new Icon.Builder();
+        builder.setImageUri(Icon.STATE_DEFAULT, iconUri);
+        if (iconColor != 0) {
+            builder.setColor(Icon.STATE_DEFAULT, iconColor);
+        }
+        marker.setIcon(builder.build());
     }
 }

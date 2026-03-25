@@ -35,18 +35,33 @@ public class AtakBridge {
     private final MapView mapView;
     private final BridgeEventEmitter emitter;
     private final MarkerManager markerManager;
+    private final ShapeManager shapeManager;
+    private final RouteManager routeManager;
+    private final NavigationRelay navigationRelay;
     private final MapItemEventRelay relay;
     private final CotBridge cotBridge;
     private final IntentBridge intentBridge;
+    private final MapGroupBridge mapGroupBridge;
+    private final ContactBridge contactBridge;
+    private final ChatBridge chatBridge;
+    private final GeofenceBridge geofenceBridge;
     private ReactiveDropDown dropDown;
 
     public AtakBridge(MapView mapView, BridgeEventEmitter emitter) {
         this.mapView = mapView;
         this.emitter = emitter;
         this.markerManager = new MarkerManager(mapView);
+        this.shapeManager = new ShapeManager(mapView);
+        this.routeManager = new RouteManager(mapView);
+        this.navigationRelay = new NavigationRelay(mapView, emitter);
         this.relay = new MapItemEventRelay(mapView, emitter);
         this.cotBridge = new CotBridge(emitter);
         this.intentBridge = new IntentBridge(emitter);
+        this.mapGroupBridge = new MapGroupBridge(mapView);
+        this.contactBridge = new ContactBridge(emitter);
+        this.chatBridge = new ChatBridge(mapView, emitter);
+        this.geofenceBridge = new GeofenceBridge(mapView, emitter);
+        this.navigationRelay.start();
     }
 
     @JavascriptInterface
@@ -87,16 +102,21 @@ public class AtakBridge {
     public String addMarker(String optionsJson) {
         try {
             JSONObject opts = new JSONObject(optionsJson);
-            double lat = opts.getDouble("lat");
-            double lng = opts.getDouble("lng");
-            String title = opts.optString("title", "Marker");
-            String type = opts.optString("type", "a-u-G");
-            String uid = opts.optString("uid", UUID.randomUUID().toString());
-
-            return markerManager.addMarker(uid, title, type, lat, lng);
+            return markerManager.addMarker(opts);
         } catch (JSONException e) {
             Log.e(TAG, "Error adding marker", e);
             return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String setMarkerIcon(String uid, String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return String.valueOf(markerManager.setMarkerIcon(uid, opts));
+        } catch (JSONException e) {
+            Log.e(TAG, "Error setting marker icon", e);
+            return "false";
         }
     }
 
@@ -175,7 +195,7 @@ public class AtakBridge {
         double w = parseSizeFraction(width);
         double h = parseSizeFraction(height);
         if (w < 0 || h < 0) return;
-        mapView.post(() -> dropDown.resize(w, h));
+        mapView.post(() -> dropDown.callResize(w, h));
     }
 
     @JavascriptInterface
@@ -494,6 +514,24 @@ public class AtakBridge {
         return cotBridge.sendCotToContacts(cotJson, contactUidsJson);
     }
 
+    // --- Map group delegation ---
+
+    @JavascriptInterface
+    public String createMapGroup(String name, String parentName) {
+        return String.valueOf(mapGroupBridge.createMapGroup(name, parentName));
+    }
+
+    @JavascriptInterface
+    public String removeMapGroup(String name) {
+        return String.valueOf(mapGroupBridge.removeMapGroup(name));
+    }
+
+    @JavascriptInterface
+    public String setGroupVisible(String name, String visible) {
+        return String.valueOf(mapGroupBridge.setGroupVisible(name,
+                Boolean.parseBoolean(visible)));
+    }
+
     // --- Intent delegation ---
 
     @JavascriptInterface
@@ -511,10 +549,244 @@ public class AtakBridge {
         intentBridge.sendBroadcast(action, extrasJson);
     }
 
+    // --- Shape delegation ---
+
+    @JavascriptInterface
+    public String addShape(String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return shapeManager.addShape(opts);
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding shape", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String addCircle(String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return shapeManager.addCircle(opts);
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding circle", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String addEllipse(String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return shapeManager.addEllipse(opts);
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding ellipse", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String addRectangle(String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return shapeManager.addRectangle(opts);
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding rectangle", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String updateShape(String uid, String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return String.valueOf(shapeManager.updateShape(uid, opts));
+        } catch (JSONException e) {
+            Log.e(TAG, "Error updating shape", e);
+            return "false";
+        }
+    }
+
+    @JavascriptInterface
+    public String removeShape(String uid) {
+        return String.valueOf(shapeManager.removeShape(uid));
+    }
+
+    @JavascriptInterface
+    public String getPluginShapes() {
+        try {
+            JSONArray result = new JSONArray();
+            List<String> uids = shapeManager.getManagedUids();
+            for (String uid : uids) {
+                MapItem item = mapView.getRootGroup().deepFindUID(uid);
+                if (item != null) {
+                    result.put(MapItemSerializer.serialize(item));
+                }
+            }
+            return result.toString();
+        } catch (JSONException e) {
+            Log.e(TAG, "Error getting plugin shapes", e);
+            return "[]";
+        }
+    }
+
+    // --- Route delegation ---
+
+    @JavascriptInterface
+    public String addRoute(String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return routeManager.addRoute(opts);
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding route", e);
+            return "null";
+        }
+    }
+
+    @JavascriptInterface
+    public String updateRoute(String uid, String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return String.valueOf(routeManager.updateRoute(uid, opts));
+        } catch (JSONException e) {
+            Log.e(TAG, "Error updating route", e);
+            return "false";
+        }
+    }
+
+    @JavascriptInterface
+    public String addWaypoint(String routeUid, String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return String.valueOf(routeManager.addWaypoint(routeUid, opts));
+        } catch (JSONException e) {
+            Log.e(TAG, "Error adding waypoint", e);
+            return "false";
+        }
+    }
+
+    @JavascriptInterface
+    public String removeWaypoint(String routeUid, String waypointUid) {
+        return String.valueOf(routeManager.removeWaypoint(routeUid, waypointUid));
+    }
+
+    @JavascriptInterface
+    public String removeRoute(String uid) {
+        return String.valueOf(routeManager.removeRoute(uid));
+    }
+
+    @JavascriptInterface
+    public String getPluginRoutes() {
+        try {
+            JSONArray result = new JSONArray();
+            List<String> uids = routeManager.getManagedUids();
+            for (String uid : uids) {
+                MapItem item = mapView.getRootGroup().deepFindUID(uid);
+                if (item != null) {
+                    result.put(MapItemSerializer.serialize(item));
+                }
+            }
+            return result.toString();
+        } catch (JSONException e) {
+            Log.e(TAG, "Error getting plugin routes", e);
+            return "[]";
+        }
+    }
+
+    // --- Navigation delegation ---
+
+    @JavascriptInterface
+    public String startNavigation(String routeUid, String optionsJson) {
+        try {
+            JSONObject opts = new JSONObject(optionsJson);
+            return String.valueOf(routeManager.startNavigation(routeUid, opts));
+        } catch (JSONException e) {
+            Log.e(TAG, "Error starting navigation", e);
+            return "false";
+        }
+    }
+
+    @JavascriptInterface
+    public String stopNavigation() {
+        return String.valueOf(routeManager.stopNavigation());
+    }
+
+    @JavascriptInterface
+    public String getNavigationState() {
+        return navigationRelay.getNavigationState();
+    }
+
+    // --- Contact delegation ---
+
+    @JavascriptInterface
+    public void subscribeContacts() {
+        contactBridge.start();
+    }
+
+    @JavascriptInterface
+    public void unsubscribeContacts() {
+        contactBridge.stop();
+    }
+
+    // --- Chat delegation ---
+
+    @JavascriptInterface
+    public void subscribeChat() {
+        chatBridge.start();
+    }
+
+    @JavascriptInterface
+    public void unsubscribeChat() {
+        chatBridge.stop();
+    }
+
+    @JavascriptInterface
+    public void sendChatMessage(String conversationId, String text) {
+        chatBridge.sendMessage(conversationId, text);
+    }
+
+    @JavascriptInterface
+    public String getChatHistory(String conversationId, int limit) {
+        return chatBridge.getHistory(conversationId, limit);
+    }
+
+    @JavascriptInterface
+    public String getConversations() {
+        return chatBridge.getConversations();
+    }
+
+    @JavascriptInterface
+    public void openConversation(String contactUid) {
+        chatBridge.openConversation(contactUid);
+    }
+
+    // --- Geofence delegation ---
+
+    @JavascriptInterface
+    public String createGeofence(String optionsJson) {
+        return geofenceBridge.createGeofence(optionsJson);
+    }
+
+    @JavascriptInterface
+    public void removeGeofence(String shapeUid) {
+        geofenceBridge.removeGeofence(shapeUid);
+    }
+
+    @JavascriptInterface
+    public void dismissGeofenceAlert(String fenceUid, String itemUid) {
+        geofenceBridge.dismissGeofenceAlert(fenceUid, itemUid);
+    }
+
     public void dispose() {
         markerManager.removeAll();
+        shapeManager.removeAll();
+        routeManager.removeAll();
+        navigationRelay.stop();
+        contactBridge.stop();
+        chatBridge.stop();
+        geofenceBridge.stop();
         relay.dispose();
         cotBridge.dispose();
         intentBridge.dispose();
+        mapGroupBridge.dispose();
     }
 }
