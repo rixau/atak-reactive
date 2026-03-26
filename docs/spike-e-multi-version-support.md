@@ -140,9 +140,32 @@ Findings:
 
 Action taken: Created `cli/src/templates/5.5.1/` as a copy of `5.6.0/` so the CLI resolves it directly. If differences surface later, the template is in place to diverge.
 
-## Time Estimate
+### 5.5.0 — Tested 2026-03-25
 
-1-2 days. This is the first version port so it establishes the process. Findings here inform Spike F (5.5.0, 5.4.0).
+**Result: 5.6.0 bridge code compiles against 5.5.0 with zero code changes.**
+
+Same setup as 5.5.1 using `ATAK-CIV-5.5.0.7-SDK.zip`. All 17 bridge files compile cleanly. No API differences found.
+
+Action taken: Created `cli/src/templates/5.5.0/` as a copy of `5.6.0/`.
+
+### 5.4.0 — Tested 2026-03-25
+
+**Result: 5.6.0 bridge code compiles against 5.4.0 with zero code changes.**
+
+Same setup using `ATAK-CIV-5.4.0.31-SDK.zip`. All 17 bridge files compile cleanly. No API differences found. This was the version most expected to diverge, but the ATAK APIs used by our bridges (contacts, chat, geofence, routes, navigation, maps, CoT) have remained stable across 5.4.0–5.6.0.
+
+Action taken: Created `cli/src/templates/5.4.0/` as a copy of `5.6.0/`.
+
+### Summary
+
+| Version | Bridge Compilation | Code Changes | Template |
+|---------|-------------------|--------------|----------|
+| 5.6.0 | PASS | — (baseline) | `cli/src/templates/5.6.0/` |
+| 5.5.1 | PASS | None | `cli/src/templates/5.5.1/` |
+| 5.5.0 | PASS | None | `cli/src/templates/5.5.0/` |
+| 5.4.0 | PASS | None | `cli/src/templates/5.4.0/` |
+
+All templates are currently identical copies of 5.6.0. Each has its own directory so the CLI resolves exactly and any future version-specific fixes can be applied without affecting other versions.
 
 ## Depends On
 
