@@ -24,6 +24,15 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Verify CLI/SDK version sync
+        run: |
+          SDK_VERSION=$(node -p "require('./sdk/package.json').version")
+          CLI_VERSION=$(node -p "require('./cli/package.json').version")
+          if [ "$SDK_VERSION" != "$CLI_VERSION" ]; then
+            echo "::error::SDK ($SDK_VERSION) and CLI ($CLI_VERSION) versions must match"
+            exit 1
+          fi
+
       - name: Check for version changes
         id: check
         run: |

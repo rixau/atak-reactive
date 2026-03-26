@@ -24,6 +24,12 @@ npx @atak-reactive/cli init
 # Or, for incremental migration (bridge + web project, no new dropdown)
 npx @atak-reactive/cli init --embedded
 
+# Update an existing installation (re-run init to sync Java bridge + SDK)
+npx @atak-reactive/cli init
+
+# Preview what an update would change
+npx @atak-reactive/cli init --dry-run
+
 # 2. Build release APK (builds web assets + APK)
 npx @atak-reactive/cli build
 

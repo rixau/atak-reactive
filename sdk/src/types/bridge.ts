@@ -1,4 +1,5 @@
 export interface NativeBridge {
+  getBridgeVersion(): string;
   getSelfLocation(): string;
   getMapCenter(): string;
   addMarker(optionsJson: string): string;

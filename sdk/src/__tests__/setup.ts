@@ -7,6 +7,7 @@ import { chatStore } from '../stores/chatStore';
 
 export function createMockBridge(overrides?: Partial<NativeBridge>): NativeBridge {
   return {
+    getBridgeVersion: () => 'test',
     getSelfLocation: () => 'null',
     getMapCenter: () => 'null',
     addMarker: () => 'null',

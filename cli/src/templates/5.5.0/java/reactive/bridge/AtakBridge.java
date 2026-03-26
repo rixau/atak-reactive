@@ -776,6 +776,11 @@ public class AtakBridge {
         geofenceBridge.dismissGeofenceAlert(fenceUid, itemUid);
     }
 
+    @JavascriptInterface
+    public String getBridgeVersion() {
+        return "0.0.0";
+    }
+
     public void dispose() {
         markerManager.removeAll();
         shapeManager.removeAll();

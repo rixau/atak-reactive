@@ -1,5 +1,6 @@
 // Bridge functions (all domains)
 export {
+  SDK_VERSION,
   isNative,
   getSelfLocation,
   getMapCenter,

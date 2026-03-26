@@ -2,6 +2,10 @@ import type { NativeBridge } from './types';
 
 /** Mock bridge for browser-only development (no Android device) */
 export const mockBridge: NativeBridge = {
+  getBridgeVersion() {
+    return 'mock';
+  },
+
   getSelfLocation() {
     return JSON.stringify({
       lat: 38.8977,

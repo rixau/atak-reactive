@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync } from 'fs';
 import { join, basename } from 'path';
 import {
+  CLI_VERSION,
   findProjectRoot,
   fileContains,
   appendIfMissing,
@@ -8,9 +9,11 @@ import {
   detectAtakVersion,
   resolveTemplateVersion,
   listSupportedVersions,
+  findJavaFiles,
   findMapComponents,
   deriveIntentAction,
   injectReactiveRegistration,
+  copyJavaTemplatesWithInjection,
   exec,
   log,
   logStep,
@@ -18,8 +21,12 @@ import {
   logError,
 } from '../utils.js';
 
-export function init(opts: { embedded?: boolean } = {}): void {
-  console.log('\n  atak-reactive init\n');
+export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void {
+  if (opts.dryRun) {
+    console.log('\n  atak-reactive init (dry run)\n');
+  } else {
+    console.log('\n  atak-reactive init\n');
+  }
 
   // 1. Find project root
   const root = findProjectRoot();
@@ -73,19 +80,78 @@ export function init(opts: { embedded?: boolean } = {}): void {
 
   log(`Using templates for ATAK ${templateVersion}`);
 
-  // 3. Copy Java source
+  // 3. Detect existing installation
+  const versionFile = join(root, '.atak-reactive-version');
   const reactiveDir = join(appDir, 'src/main/java/com/atakmap/android/reactive');
-  const checkFile = join(reactiveDir, 'ReactiveDropDown.java');
+  const isExisting = existsSync(versionFile) || existsSync(reactiveDir);
+  const installedVersion = existsSync(versionFile)
+    ? readFileSync(versionFile, 'utf-8').trim()
+    : (existsSync(reactiveDir) ? 'unknown' : null);
 
-  if (existsSync(checkFile)) {
-    log('Java source already exists, skipping copy');
-  } else {
-    logStep('Copying Java library source...');
-    cpSync(javaTemplatesDir, reactiveDir, { recursive: true });
-    log(`Copied reactive/ (ATAK ${templateVersion}) to app/src/main/java/com/atakmap/android/reactive/`);
+  // Already up to date
+  if (isExisting && installedVersion === CLI_VERSION) {
+    log(`Already up to date (${CLI_VERSION}).`);
+    return;
   }
 
-  // 3. Patch build.gradle — webkit dependency
+  // Update path — existing installation, different version
+  if (isExisting) {
+    log(`Existing installation detected (${installedVersion}).`);
+    log(`Latest available: ${CLI_VERSION}`);
+
+    if (opts.dryRun) {
+      const javaFiles = findJavaFiles(javaTemplatesDir);
+      const webPkgPath = join(root, 'web', 'package.json');
+      log('');
+      log('Would update:');
+      log(`  ${javaFiles.length} Java files in com/atakmap/android/reactive/`);
+      if (existsSync(webPkgPath)) {
+        const webPkg = JSON.parse(readFileSync(webPkgPath, 'utf-8'));
+        const currentSdk = webPkg.dependencies?.['@atak-reactive/sdk'] ?? 'unknown';
+        log(`  @atak-reactive/sdk ${currentSdk} → ^${CLI_VERSION} in web/package.json`);
+      }
+      log('');
+      log('Run without --dry-run to apply.');
+      return;
+    }
+
+    // 1. Replace Java bridge files
+    logStep('Updating Java bridge files...');
+    const count = copyJavaTemplatesWithInjection(javaTemplatesDir, reactiveDir, CLI_VERSION);
+    log(`Updated ${count} files`);
+
+    // 2. Update SDK version in web/package.json
+    logStep('Updating SDK dependency...');
+    const webPkgPath = join(root, 'web', 'package.json');
+    if (existsSync(webPkgPath)) {
+      const webPkg = JSON.parse(readFileSync(webPkgPath, 'utf-8'));
+      const oldSdk = webPkg.dependencies?.['@atak-reactive/sdk'] ?? 'unknown';
+      webPkg.dependencies['@atak-reactive/sdk'] = `^${CLI_VERSION}`;
+      webPkg.devDependencies['@atak-reactive/cli'] = `^${CLI_VERSION}`;
+      writeFileSync(webPkgPath, JSON.stringify(webPkg, null, 2) + '\n');
+      log(`${oldSdk} → ^${CLI_VERSION}`);
+    }
+
+    // 3. npm install
+    logStep('Installing dependencies...');
+    const webDir = join(root, 'web');
+    const { ok } = exec('npm install', webDir);
+    log(ok ? 'npm install complete' : 'Warning: npm install failed');
+
+    // 4. Write version file
+    writeFileSync(versionFile, CLI_VERSION + '\n');
+    log(`Updated .atak-reactive-version to ${CLI_VERSION}`);
+
+    logDone(`Updated to ${CLI_VERSION}. Run 'npx @atak-reactive/cli dev' to test.`);
+    return;
+  }
+
+  // Fresh install path — copy Java source with version injection
+  logStep('Copying Java library source...');
+  const javaCount = copyJavaTemplatesWithInjection(javaTemplatesDir, reactiveDir, CLI_VERSION);
+  log(`Copied ${javaCount} files (ATAK ${templateVersion}) to app/src/main/java/com/atakmap/android/reactive/`);
+
+  // 4. Patch build.gradle — webkit dependency
   logStep('Patching app/build.gradle...');
 
   const gradleRaw = readFileSync(buildGradle, 'utf-8');
@@ -193,7 +259,12 @@ preBuild.dependsOn buildWebAssets
     // Generate package.json from template
     const projectName = basename(root);
     const pkgTemplate = readFileSync(join(webTemplates, 'package.json.tmpl'), 'utf-8');
-    writeFileSync(join(webDir, 'package.json'), pkgTemplate.replace(/\{\{name\}\}/g, projectName));
+    writeFileSync(
+      join(webDir, 'package.json'),
+      pkgTemplate
+        .replace(/\{\{name\}\}/g, projectName)
+        .replace(/\{\{version\}\}/g, `^${CLI_VERSION}`),
+    );
 
     log('Created web/ with React + Vite + TypeScript');
   }
@@ -295,6 +366,9 @@ preBuild.dependsOn buildWebAssets
       intentAction = deriveIntentAction(mapComponents[0]!.packageName);
     }
   }
+
+  // 10. Write version file
+  writeFileSync(versionFile, CLI_VERSION + '\n');
 
   console.log('');
   if (opts.embedded) {

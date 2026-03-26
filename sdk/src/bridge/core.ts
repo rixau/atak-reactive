@@ -7,8 +7,26 @@ import type {
 } from '../types';
 import { mockBridge } from '../mock';
 
+declare const __SDK_VERSION__: string;
+export const SDK_VERSION: string = typeof __SDK_VERSION__ !== 'undefined' ? __SDK_VERSION__ : '0.0.0';
+
+let versionChecked = false;
+
 function getBridge(): NativeBridge {
-  return window._atak ?? mockBridge;
+  const bridge = window._atak ?? mockBridge;
+
+  if (!versionChecked) {
+    versionChecked = true;
+    const bridgeVersion = bridge.getBridgeVersion?.() ?? 'unknown';
+    if (bridgeVersion !== SDK_VERSION && bridgeVersion !== 'unknown' && bridgeVersion !== 'mock') {
+      console.warn(
+        `[atak-reactive] Version mismatch: SDK ${SDK_VERSION}, bridge ${bridgeVersion}. ` +
+        `Run 'npx @atak-reactive/cli init' to sync.`,
+      );
+    }
+  }
+
+  return bridge;
 }
 
 export function isNative(): boolean {
