@@ -171,7 +171,7 @@ public class PlatformSimBridge {
 }
 ```
 
-Register it alongside the built-in bridge:
+Register it alongside the built-in bridge (works with both `ReactiveDropDown` and `ReactiveWebView`):
 
 ```java
 ReactiveDropDown view = new ReactiveDropDown(mapView, ctx, "web/index.html");
@@ -219,6 +219,71 @@ function PlatformSimulator() {
 ```
 
 The simulation engine stays in Java. The config form and live status list are React. Simulated tracks also appear on the ATAK map as CoT items, visible via `useMapItems()`.
+
+## Embedded Views (ReactiveWebView)
+
+`ReactiveDropDown` takes over the entire dropdown panel. For incremental migration — converting one tab or section of an existing native UI to React while keeping the rest native — use `ReactiveWebView`.
+
+Same bridge, same SDK, same hooks. Different container.
+
+**Replace one tab in an existing tabbed dropdown:**
+
+```java
+public class MyPluginReceiver extends DropDownReceiver {
+    private ReactiveWebView reactTab;
+
+    @Override
+    public void onReceive(Context ctx, Intent intent) {
+        LinearLayout root = new LinearLayout(ctx);
+        TabHost tabs = new TabHost(ctx);
+
+        // Native tabs stay native
+        tabs.addTab("Dashboard", createNativeDashboard());
+        tabs.addTab("Settings", createNativeSettings());
+
+        // One tab is React
+        reactTab = new ReactiveWebView(getMapView(), ctx, "web/index.html");
+        tabs.addTab("Detections", reactTab);
+
+        showDropDown(root, HALF_WIDTH, FULL_HEIGHT, FULL_WIDTH, HALF_HEIGHT, false, this);
+        reactTab.onResume();
+    }
+
+    @Override
+    public void onDropDownClose() {
+        if (reactTab != null) reactTab.destroy();
+    }
+}
+```
+
+**Embed React in a split layout:**
+
+```java
+LinearLayout split = new LinearLayout(ctx);
+split.setOrientation(LinearLayout.VERTICAL);
+split.addView(nativeMapControls, new LayoutParams(MATCH_PARENT, 0, 1));
+
+ReactiveWebView reactList = new ReactiveWebView(mapView, ctx, "web/list.html");
+split.addView(reactList, new LayoutParams(MATCH_PARENT, 0, 1));
+reactList.onResume();
+```
+
+**Multiple React views with different routes:**
+
+```java
+ReactiveWebView tab1 = new ReactiveWebView(mapView, ctx, "web/index.html#/detections");
+ReactiveWebView tab2 = new ReactiveWebView(mapView, ctx, "web/index.html#/sensors");
+// Each has its own WebView, own bridge instance, own React tree
+```
+
+Custom bridges work the same way:
+
+```java
+ReactiveWebView view = new ReactiveWebView(mapView, ctx, "web/index.html");
+view.addBridge(new PlatformSimBridge(simulator, emitter));
+```
+
+**Lifecycle:** Call `onResume()` when the view becomes visible, `onPause()` when hidden. `destroy()` is called automatically when the view is detached from the window, but you can call it earlier for explicit cleanup. `useDropdownSize()` and `useDropdownVisible()` return defaults in embedded views — they only update inside `ReactiveDropDown`.
 
 ## Architecture
 
