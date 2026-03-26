@@ -6,6 +6,13 @@ Build ATAK plugin UIs with React. Add React screens to any existing plugin — o
 
 Your plugin's React UI runs in a WebView panel. A typed JavaScript bridge connects it to ATAK's map engine — markers, shapes, routes, map items, GPS, CoT messaging, intents, coordinates, preferences, and navigation. During development, Vite serves the UI with hot module replacement. For release, assets are bundled into the APK.
 
+## Prerequisites
+
+- **Node.js 22+** — includes `npm` and `npx` (used to run the CLI and build the web UI)
+- **Java 17** — required by ATAK's Gradle build
+- **Android SDK** — with ATAK SDK extracted (`main.jar`, `atak-gradle-takdev.jar`)
+- **An existing ATAK plugin project** — with `settings.gradle` at the root
+
 ## Quick Start
 
 No installation needed — `npx` runs the CLI directly from npm. Run all commands from your ATAK plugin project root (where `settings.gradle` is).
