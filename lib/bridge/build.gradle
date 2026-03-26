@@ -1,0 +1,39 @@
+plugins {
+    id 'com.android.library'
+    id 'com.vanniktech.maven.publish'
+}
+
+android {
+    namespace 'com.atakmap.android.reactive'
+    compileSdk 36
+
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 34
+        consumerProguardFiles "${rootDir}/consumer-rules.pro"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs = ["${rootDir}/src/main/java"]
+        }
+    }
+}
+
+dependencies {
+    compileOnly files(project.findProperty("atakSdkPath") ? "${rootDir}/${project.findProperty('atakSdkPath')}" : "${rootDir}/sdks/5.6.0/main.jar")
+    compileOnly 'androidx.webkit:webkit:1.12.1'
+}
+
+mavenPublishing {
+    coordinates(
+        "dev.atakreactive",
+        "bridge-${project.findProperty('atakVersion') ?: '5.6.0'}",
+        file("${rootDir}/../version.txt").text.trim()
+    )
+}
