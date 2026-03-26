@@ -38,7 +38,7 @@ function getFlavor(): string {
 
 switch (command) {
   case 'init':
-    init();
+    init({ embedded: args.includes('--embedded') });
     break;
   case 'dev':
     dev(getFlavor());
@@ -51,7 +51,7 @@ switch (command) {
   atak-reactive — React UI for ATAK plugins
 
   Commands:
-    init                  Set up atak-reactive in an existing ATAK plugin
+    init [--embedded]     Set up atak-reactive in an existing ATAK plugin
     dev [--flavor name]   Build debug APK, install, start dev server
     build [--flavor name] Build web assets + release APK
 

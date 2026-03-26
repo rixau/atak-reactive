@@ -18,7 +18,7 @@ import {
   logError,
 } from '../utils.js';
 
-export function init(): void {
+export function init(opts: { embedded?: boolean } = {}): void {
   console.log('\n  atak-reactive init\n');
 
   // 1. Find project root
@@ -218,77 +218,98 @@ preBuild.dependsOn buildWebAssets
     log(output);
   }
 
-  // 9. Auto-register ReactiveDropDown in MapComponent
-  logStep('Registering ReactiveDropDown...');
+  // 9. Auto-register ReactiveDropDown in MapComponent (skip for --embedded)
+  let intentAction: string | null = null;
 
-  const mapComponents = findMapComponents(appDir);
-
-  if (mapComponents.length === 0) {
-    log('Warning: No MapComponent with registerDropDownReceiver found.');
+  if (opts.embedded) {
+    logStep('Skipping ReactiveDropDown registration (--embedded mode)');
     log('');
-    log('Add this to your MapComponent.onCreate():');
+    log('  Add ReactiveWebView to your existing DropDownReceiver:');
     log('');
-    log('  import com.atakmap.android.reactive.ReactiveDropDown;');
+    log('    import com.atakmap.android.reactive.ReactiveWebView;');
     log('');
-    log('  ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");');
-    log('  DocumentedIntentFilter reactFilter = new DocumentedIntentFilter();');
-    log('  reactFilter.addAction("com.yourplugin.SHOW_REACT",');
-    log('          "React screen powered by atak-reactive");');
-    log('  this.registerDropDownReceiver(reactScreen, reactFilter);');
-  } else if (mapComponents.length === 1) {
-    const comp = mapComponents[0]!;
-    const intentAction = deriveIntentAction(comp.packageName);
-    const result = injectReactiveRegistration(comp.filePath, intentAction);
-
-    switch (result) {
-      case 'injected':
-        log(`Registered in ${comp.relativePath}`);
-        log(`  Class: ${comp.className}`);
-        log(`  Intent action: ${intentAction}`);
-        log('');
-        log('  Added:');
-        log('    import com.atakmap.android.reactive.ReactiveDropDown;');
-        log(`    ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");`);
-        log(`    reactFilter.addAction("${intentAction}", ...);`);
-        log(`    this.registerDropDownReceiver(reactScreen, reactFilter);`);
-        break;
-      case 'already_exists':
-        log(`ReactiveDropDown already registered in ${comp.relativePath}`);
-        break;
-      case 'failed':
-        log(`Warning: Could not find registerDropDownReceiver call in ${comp.relativePath}`);
-        log('Add the registration manually (see README).');
-        break;
-    }
+    log('    ReactiveWebView reactView = new ReactiveWebView(mapView, ctx, "web/index.html");');
+    log('    myContainer.addView(reactView);');
+    log('    reactView.onResume();');
   } else {
-    log(`Found ${mapComponents.length} MapComponents:`);
-    for (const comp of mapComponents) {
-      log(`  - ${comp.relativePath} (${comp.className})`);
+    logStep('Registering ReactiveDropDown...');
+
+    const mapComponents = findMapComponents(appDir);
+
+    if (mapComponents.length === 0) {
+      log('Warning: No MapComponent with registerDropDownReceiver found.');
+      log('');
+      log('Add this to your MapComponent.onCreate():');
+      log('');
+      log('  import com.atakmap.android.reactive.ReactiveDropDown;');
+      log('');
+      log('  ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");');
+      log('  DocumentedIntentFilter reactFilter = new DocumentedIntentFilter();');
+      log('  reactFilter.addAction("com.yourplugin.SHOW_REACT",');
+      log('          "React screen powered by atak-reactive");');
+      log('  this.registerDropDownReceiver(reactScreen, reactFilter);');
+    } else if (mapComponents.length === 1) {
+      const comp = mapComponents[0]!;
+      intentAction = deriveIntentAction(comp.packageName);
+      const result = injectReactiveRegistration(comp.filePath, intentAction);
+
+      switch (result) {
+        case 'injected':
+          log(`Registered in ${comp.relativePath}`);
+          log(`  Class: ${comp.className}`);
+          log(`  Intent action: ${intentAction}`);
+          log('');
+          log('  Added:');
+          log('    import com.atakmap.android.reactive.ReactiveDropDown;');
+          log(`    ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");`);
+          log(`    reactFilter.addAction("${intentAction}", ...);`);
+          log(`    this.registerDropDownReceiver(reactScreen, reactFilter);`);
+          break;
+        case 'already_exists':
+          log(`ReactiveDropDown already registered in ${comp.relativePath}`);
+          break;
+        case 'failed':
+          log(`Warning: Could not find registerDropDownReceiver call in ${comp.relativePath}`);
+          log('Add the registration manually (see README).');
+          break;
+      }
+    } else {
+      log(`Found ${mapComponents.length} MapComponents:`);
+      for (const comp of mapComponents) {
+        log(`  - ${comp.relativePath} (${comp.className})`);
+      }
+      log('');
+      log('Multiple MapComponents found — skipping auto-registration.');
+      log('Add this to the one you want:');
+      log('');
+      log('  import com.atakmap.android.reactive.ReactiveDropDown;');
+      log('');
+      log('  ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");');
+      log('  DocumentedIntentFilter reactFilter = new DocumentedIntentFilter();');
+      log('  reactFilter.addAction("com.yourplugin.SHOW_REACT",');
+      log('          "React screen powered by atak-reactive");');
+      log('  this.registerDropDownReceiver(reactScreen, reactFilter);');
     }
-    log('');
-    log('Multiple MapComponents found — skipping auto-registration.');
-    log('Add this to the one you want:');
-    log('');
-    log('  import com.atakmap.android.reactive.ReactiveDropDown;');
-    log('');
-    log('  ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");');
-    log('  DocumentedIntentFilter reactFilter = new DocumentedIntentFilter();');
-    log('  reactFilter.addAction("com.yourplugin.SHOW_REACT",');
-    log('          "React screen powered by atak-reactive");');
-    log('  this.registerDropDownReceiver(reactScreen, reactFilter);');
+
+    if (mapComponents.length === 1) {
+      intentAction = deriveIntentAction(mapComponents[0]!.packageName);
+    }
   }
 
-  // Summary
-  const intentAction = mapComponents.length === 1
-    ? deriveIntentAction(mapComponents[0]!.packageName)
-    : null;
-
   console.log('');
-  logDone('atak-reactive initialized.\n' +
-    '\n    Next steps:\n' +
-    '    1. npx @atak-reactive/cli dev       (start dev server)\n' +
-    '    2. Edit web/src/App.tsx              (hot-reload in ATAK)\n' +
-    (intentAction
-      ? `    3. Trigger: adb shell am broadcast -a ${intentAction}\n`
-      : '    3. Trigger the React screen from your plugin UI\n'));
+  if (opts.embedded) {
+    logDone('atak-reactive initialized (embedded mode).\n' +
+      '\n    Next steps:\n' +
+      '    1. Add ReactiveWebView to your existing DropDownReceiver\n' +
+      '    2. npx @atak-reactive/cli dev       (start dev server)\n' +
+      '    3. Edit web/src/App.tsx              (hot-reload in ATAK)\n');
+  } else {
+    logDone('atak-reactive initialized.\n' +
+      '\n    Next steps:\n' +
+      '    1. npx @atak-reactive/cli dev       (start dev server)\n' +
+      '    2. Edit web/src/App.tsx              (hot-reload in ATAK)\n' +
+      (intentAction
+        ? `    3. Trigger: adb shell am broadcast -a ${intentAction}\n`
+        : '    3. Trigger the React screen from your plugin UI\n'));
+  }
 }
