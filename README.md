@@ -12,6 +12,9 @@ Your plugin's React UI runs in a WebView panel. A typed JavaScript bridge connec
 # 1. Initialize (from any existing ATAK plugin root)
 npx @atak-reactive/cli init
 
+# Or, for incremental migration (adds bridge + web project, no dropdown registration)
+npx @atak-reactive/cli init --embedded
+
 # 2. Build and install
 npx @atak-reactive/cli build
 ./gradlew assembleCivDebug
