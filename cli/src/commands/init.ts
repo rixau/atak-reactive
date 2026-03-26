@@ -2,18 +2,18 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync } from 'fs';
 import { join, basename } from 'path';
 import {
   CLI_VERSION,
+  SUPPORTED_ATAK_VERSIONS,
   findProjectRoot,
   fileContains,
   appendIfMissing,
-  patchGradleBlock,
   detectAtakVersion,
-  resolveTemplateVersion,
-  listSupportedVersions,
-  findJavaFiles,
+  detectInstallType,
+  getAarVersion,
+  addAarDependency,
+  removeSourceInstall,
   findMapComponents,
   deriveIntentAction,
   injectReactiveRegistration,
-  copyJavaTemplatesWithInjection,
   exec,
   log,
   logStep,
@@ -45,7 +45,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     process.exit(1);
   }
 
-  // 2. Detect ATAK version and resolve templates
+  // 2. Detect ATAK version
   const atakVersion = detectAtakVersion(buildGradle);
   if (atakVersion) {
     log(`Detected ATAK version: ${atakVersion}`);
@@ -53,84 +53,48 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     log('Warning: Could not detect ATAK_VERSION from build.gradle');
   }
 
-  const templatesDir = join(__dirname, 'templates');
-  const templateVersion = atakVersion
-    ? resolveTemplateVersion(templatesDir, atakVersion)
-    : null;
-
-  if (atakVersion && !templateVersion) {
-    const supported = listSupportedVersions(templatesDir);
+  if (atakVersion && !SUPPORTED_ATAK_VERSIONS.includes(atakVersion)) {
     logError(
-      `No templates for ATAK ${atakVersion}. Supported versions: ${supported.join(', ')}`,
+      `ATAK ${atakVersion} is not supported. Supported versions: ${SUPPORTED_ATAK_VERSIONS.join(', ')}`,
     );
     process.exit(1);
   }
 
-  const javaTemplatesDir = templateVersion
-    ? join(templatesDir, templateVersion, 'java', 'reactive')
-    : null;
-
-  if (!javaTemplatesDir || !existsSync(javaTemplatesDir)) {
-    const supported = listSupportedVersions(templatesDir);
-    logError(
-      `Java templates not found. Supported versions: ${supported.join(', ')}`,
-    );
-    process.exit(1);
-  }
-
-  log(`Using templates for ATAK ${templateVersion}`);
+  const effectiveAtakVersion = atakVersion ?? '5.6.0';
 
   // 3. Detect existing installation
-  const versionFile = join(root, '.atak-reactive-version');
-  const reactiveDir = join(appDir, 'src/main/java/com/atakmap/android/reactive');
-  const isExisting = existsSync(versionFile) || existsSync(reactiveDir);
-  const installedVersion = existsSync(versionFile)
-    ? readFileSync(versionFile, 'utf-8').trim()
-    : (existsSync(reactiveDir) ? 'unknown' : null);
+  const installType = detectInstallType(appDir, buildGradle);
+  const installedVersion = installType === 'aar' ? getAarVersion(buildGradle) : null;
 
-  // Already up to date
-  if (isExisting && installedVersion === CLI_VERSION) {
+  // Already up to date (AAR install with matching version)
+  if (installType === 'aar' && installedVersion === CLI_VERSION) {
     log(`Already up to date (${CLI_VERSION}).`);
     return;
   }
 
-  // Update path — existing installation, different version
-  if (isExisting) {
-    log(`Existing installation detected (${installedVersion}).`);
+  // --- Update path: existing AAR install, different version ---
+  if (installType === 'aar') {
+    log(`Existing AAR installation detected (${installedVersion}).`);
     log(`Latest available: ${CLI_VERSION}`);
 
     if (opts.dryRun) {
-      const javaFiles = findJavaFiles(javaTemplatesDir);
-      const webPkgPath = join(root, 'web', 'package.json');
       log('');
       log('Would update:');
-      log(`  ${javaFiles.length} Java files in com/atakmap/android/reactive/`);
-      if (existsSync(webPkgPath)) {
-        const webPkg = JSON.parse(readFileSync(webPkgPath, 'utf-8'));
-        const currentSdk = webPkg.dependencies?.['@atak-reactive/sdk'] ?? 'unknown';
-        log(`  @atak-reactive/sdk ${currentSdk} → ^${CLI_VERSION} in web/package.json`);
-      }
+      log(`  compileOnly dependency → ${CLI_VERSION}`);
+      log(`  @atak-reactive/sdk → ^${CLI_VERSION} in web/package.json`);
       log('');
       log('Run without --dry-run to apply.');
       return;
     }
 
-    // 1. Replace Java bridge files
-    logStep('Updating Java bridge files...');
-    const count = copyJavaTemplatesWithInjection(javaTemplatesDir, reactiveDir, CLI_VERSION);
-    log(`Updated ${count} files`);
+    // 1. Bump AAR version
+    logStep('Updating AAR dependency...');
+    const result = addAarDependency(buildGradle, effectiveAtakVersion, CLI_VERSION);
+    log(`${installedVersion} → ${CLI_VERSION} (${result})`);
 
     // 2. Update SDK version in web/package.json
     logStep('Updating SDK dependency...');
-    const webPkgPath = join(root, 'web', 'package.json');
-    if (existsSync(webPkgPath)) {
-      const webPkg = JSON.parse(readFileSync(webPkgPath, 'utf-8'));
-      const oldSdk = webPkg.dependencies?.['@atak-reactive/sdk'] ?? 'unknown';
-      webPkg.dependencies['@atak-reactive/sdk'] = `^${CLI_VERSION}`;
-      webPkg.devDependencies['@atak-reactive/cli'] = `^${CLI_VERSION}`;
-      writeFileSync(webPkgPath, JSON.stringify(webPkg, null, 2) + '\n');
-      log(`${oldSdk} → ^${CLI_VERSION}`);
-    }
+    updateWebPackageJson(root);
 
     // 3. npm install
     logStep('Installing dependencies...');
@@ -138,28 +102,64 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     const { ok } = exec('npm install', webDir);
     log(ok ? 'npm install complete' : 'Warning: npm install failed');
 
-    // 4. Write version file
-    writeFileSync(versionFile, CLI_VERSION + '\n');
-    log(`Updated .atak-reactive-version to ${CLI_VERSION}`);
-
     logDone(`Updated to ${CLI_VERSION}. Run 'npx @atak-reactive/cli dev' to test.`);
     return;
   }
 
-  // Fresh install path — copy Java source with version injection
-  logStep('Copying Java library source...');
-  const javaCount = copyJavaTemplatesWithInjection(javaTemplatesDir, reactiveDir, CLI_VERSION);
-  log(`Copied ${javaCount} files (ATAK ${templateVersion}) to app/src/main/java/com/atakmap/android/reactive/`);
+  // --- Migration path: source-copy install → AAR ---
+  if (installType === 'source') {
+    log('Existing source-copy installation detected.');
+    log('Migrating to AAR dependency...');
 
-  // 4. Patch build.gradle — webkit dependency
+    if (opts.dryRun) {
+      log('');
+      log('Would migrate:');
+      log('  1. Remove com/atakmap/android/reactive/ (source files)');
+      log(`  2. Add compileOnly "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}"`);
+      log(`  3. Update @atak-reactive/sdk → ^${CLI_VERSION} in web/package.json`);
+      log('');
+      log('Run without --dry-run to apply.');
+      return;
+    }
+
+    // 1. Remove source files
+    logStep('Removing source-copy files...');
+    const removed = removeSourceInstall(appDir, root);
+    log(`Removed ${removed} files`);
+
+    // 2. Add AAR dependency
+    logStep('Adding AAR dependency...');
+    addAarDependency(buildGradle, effectiveAtakVersion, CLI_VERSION);
+    log(`Added compileOnly "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}"`);
+
+    // 3. Update SDK version in web/package.json
+    logStep('Updating SDK dependency...');
+    updateWebPackageJson(root);
+
+    // 4. npm install
+    logStep('Installing dependencies...');
+    const webDir = join(root, 'web');
+    const { ok } = exec('npm install', webDir);
+    log(ok ? 'npm install complete' : 'Warning: npm install failed');
+
+    logDone(`Migrated to AAR. Your MapComponent and custom bridges are unchanged.`);
+    return;
+  }
+
+  // --- Fresh install path ---
+
+  // 4. Add AAR dependency
+  logStep('Adding AAR dependency...');
+  addAarDependency(buildGradle, effectiveAtakVersion, CLI_VERSION);
+  log(`Added compileOnly "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}"`);
+
+  // 5. Patch build.gradle — webkit dependency
   logStep('Patching app/build.gradle...');
 
   const gradleRaw = readFileSync(buildGradle, 'utf-8');
   if (gradleRaw.includes('androidx.webkit')) {
     log('androidx.webkit dependency already present');
   } else {
-    // Find the project-level dependencies block (has "implementation fileTree")
-    // not the buildscript dependencies block (has "classpath")
     const depsRegex = /dependencies\s*\{[^}]*implementation\s+fileTree/;
     const depsMatch = depsRegex.exec(gradleRaw);
     if (depsMatch) {
@@ -175,18 +175,16 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
   }
 
-  // 4. Patch build.gradle — assets srcDir
+  // 6. Patch build.gradle — assets srcDir
   const assetsSrcDir = '            assets.srcDirs += ["${rootDir}/web/dist-assets"]';
   const gradleContent = readFileSync(buildGradle, 'utf-8');
   if (gradleContent.includes('dist-assets')) {
     log('assets.srcDirs already configured');
   } else {
-    // Find sourceSets { main { and add after the versionName line or closing of that block
     const mainBlockMatch = gradleContent.match(/sourceSets\s*\{[\s\S]*?main\s*\{/);
     if (mainBlockMatch) {
       const mainIdx = gradleContent.indexOf(mainBlockMatch[0]!);
       const afterMain = mainIdx + mainBlockMatch[0]!.length;
-      // Find the closing brace of the main block — insert before it
       let braceDepth = 1;
       let insertIdx = afterMain;
       for (let i = afterMain; i < gradleContent.length; i++) {
@@ -208,7 +206,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
   }
 
-  // 4b. Patch build.gradle — auto-build web assets before APK
+  // 7. Patch build.gradle — auto-build web assets before APK
   const gradleAfterAssets = readFileSync(buildGradle, 'utf-8');
   if (gradleAfterAssets.includes('buildWebAssets')) {
     log('Gradle web build task already present');
@@ -221,12 +219,11 @@ task buildWebAssets(type: Exec) {
 }
 preBuild.dependsOn buildWebAssets
 `;
-    // Append at end of file
     writeFileSync(buildGradle, gradleAfterAssets.trimEnd() + '\n' + webBuildTask);
     log('Added Gradle task to auto-build web assets before APK');
   }
 
-  // 5. Patch proguard
+  // 8. Patch proguard
   logStep('Patching proguard-gradle.txt...');
   if (existsSync(proguardFile)) {
     const snippet = readFileSync(
@@ -239,7 +236,7 @@ preBuild.dependsOn buildWebAssets
     log('Warning: proguard-gradle.txt not found, skipping');
   }
 
-  // 6. Scaffold web/ folder
+  // 9. Scaffold web/ folder
   const webDir = join(root, 'web');
   if (existsSync(join(webDir, 'package.json'))) {
     log('web/ folder already exists, skipping scaffold');
@@ -249,14 +246,12 @@ preBuild.dependsOn buildWebAssets
 
     mkdirSync(join(webDir, 'src'), { recursive: true });
 
-    // Copy static templates
     for (const file of ['tsconfig.json', 'vite.config.ts', 'index.html']) {
       cpSync(join(webTemplates, file), join(webDir, file));
     }
     cpSync(join(webTemplates, 'src', 'main.tsx'), join(webDir, 'src', 'main.tsx'));
     cpSync(join(webTemplates, 'src', 'App.tsx'), join(webDir, 'src', 'App.tsx'));
 
-    // Generate package.json from template
     const projectName = basename(root);
     const pkgTemplate = readFileSync(join(webTemplates, 'package.json.tmpl'), 'utf-8');
     writeFileSync(
@@ -269,7 +264,7 @@ preBuild.dependsOn buildWebAssets
     log('Created web/ with React + Vite + TypeScript');
   }
 
-  // 7. Update .gitignore
+  // 10. Update .gitignore
   logStep('Updating .gitignore...');
   const gitignore = join(root, '.gitignore');
   if (existsSync(gitignore)) {
@@ -279,7 +274,7 @@ preBuild.dependsOn buildWebAssets
   }
   log('.gitignore updated');
 
-  // 8. Install npm deps
+  // 11. Install npm deps
   logStep('Installing web dependencies...');
   const { ok, output } = exec('npm install', webDir);
   if (ok) {
@@ -289,7 +284,7 @@ preBuild.dependsOn buildWebAssets
     log(output);
   }
 
-  // 9. Auto-register ReactiveDropDown in MapComponent (skip for --embedded)
+  // 12. Auto-register ReactiveDropDown in MapComponent (skip for --embedded)
   let intentAction: string | null = null;
 
   if (opts.embedded) {
@@ -367,9 +362,6 @@ preBuild.dependsOn buildWebAssets
     }
   }
 
-  // 10. Write version file
-  writeFileSync(versionFile, CLI_VERSION + '\n');
-
   console.log('');
   if (opts.embedded) {
     logDone('atak-reactive initialized (embedded mode).\n' +
@@ -385,5 +377,17 @@ preBuild.dependsOn buildWebAssets
       (intentAction
         ? `    3. Trigger: adb shell am broadcast -a ${intentAction}\n`
         : '    3. Trigger the React screen from your plugin UI\n'));
+  }
+}
+
+function updateWebPackageJson(root: string): void {
+  const webPkgPath = join(root, 'web', 'package.json');
+  if (existsSync(webPkgPath)) {
+    const webPkg = JSON.parse(readFileSync(webPkgPath, 'utf-8'));
+    const oldSdk = webPkg.dependencies?.['@atak-reactive/sdk'] ?? 'unknown';
+    webPkg.dependencies['@atak-reactive/sdk'] = `^${CLI_VERSION}`;
+    webPkg.devDependencies['@atak-reactive/cli'] = `^${CLI_VERSION}`;
+    writeFileSync(webPkgPath, JSON.stringify(webPkg, null, 2) + '\n');
+    log(`${oldSdk} → ^${CLI_VERSION}`);
   }
 }
