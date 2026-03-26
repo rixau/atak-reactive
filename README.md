@@ -249,7 +249,7 @@ cd example && ./scripts/integration-test.sh
 
 ## Compatibility
 
-- ATAK 5.6.x
+- ATAK 5.4.0 – 5.6.x
 - Android 5.0+ (API 21+)
 - Java 17, Node.js 22+, React 18+
 
