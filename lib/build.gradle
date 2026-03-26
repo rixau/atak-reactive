@@ -1,3 +1,13 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.0'
+    }
+}
+
 apply plugin: 'com.android.library'
 apply plugin: 'maven-publish'
 apply plugin: 'signing'
@@ -24,32 +34,37 @@ dependencies {
     compileOnly 'androidx.webkit:webkit:1.12.1'
 }
 
-publishing {
-    publications {
-        release(MavenPublication) {
-            groupId = 'dev.atakreactive'
-            artifactId = "bridge-${project.findProperty('atakVersion') ?: '5.6.0'}"
-            version = file("${rootDir}/../version.txt").text.trim()
-
-            afterEvaluate {
-                from components.release
-            }
-        }
-    }
-    repositories {
-        maven {
-            url = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
-            credentials {
-                username = System.getenv("SONATYPE_USERNAME")
-                password = System.getenv("SONATYPE_PASSWORD")
-            }
-        }
-    }
+android.publishing {
+    singleVariant('release')
 }
 
-signing {
-    def signingKey = System.getenv("GPG_SIGNING_KEY")
-    def signingPassword = System.getenv("GPG_PASSPHRASE")
-    useInMemoryPgpKeys(signingKey, signingPassword)
-    sign publishing.publications.release
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = 'dev.atakreactive'
+                artifactId = "bridge-${project.findProperty('atakVersion') ?: '5.6.0'}"
+                version = file("${rootDir}/../version.txt").text.trim()
+            }
+        }
+        repositories {
+            maven {
+                url = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
+                credentials {
+                    username = System.getenv("SONATYPE_USERNAME")
+                    password = System.getenv("SONATYPE_PASSWORD")
+                }
+            }
+        }
+    }
+
+    signing {
+        def signingKey = System.getenv("GPG_SIGNING_KEY")
+        def signingPassword = System.getenv("GPG_PASSPHRASE")
+        if (signingKey) {
+            useInMemoryPgpKeys(signingKey, signingPassword)
+            sign publishing.publications.release
+        }
+    }
 }
