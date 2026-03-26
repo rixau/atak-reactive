@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMapItems, useSelfLocation, addMarker, removeMarker } from '@atak-reactive/sdk';
+import { useMapItems, useSelfLocation, addMarker, removeMarker, sendBroadcast } from '@atak-reactive/sdk';
 
 /**
  * Embedded React tab — runs inside a ReactiveWebView within a native tabbed layout.
@@ -46,6 +46,9 @@ export function EmbeddedPage() {
 
       <div style={styles.card}>
         <h2 style={styles.sectionTitle}>ACTIONS</h2>
+        <button onClick={() => sendBroadcast('com.atakmap.android.plugintemplate.SHOW_REACT')} style={styles.buttonOutline}>
+          Open Full React Dropdown
+        </button>
         <button onClick={dropMarker} disabled={!location} style={styles.button}>
           Drop Marker at My Location
         </button>
@@ -76,5 +79,6 @@ const styles: Record<string, React.CSSProperties> = {
   more: { color: '#8d99ae', fontSize: 12, fontStyle: 'italic', marginTop: 4 },
   dim: { color: '#8d99ae', fontSize: 12 },
   button: { width: '100%', padding: '10px 0', border: 'none', borderRadius: 6, background: '#4cc9f0', color: '#0f0f23', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 8 },
+  buttonOutline: { width: '100%', padding: '10px 0', border: '1px solid #4cc9f0', borderRadius: 6, background: 'transparent', color: '#4cc9f0', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 8 },
   removeBtn: { background: 'none', border: '1px solid #8d99ae', borderRadius: 4, color: '#8d99ae', fontSize: 11, padding: '2px 8px', cursor: 'pointer' },
 };
