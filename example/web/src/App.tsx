@@ -4,8 +4,24 @@ import { HomePage } from './pages/Home';
 import { MarkersPage } from './pages/Markers';
 import { SettingsPage } from './pages/Settings';
 import { IntegrationTestPage } from './pages/IntegrationTest';
+import { EmbeddedPage } from './pages/Embedded';
+import { useLocation } from 'react-router-dom';
 
 export function App() {
+  const location = useLocation();
+  const isEmbedded = location.pathname === '/embedded';
+
+  // When loaded as an embedded view, render just the embedded page — no chrome
+  if (isEmbedded) {
+    return (
+      <div style={{ height: '100vh', overflow: 'auto', padding: 16 }}>
+        <Routes>
+          <Route path="/embedded" element={<EmbeddedPage />} />
+        </Routes>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #16213e' }}>

@@ -14,8 +14,10 @@ public class ReactiveExampleComponent extends DropDownMapComponent {
 
     private static final String TAG = "ReactiveExample";
     public static final String SHOW_REACT = "com.atakmap.android.plugintemplate.SHOW_REACT";
+    public static final String SHOW_MIXED = "com.atakmap.android.plugintemplate.SHOW_MIXED";
 
     private ReactiveDropDown reactiveDropDown;
+    private MixedExampleReceiver mixedReceiver;
 
     @Override
     public void onCreate(final Context context, Intent intent,
@@ -27,6 +29,11 @@ public class ReactiveExampleComponent extends DropDownMapComponent {
         DocumentedIntentFilter filter = new DocumentedIntentFilter();
         filter.addAction(SHOW_REACT, "React example screen");
         registerDropDownReceiver(reactiveDropDown, filter);
+
+        mixedReceiver = new MixedExampleReceiver(view, context);
+        DocumentedIntentFilter mixedFilter = new DocumentedIntentFilter();
+        mixedFilter.addAction(SHOW_MIXED, "Mixed native + React example");
+        registerDropDownReceiver(mixedReceiver, mixedFilter);
 
         Log.d(TAG, "Reactive example component initialized");
     }

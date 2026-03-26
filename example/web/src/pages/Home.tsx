@@ -1,12 +1,25 @@
-import { useSelfLocation, useMapEvent } from '@atak-reactive/sdk';
+import { useSelfLocation, useMapEvent, sendBroadcast } from '@atak-reactive/sdk';
 
 export function HomePage() {
   const location = useSelfLocation();
   const lastClick = useMapEvent('mapClick');
   const selected = useMapEvent('itemSelected');
 
+  const openMixedDemo = () => {
+    sendBroadcast('com.atakmap.android.plugintemplate.SHOW_MIXED');
+  };
+
   return (
     <div>
+      <Section title="Mixed Demo">
+        <p style={{ color: '#8d99ae', fontSize: 13, marginBottom: 8 }}>
+          Open a native tabbed dropdown with one React tab via ReactiveWebView.
+        </p>
+        <button onClick={openMixedDemo} style={{ width: '100%', padding: '10px 0', border: 'none', borderRadius: 6, background: '#4cc9f0', color: '#0f0f23', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+          Open Mixed Demo
+        </button>
+      </Section>
+
       <Section title="Self Location">
         {location ? (
           <>
