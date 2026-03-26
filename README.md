@@ -8,17 +8,17 @@ Your plugin's React UI runs in a WebView panel. A typed JavaScript bridge connec
 
 ## Quick Start
 
+No installation needed — `npx` runs the CLI directly from npm. Run all commands from your ATAK plugin project root (where `settings.gradle` is).
+
 ```bash
-# 1. Initialize (from any existing ATAK plugin root)
+# 1. Initialize (adds React bridge + web project to your existing plugin)
 npx @atak-reactive/cli init
 
-# Or, for incremental migration (adds bridge + web project, no dropdown registration)
+# Or, for incremental migration (bridge + web project, no new dropdown)
 npx @atak-reactive/cli init --embedded
 
-# 2. Build and install
+# 2. Build release APK (builds web assets + APK)
 npx @atak-reactive/cli build
-./gradlew assembleCivDebug
-adb install -r app/build/outputs/apk/civ/debug/*.apk
 
 # 3. Develop with hot reload
 npx @atak-reactive/cli dev
