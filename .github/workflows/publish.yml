@@ -24,12 +24,13 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Verify CLI/SDK version sync
+      - name: Verify version sync (SDK, CLI, version.txt)
         run: |
           SDK_VERSION=$(node -p "require('./sdk/package.json').version")
           CLI_VERSION=$(node -p "require('./cli/package.json').version")
-          if [ "$SDK_VERSION" != "$CLI_VERSION" ]; then
-            echo "::error::SDK ($SDK_VERSION) and CLI ($CLI_VERSION) versions must match"
+          AAR_VERSION=$(cat version.txt | tr -d '[:space:]')
+          if [ "$SDK_VERSION" != "$CLI_VERSION" ] || [ "$SDK_VERSION" != "$AAR_VERSION" ]; then
+            echo "::error::Versions must match — SDK ($SDK_VERSION), CLI ($CLI_VERSION), version.txt ($AAR_VERSION)"
             exit 1
           fi
 
