@@ -1,0 +1,55 @@
+apply plugin: 'com.android.library'
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+
+android {
+    namespace 'com.atakmap.android.reactive'
+    compileSdk 36
+
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 34
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // ATAK SDK — passed by CI via -PatakSdkPath=..., defaults to local 5.6.0
+    compileOnly files(project.findProperty("atakSdkPath") ?: "sdks/5.6.0/main.jar")
+    compileOnly 'androidx.webkit:webkit:1.12.1'
+}
+
+publishing {
+    publications {
+        release(MavenPublication) {
+            groupId = 'dev.atakreactive'
+            artifactId = "bridge-${project.findProperty('atakVersion') ?: '5.6.0'}"
+            version = file("${rootDir}/../version.txt").text.trim()
+
+            afterEvaluate {
+                from components.release
+            }
+        }
+    }
+    repositories {
+        maven {
+            url = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
+            credentials {
+                username = System.getenv("SONATYPE_USERNAME")
+                password = System.getenv("SONATYPE_PASSWORD")
+            }
+        }
+    }
+}
+
+signing {
+    def signingKey = System.getenv("GPG_SIGNING_KEY")
+    def signingPassword = System.getenv("GPG_PASSPHRASE")
+    useInMemoryPgpKeys(signingKey, signingPassword)
+    sign publishing.publications.release
+}

@@ -28,5 +28,6 @@ docs/
 
 # Build artifacts
 lib/build/
+lib/sdks/
 *.jar
 !example/app/libs/*.jar

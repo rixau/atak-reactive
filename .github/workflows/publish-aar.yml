@@ -1,0 +1,73 @@
+name: Publish AAR
+
+on:
+  push:
+    branches: [main]
+    paths: ['lib/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version and validate sync
+        id: version
+        run: |
+          AAR_VERSION=$(cat version.txt | tr -d '[:space:]')
+          SDK_VERSION=$(node -p "require('./sdk/package.json').version")
+          CLI_VERSION=$(node -p "require('./cli/package.json').version")
+
+          echo "AAR: $AAR_VERSION | SDK: $SDK_VERSION | CLI: $CLI_VERSION"
+
+          if [ "$AAR_VERSION" != "$SDK_VERSION" ] || [ "$AAR_VERSION" != "$CLI_VERSION" ]; then
+            echo "::error::Version mismatch — version.txt ($AAR_VERSION), SDK ($SDK_VERSION), CLI ($CLI_VERSION) must all match"
+            exit 1
+          fi
+
+          echo "version=$AAR_VERSION" >> $GITHUB_OUTPUT
+
+  publish:
+    needs: check-version
+    strategy:
+      matrix:
+        atak-version: ['5.4.0', '5.5.0', '5.5.1', '5.6.0']
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Download ATAK SDK
+        run: ./scripts/download-sdk.sh ${{ matrix.atak-version }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build AAR
+        run: |
+          cd lib
+          ./gradlew assembleRelease \
+            -PatakSdkPath=sdks/${{ matrix.atak-version }}/main.jar \
+            -PatakVersion=${{ matrix.atak-version }}
+
+      - name: Publish to Maven Central
+        run: |
+          cd lib
+          ./gradlew publish \
+            -PatakSdkPath=sdks/${{ matrix.atak-version }}/main.jar \
+            -PatakVersion=${{ matrix.atak-version }}
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

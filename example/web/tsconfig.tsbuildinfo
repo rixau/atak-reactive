@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/main.tsx","./src/pages/Home.tsx","./src/pages/IntegrationTest.tsx","./src/pages/Markers.tsx","./src/pages/Settings.tsx"],"version":"5.8.3"}
+{"root":["./src/App.tsx","./src/main.tsx","./src/pages/Embedded.tsx","./src/pages/Home.tsx","./src/pages/IntegrationTest.tsx","./src/pages/Markers.tsx","./src/pages/Settings.tsx"],"version":"5.8.3"}
