@@ -213,6 +213,10 @@ android {
             defaultConfig.versionCode = getVersionCode()
             defaultConfig.versionName = PLUGIN_VERSION + " (" + getVersionName() + ") - [" + ATAK_VERSION + "]"
 
+            // atak-reactive: compile bridge source directly from lib/ (example only)
+            // Real plugins use: compileOnly "dev.atakreactive:bridge-${ATAK_VERSION}:x.y.z"
+            java.srcDirs += ["${rootDir}/../lib/src/main/java"]
+
             // atak-reactive: serve bundled web assets from web/dist/ (built by Vite)
             assets.srcDirs += ["${rootDir}/web/dist-assets"]
         }
@@ -291,7 +295,8 @@ def getCommandFlavor() {
 dependencies {
     implementation fileTree(dir: 'libs', include: '*.jar')
     implementation 'androidx.webkit:webkit:1.12.1'
-    compileOnly "dev.atakreactive:bridge-${ATAK_VERSION}:${file("${rootDir}/../version.txt").text.trim()}"
+    // Real plugins use the published AAR instead of java.srcDirs:
+    // compileOnly "dev.atakreactive:bridge-${ATAK_VERSION}:x.y.z"
 }
 
 configurations.all {
