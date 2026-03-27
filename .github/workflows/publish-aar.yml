@@ -56,7 +56,7 @@ jobs:
       - name: Build and publish to Maven Central
         run: |
           cd lib
-          ./gradlew :bridge:publishToMavenCentral \
+          ./gradlew :bridge:publishAndReleaseToMavenCentral \
             -PatakSdkPath=sdks/${{ matrix.atak-version }}/main.jar \
             -PatakVersion=${{ matrix.atak-version }} \
             -PRELEASE_SIGNING_ENABLED=true
