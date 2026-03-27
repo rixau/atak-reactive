@@ -9,7 +9,7 @@ set -euo pipefail
 # Requires: gh CLI authenticated, or GITHUB_TOKEN env var
 
 ATAK_VERSION="${1:?Usage: download-sdk.sh <atak-version>}"
-REPO="rixau/atak-reactive"
+REPO="rixau/atak-ci-resources"
 TAG="sdk-${ATAK_VERSION}"
 DEST="lib/sdks/${ATAK_VERSION}"
 

@@ -51,7 +51,7 @@ jobs:
       - name: Download ATAK SDK
         run: ./scripts/download-sdk.sh ${{ matrix.atak-version }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CI_SDK_TOKEN }}
 
       - name: Build and publish to Maven Central
         run: |
