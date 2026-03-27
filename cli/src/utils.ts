@@ -184,7 +184,7 @@ export function getAarVersion(buildGradlePath: string): string | null {
 }
 
 /**
- * Add or update the compileOnly AAR dependency in build.gradle.
+ * Add or update the implementation AAR dependency in build.gradle.
  * Returns 'added', 'updated', or 'already_present'.
  */
 export function addAarDependency(
@@ -199,9 +199,9 @@ export function addAarDependency(
   if (content.includes(dep)) return 'already_present';
 
   // Has an older version — update it
-  const existingPattern = /compileOnly\s+["']dev\.atakreactive:bridge-[\d.]+:[\d.]+["']/;
+  const existingPattern = /implementation\s+["']dev\.atakreactive:bridge-[\d.]+:[\d.]+["']/;
   if (existingPattern.test(content)) {
-    content = content.replace(existingPattern, `compileOnly "${dep}"`);
+    content = content.replace(existingPattern, `implementation "${dep}"`);
     writeFileSync(buildGradlePath, content);
     return 'updated';
   }
@@ -212,7 +212,7 @@ export function addAarDependency(
   if (depsMatch) {
     const depsIdx = content.indexOf('dependencies', depsMatch.index);
     const braceIdx = content.indexOf('{', depsIdx);
-    const depLine = `\n    compileOnly "${dep}"`;
+    const depLine = `\n    implementation "${dep}"`;
     content = content.slice(0, braceIdx + 1) + depLine + content.slice(braceIdx + 1);
     writeFileSync(buildGradlePath, content);
     return 'added';

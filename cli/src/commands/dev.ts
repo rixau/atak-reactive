@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { execSync, spawn } from 'child_process';
 import { findProjectRoot, log, logError } from '../utils.js';
@@ -18,21 +18,15 @@ export function dev(flavor: string = 'civ'): void {
 
   console.log(`\n  atak-reactive dev (flavor: ${flavor})\n`);
 
-  // Step 1: Build web assets
-  log('Building web assets...');
-  try {
-    execSync('npm run build', { cwd: webDir, stdio: 'inherit' });
-  } catch {
-    logError('Web build failed.');
-    process.exit(1);
-  }
-
-  // Step 2: Build debug APK
+  // Step 1: Build debug APK (skip web build — dev mode uses Vite dev server)
   const capFlavor = flavor.charAt(0).toUpperCase() + flavor.slice(1);
   log(`Building debug APK (${capFlavor}Debug)...`);
   try {
     const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
-    execSync(`${gradlew} assemble${capFlavor}Debug`, { cwd: root, stdio: 'inherit' });
+    const buildGradle = join(root, 'app', 'build.gradle');
+    const hasBuildWebTask = existsSync(buildGradle) && readFileSync(buildGradle, 'utf-8').includes('buildWebAssets');
+    const skipWeb = hasBuildWebTask ? ' -x buildWebAssets' : '';
+    execSync(`${gradlew} assemble${capFlavor}Debug${skipWeb}`, { cwd: root, stdio: 'inherit' });
   } catch {
     logError('Gradle build failed.');
     process.exit(1);

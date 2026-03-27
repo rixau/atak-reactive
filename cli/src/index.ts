@@ -19,9 +19,14 @@ function detectDefaultFlavor(): string {
 
   try {
     const content = readFileSync(buildGradle, 'utf-8');
-    // Match: [ name : 'civ', default: true ]
-    const match = content.match(/name\s*:\s*'(\w+)',\s*default:\s*true/);
-    if (match) return match[1];
+
+    // Pattern 1: supportedFlavors array — [ name : 'civ', default: true ]
+    const arrayMatch = content.match(/name\s*:\s*'(\w+)',\s*default:\s*true/);
+    if (arrayMatch) return arrayMatch[1];
+
+    // Pattern 2: direct productFlavors — mil { getIsDefault().set(true) }
+    const directMatch = content.match(/(\w+)\s*\{[^}]*getIsDefault\(\)\.set\(true\)/);
+    if (directMatch) return directMatch[1];
   } catch {
     // Fall through
   }

@@ -80,7 +80,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     if (opts.dryRun) {
       log('');
       log('Would update:');
-      log(`  compileOnly dependency → ${CLI_VERSION}`);
+      log(`  implementation dependency → ${CLI_VERSION}`);
       log(`  @atak-reactive/sdk → ^${CLI_VERSION} in web/package.json`);
       log('');
       log('Run without --dry-run to apply.');
@@ -115,7 +115,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       log('');
       log('Would migrate:');
       log('  1. Remove com/atakmap/android/reactive/ (source files)');
-      log(`  2. Add compileOnly "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}"`);
+      log(`  2. Add implementation "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}"`);
       log(`  3. Update @atak-reactive/sdk → ^${CLI_VERSION} in web/package.json`);
       log('');
       log('Run without --dry-run to apply.');
@@ -130,7 +130,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     // 2. Add AAR dependency
     logStep('Adding AAR dependency...');
     addAarDependency(buildGradle, effectiveAtakVersion, CLI_VERSION);
-    log(`Added compileOnly "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}"`);
+    log(`Added implementation "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}"`);
 
     // 3. Update SDK version in web/package.json
     logStep('Updating SDK dependency...');
@@ -148,10 +148,99 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
 
   // --- Fresh install path ---
 
+  if (opts.dryRun) {
+    const gradleRaw = readFileSync(buildGradle, 'utf-8');
+    const webDir = join(root, 'web');
+    const gitignore = join(root, '.gitignore');
+
+    log('');
+
+    // AAR dependency
+    if (gradleRaw.includes('dev.atakreactive')) {
+      log('  ✓ AAR dependency already present');
+    } else {
+      log(`  + Add implementation "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}" to build.gradle`);
+    }
+
+    // Webkit
+    if (gradleRaw.includes('androidx.webkit')) {
+      log('  ✓ androidx.webkit already present');
+    } else {
+      log("  + Add implementation 'androidx.webkit:webkit:1.12.1' to build.gradle");
+    }
+
+    // Assets srcDir
+    if (gradleRaw.includes('dist-assets')) {
+      log('  ✓ assets.srcDirs already configured');
+    } else {
+      log('  + Add assets.srcDirs for web build output to build.gradle');
+    }
+
+    // Web build task
+    if (gradleRaw.includes('buildWebAssets')) {
+      log('  ✓ Gradle web build task already present');
+    } else {
+      log('  + Add buildWebAssets Gradle task to build.gradle');
+    }
+
+    // Proguard
+    if (existsSync(proguardFile)) {
+      const proguardContent = readFileSync(proguardFile, 'utf-8');
+      if (proguardContent.includes('@android.webkit.JavascriptInterface')) {
+        log('  ✓ Proguard keep rule already present');
+      } else {
+        log('  + Add JavascriptInterface keep rule to proguard-gradle.txt');
+      }
+    } else {
+      log('  ⚠ proguard-gradle.txt not found — will skip');
+    }
+
+    // Web folder
+    if (existsSync(join(webDir, 'package.json'))) {
+      log('  ✓ web/ folder already exists');
+    } else {
+      log('  + Create web/ folder with React + Vite + TypeScript');
+      log('  + Run npm install in web/');
+    }
+
+    // Gitignore
+    if (existsSync(gitignore) && readFileSync(gitignore, 'utf-8').includes('dist-assets')) {
+      log('  ✓ .gitignore already has dist-assets');
+    } else {
+      log('  + Add dist-assets/ to .gitignore');
+    }
+
+    // MapComponent registration
+    if (!opts.embedded) {
+      const mapComponents = findMapComponents(appDir);
+      if (mapComponents.length === 0) {
+        log('  ⚠ No MapComponent found — manual registration needed');
+      } else if (mapComponents.length === 1) {
+        const comp = mapComponents[0]!;
+        const content = readFileSync(comp.filePath, 'utf-8');
+        if (content.includes('ReactiveDropDown')) {
+          log(`  ✓ ReactiveDropDown already registered in ${comp.relativePath}`);
+        } else {
+          const action = deriveIntentAction(comp.packageName);
+          log(`  + Register ReactiveDropDown in ${comp.relativePath}`);
+          log(`    Intent action: ${action}`);
+        }
+      } else {
+        log(`  ⚠ ${mapComponents.length} MapComponents found — manual registration needed`);
+      }
+    } else {
+      log('  - Skipping ReactiveDropDown registration (--embedded mode)');
+    }
+
+    log('');
+    log('Run without --dry-run to apply.');
+    return;
+  }
+
   // 4. Add AAR dependency
   logStep('Adding AAR dependency...');
   addAarDependency(buildGradle, effectiveAtakVersion, CLI_VERSION);
-  log(`Added compileOnly "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}"`);
+  log(`Added implementation "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}"`);
 
   // 5. Patch build.gradle — webkit dependency
   logStep('Patching app/build.gradle...');
