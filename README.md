@@ -15,27 +15,31 @@ Your plugin's React UI runs in a WebView panel. A typed JavaScript bridge connec
 
 ## Quick Start
 
-No installation needed — `npx` runs the CLI directly from npm. Run all commands from your ATAK plugin project root (where `settings.gradle` is).
+Run from your ATAK plugin project root (where `settings.gradle` is). No global install needed.
+
+**1. Add React to your plugin**
 
 ```bash
-# 1. Initialize (adds React bridge + web project to your existing plugin)
 npx @atak-reactive/cli init
+```
 
-# Or, for incremental migration (bridge + web project, no new dropdown)
-npx @atak-reactive/cli init --embedded
+This adds the bridge AAR, patches `build.gradle`, creates a `web/` folder with React + Vite, and registers a `ReactiveDropDown` in your MapComponent. Use `--embedded` to skip the dropdown and wire up `ReactiveWebView` yourself. Use `--dry-run` to preview changes without writing anything.
 
-# Update an existing installation (re-run init to sync Java bridge + SDK)
-npx @atak-reactive/cli init
+**2. Develop with hot reload**
 
-# Preview what an update would change
-npx @atak-reactive/cli init --dry-run
-
-# 2. Build release APK (builds web assets + APK)
-npx @atak-reactive/cli build
-
-# 3. Develop with hot reload
+```bash
 npx @atak-reactive/cli dev
 ```
+
+Builds the debug APK, installs it, sets up `adb reverse`, and starts Vite. Edit `web/src/App.tsx` — changes appear instantly in ATAK.
+
+**3. Build for release**
+
+```bash
+npx @atak-reactive/cli build
+```
+
+Builds web assets into the APK. Output is a signed release APK ready for distribution.
 
 ## React Hooks
 

@@ -1,11 +1,9 @@
-name: Publish Packages
+name: Publish
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'sdk/package.json'
-      - 'cli/package.json'
+    paths: ['version.txt']
   workflow_dispatch:
 
 permissions:
@@ -16,54 +14,42 @@ jobs:
   check-version:
     runs-on: ubuntu-latest
     outputs:
-      sdk_changed: ${{ steps.check.outputs.sdk_changed }}
-      cli_changed: ${{ steps.check.outputs.cli_changed }}
       version: ${{ steps.check.outputs.version }}
+      changed: ${{ steps.check.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - name: Verify version sync (SDK, CLI, version.txt)
+      - name: Verify version sync
+        id: check
         run: |
+          VERSION=$(cat version.txt | tr -d '[:space:]')
           SDK_VERSION=$(node -p "require('./sdk/package.json').version")
           CLI_VERSION=$(node -p "require('./cli/package.json').version")
-          AAR_VERSION=$(cat version.txt | tr -d '[:space:]')
-          if [ "$SDK_VERSION" != "$CLI_VERSION" ] || [ "$SDK_VERSION" != "$AAR_VERSION" ]; then
-            echo "::error::Versions must match — SDK ($SDK_VERSION), CLI ($CLI_VERSION), version.txt ($AAR_VERSION)"
+
+          echo "version.txt: $VERSION | SDK: $SDK_VERSION | CLI: $CLI_VERSION"
+
+          if [ "$VERSION" != "$SDK_VERSION" ] || [ "$VERSION" != "$CLI_VERSION" ]; then
+            echo "::error::Versions must match — version.txt ($VERSION), SDK ($SDK_VERSION), CLI ($CLI_VERSION)"
             exit 1
           fi
 
-      - name: Check for version changes
-        id: check
-        run: |
-          SDK_VERSION=$(node -p "require('./sdk/package.json').version")
-          CLI_VERSION=$(node -p "require('./cli/package.json').version")
+          # Check if version actually changed
+          PREV=$(git show HEAD~1:version.txt 2>/dev/null | tr -d '[:space:]' || echo "")
+          echo "Previous: $PREV → Current: $VERSION"
 
-          # Check if sdk/package.json version changed
-          SDK_PREV=$(git show HEAD~1:sdk/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version" 2>/dev/null || echo "")
-          CLI_PREV=$(git show HEAD~1:cli/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version" 2>/dev/null || echo "")
-
-          echo "SDK: $SDK_PREV -> $SDK_VERSION"
-          echo "CLI: $CLI_PREV -> $CLI_VERSION"
-
-          if [ "$SDK_VERSION" != "$SDK_PREV" ]; then
-            echo "sdk_changed=true" >> $GITHUB_OUTPUT
+          if [ "$VERSION" != "$PREV" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
           else
-            echo "sdk_changed=false" >> $GITHUB_OUTPUT
+            echo "changed=false" >> $GITHUB_OUTPUT
           fi
 
-          if [ "$CLI_VERSION" != "$CLI_PREV" ]; then
-            echo "cli_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "cli_changed=false" >> $GITHUB_OUTPUT
-          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-          echo "version=$SDK_VERSION" >> $GITHUB_OUTPUT
-
-  publish:
+  publish-npm:
     needs: check-version
-    if: needs.check-version.outputs.sdk_changed == 'true' || needs.check-version.outputs.cli_changed == 'true'
+    if: needs.check-version.outputs.changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +60,6 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Build and publish SDK
-        if: needs.check-version.outputs.sdk_changed == 'true'
         working-directory: sdk
         run: |
           npm install
@@ -85,7 +70,6 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build and publish CLI
-        if: needs.check-version.outputs.cli_changed == 'true'
         working-directory: cli
         run: |
           npm install
@@ -94,17 +78,53 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Create git tag
-        run: |
-          VERSION="v${{ needs.check-version.outputs.version }}"
-          git tag "$VERSION" || true
-          git push origin "$VERSION" || true
+  publish-aar:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    strategy:
+      matrix:
+        atak-version: ['5.4.0', '5.5.0', '5.5.1', '5.6.0']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Create GitHub release
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Download ATAK SDK
+        run: ./scripts/download-sdk.sh ${{ matrix.atak-version }}
+        env:
+          GH_TOKEN: ${{ secrets.CI_SDK_TOKEN }}
+
+      - name: Build and publish to Maven Central
+        run: |
+          cd lib
+          ./gradlew :bridge:publishAndReleaseToMavenCentral \
+            -PatakSdkPath=sdks/${{ matrix.atak-version }}/main.jar \
+            -PatakVersion=${{ matrix.atak-version }} \
+            -PRELEASE_SIGNING_ENABLED=true
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.SONATYPE_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.SONATYPE_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
+
+  release:
+    needs: [check-version, publish-npm, publish-aar]
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create git tag and release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="v${{ needs.check-version.outputs.version }}"
+          git tag "$VERSION" || true
+          git push origin "$VERSION" || true
           gh release create "$VERSION" \
             --title "$VERSION" \
             --generate-notes \
