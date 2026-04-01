@@ -5,7 +5,7 @@ import { join } from 'path';
 import { init } from './commands/init.js';
 import { dev } from './commands/dev.js';
 import { build } from './commands/build.js';
-import { findProjectRoot } from './utils.js';
+import { findProjectRoot, parseDefaultFlavor } from './utils.js';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -18,19 +18,10 @@ function detectDefaultFlavor(): string {
   if (!existsSync(buildGradle)) return 'civ';
 
   try {
-    const content = readFileSync(buildGradle, 'utf-8');
-
-    // Pattern 1: supportedFlavors array — [ name : 'civ', default: true ]
-    const arrayMatch = content.match(/name\s*:\s*'(\w+)',\s*default:\s*true/);
-    if (arrayMatch) return arrayMatch[1];
-
-    // Pattern 2: direct productFlavors — mil { getIsDefault().set(true) }
-    const directMatch = content.match(/(\w+)\s*\{[^}]*getIsDefault\(\)\.set\(true\)/);
-    if (directMatch) return directMatch[1];
+    return parseDefaultFlavor(readFileSync(buildGradle, 'utf-8'));
   } catch {
-    // Fall through
+    return 'civ';
   }
-  return 'civ';
 }
 
 function getFlavor(): string {

@@ -33,6 +33,18 @@ npx @atak-reactive/cli dev
 
 Builds the debug APK, installs it, sets up `adb reverse`, and starts Vite. Edit `web/src/App.tsx` — changes appear instantly in ATAK.
 
+For wireless debugging (no USB), add this to your debug build type in `app/build.gradle` and set your dev machine's IP in `local.properties`:
+
+```groovy
+// app/build.gradle → buildTypes → debug
+resValue "string", "atak_reactive_dev_host", project.properties['devServerHost'] ?: 'localhost'
+```
+
+```properties
+# local.properties
+devServerHost=192.168.1.50
+```
+
 **3. Build for release**
 
 ```bash

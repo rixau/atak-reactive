@@ -49,6 +49,24 @@ export function patchGradleBlock(
   return true;
 }
 
+const VALID_FLAVORS = ['civ', 'mil', 'gov'];
+
+/**
+ * Parse the default ATAK flavor from build.gradle content.
+ * Returns 'civ' if no valid flavor is detected.
+ */
+export function parseDefaultFlavor(content: string): string {
+  // Pattern 1: supportedFlavors array — [ name : 'civ', default: true ]
+  const arrayMatch = content.match(/name\s*:\s*'(\w+)',\s*default:\s*true/);
+  if (arrayMatch && VALID_FLAVORS.includes(arrayMatch[1])) return arrayMatch[1];
+
+  // Pattern 2: direct productFlavors — mil { getIsDefault().set(true) }
+  const directMatch = content.match(/(\w+)\s*\{\s*getIsDefault\(\)\.set\(true\)/);
+  if (directMatch && VALID_FLAVORS.includes(directMatch[1])) return directMatch[1];
+
+  return 'civ';
+}
+
 export function exec(cmd: string, cwd?: string): { ok: boolean; output: string } {
   try {
     const output = execSync(cmd, {
@@ -83,11 +101,17 @@ export function logError(msg: string): void {
  * Detect ATAK_VERSION from app/build.gradle.
  * Looks for: ext.ATAK_VERSION = '5.6.0'
  */
-export function detectAtakVersion(buildGradlePath: string): string | null {
-  if (!existsSync(buildGradlePath)) return null;
-  const content = readFileSync(buildGradlePath, 'utf-8');
+/**
+ * Parse ATAK_VERSION from build.gradle content.
+ */
+export function parseAtakVersion(content: string): string | null {
   const match = content.match(/ATAK_VERSION\s*=\s*['"](\d+\.\d+\.\d+)['"]/);
   return match?.[1] ?? null;
+}
+
+export function detectAtakVersion(buildGradlePath: string): string | null {
+  if (!existsSync(buildGradlePath)) return null;
+  return parseAtakVersion(readFileSync(buildGradlePath, 'utf-8'));
 }
 
 /**
@@ -176,11 +200,17 @@ export function detectInstallType(
 /**
  * Get the currently installed AAR version from build.gradle.
  */
-export function getAarVersion(buildGradlePath: string): string | null {
-  if (!existsSync(buildGradlePath)) return null;
-  const content = readFileSync(buildGradlePath, 'utf-8');
+/**
+ * Parse AAR version from build.gradle content.
+ */
+export function parseAarVersion(content: string): string | null {
   const match = content.match(/dev\.atakreactive:bridge-[\d.]+:([\d.]+)/);
   return match?.[1] ?? null;
+}
+
+export function getAarVersion(buildGradlePath: string): string | null {
+  if (!existsSync(buildGradlePath)) return null;
+  return parseAarVersion(readFileSync(buildGradlePath, 'utf-8'));
 }
 
 /**

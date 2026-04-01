@@ -41,12 +41,14 @@ public class ReactiveWebView extends FrameLayout {
 
     private static final String TAG = "ReactiveWebView";
 
-    private static final String DEV_URL = "http://localhost:5173";
+    private static final int DEV_PORT = 5173;
     private static final String ASSET_BASE = "https://appassets.androidplatform.net/assets/";
 
     private final MapView mapView;
     private final String assetPath;
     private final String prodUrl;
+    private final String devUrl;
+    private final String devHost;
     private final boolean devMode;
 
     private WebView webView;
@@ -77,6 +79,8 @@ public class ReactiveWebView extends FrameLayout {
         this.assetPath = assetPath;
         this.prodUrl = ASSET_BASE + assetPath;
         this.devMode = devMode;
+        this.devHost = resolveDevHost(pluginContext);
+        this.devUrl = "http://" + devHost + ":" + DEV_PORT;
 
         setBackgroundColor(0xFF1a1a2e);
 
@@ -229,8 +233,8 @@ public class ReactiveWebView extends FrameLayout {
                 webView.post(() -> {
                     if (destroyed) return;
                     if (reachable) {
-                        Log.d(TAG, "Dev server reachable, loading from " + DEV_URL);
-                        String url = DEV_URL;
+                        Log.d(TAG, "Dev server reachable, loading from " + devUrl);
+                        String url = devUrl;
                         // Preserve hash fragment for route-based multi-view setups
                         int hashIndex = assetPath.indexOf('#');
                         if (hashIndex >= 0) {
@@ -304,10 +308,31 @@ public class ReactiveWebView extends FrameLayout {
         }
     }
 
-    private static boolean isDevServerReachable() {
+    private static String resolveDevHost(Context context) {
+        try {
+            int resId = context.getResources().getIdentifier(
+                    "atak_reactive_dev_host", "string", context.getPackageName());
+            if (resId != 0) {
+                String host = context.getString(resId);
+                if (host != null && !host.isEmpty()) {
+                    if (!"localhost".equals(host)) {
+                        Log.d(TAG, "Dev server host: " + host);
+                    }
+                    return host;
+                }
+            }
+        } catch (Exception e) {
+            // Fall through to default
+        }
+        Log.d(TAG, "atak_reactive_dev_host resource not detected — using localhost. "
+                + "WiFi debugging requires this resValue in your debug build type. See README.");
+        return "localhost";
+    }
+
+    private boolean isDevServerReachable() {
         try {
             java.net.Socket socket = new java.net.Socket();
-            socket.connect(new java.net.InetSocketAddress("localhost", 5173), 500);
+            socket.connect(new java.net.InetSocketAddress(devHost, DEV_PORT), 500);
             socket.close();
             return true;
         } catch (Exception e) {
@@ -378,7 +403,7 @@ public class ReactiveWebView extends FrameLayout {
         @Override
         public void onPageFinished(WebView view, String url) {
             Log.d(TAG, "Loaded: " + url);
-            if (url.equals(prodUrl) || url.startsWith(DEV_URL)) {
+            if (url.equals(prodUrl) || url.startsWith(devUrl)) {
                 devFallbackTriggered = false;
             }
             super.onPageFinished(view, url);

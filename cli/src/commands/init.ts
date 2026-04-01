@@ -176,6 +176,13 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       log('  + Add assets.srcDirs for web build output to build.gradle');
     }
 
+    // Dev server host
+    if (gradleRaw.includes('atak_reactive_dev_host')) {
+      log('  ✓ Dev server host resValue already present');
+    } else {
+      log('  + Add dev server host resValue to debug build type');
+    }
+
     // Web build task
     if (gradleRaw.includes('buildWebAssets')) {
       log('  ✓ Gradle web build task already present');
@@ -295,7 +302,26 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
   }
 
-  // 7. Patch build.gradle — auto-build web assets before APK
+  // 7. Patch build.gradle — dev server host for wireless debugging
+  const gradleForDevHost = readFileSync(buildGradle, 'utf-8');
+  if (gradleForDevHost.includes('atak_reactive_dev_host')) {
+    log('Dev server host resValue already present');
+  } else {
+    const debugBlockMatch = /buildTypes\s*\{[\s\S]*?debug\s*\{/.exec(gradleForDevHost);
+    if (debugBlockMatch) {
+      const insertAfter = debugBlockMatch.index + debugBlockMatch[0].length;
+      const devHostLines =
+        "\n            // atak-reactive: dev server host (set devServerHost in local.properties for wireless debugging)" +
+        "\n            resValue \"string\", \"atak_reactive_dev_host\", project.properties['devServerHost'] ?: 'localhost'";
+      const patched = gradleForDevHost.slice(0, insertAfter) + devHostLines + gradleForDevHost.slice(insertAfter);
+      writeFileSync(buildGradle, patched);
+      log('Added dev server host resValue to debug build type');
+    } else {
+      log('Warning: Could not find buildTypes.debug block — add manually if needed for wireless debugging');
+    }
+  }
+
+  // 8. Patch build.gradle — auto-build web assets before APK
   const gradleAfterAssets = readFileSync(buildGradle, 'utf-8');
   if (gradleAfterAssets.includes('buildWebAssets')) {
     log('Gradle web build task already present');
