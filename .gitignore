@@ -30,5 +30,8 @@ docs/
 lib/build/
 lib/sdks/
 *.jar
+*.jar.*
+*.aar
+.takdev/
 !example/app/libs/*.jar
 !lib/gradle/wrapper/gradle-wrapper.jar
