@@ -1,6 +1,6 @@
 {
   "name": "@atak-reactive/sdk",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "TypeScript SDK and React hooks for building ATAK (Android Team Awareness Kit) plugin UIs with a typed WebView bridge to the ATAK map engine.",
   "keywords": [
     "atak",

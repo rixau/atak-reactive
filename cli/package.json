@@ -1,6 +1,6 @@
 {
   "name": "@atak-reactive/cli",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "CLI to scaffold and run React + TypeScript UIs inside ATAK (Android Team Awareness Kit) plugins, with hot reload for development and bundled builds for release.",
   "keywords": [
     "atak",
