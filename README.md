@@ -1,6 +1,10 @@
 # atak-reactive
 
-Build ATAK plugin UIs with React. Add React screens to any existing plugin — one screen at a time, alongside your native Android UI — with instant hot-reload during development.
+Build **ATAK (Android Team Awareness Kit)** plugin UIs with React and TypeScript. Add React screens to any existing plugin — one screen at a time, alongside your native Android UI — with instant hot-reload during development.
+
+## Why this exists
+
+Native ATAK plugin UIs are written in Android XML and Java. That works, but iteration is slow: every UI change is a Gradle build and APK reinstall. atak-reactive lets you keep your existing plugin and convert just the UI layer — or one tab, or one panel — to React, with browser-style hot reload during development and bundled assets for release builds.
 
 ## How It Works
 

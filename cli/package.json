@@ -1,7 +1,24 @@
 {
   "name": "@atak-reactive/cli",
   "version": "0.1.12",
-  "description": "CLI tool for integrating React UIs into ATAK plugins",
+  "description": "CLI to scaffold and run React + TypeScript UIs inside ATAK (Android Team Awareness Kit) plugins, with hot reload for development and bundled builds for release.",
+  "keywords": [
+    "atak",
+    "android-team-awareness-kit",
+    "tak",
+    "atak-plugin",
+    "react",
+    "typescript",
+    "vite",
+    "hot-reload",
+    "cli",
+    "scaffolding",
+    "android"
+  ],
+  "homepage": "https://github.com/rixau/atak-reactive#readme",
+  "bugs": {
+    "url": "https://github.com/rixau/atak-reactive/issues"
+  },
   "type": "module",
   "bin": {
     "atak-reactive": "./dist/index.cjs"

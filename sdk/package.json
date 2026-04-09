@@ -1,7 +1,25 @@
 {
   "name": "@atak-reactive/sdk",
   "version": "0.1.12",
-  "description": "TypeScript SDK for building React UIs in ATAK plugins",
+  "description": "TypeScript SDK and React hooks for building ATAK (Android Team Awareness Kit) plugin UIs with a typed WebView bridge to the ATAK map engine.",
+  "keywords": [
+    "atak",
+    "android-team-awareness-kit",
+    "tak",
+    "atak-plugin",
+    "cot",
+    "cursor-on-target",
+    "react",
+    "react-hooks",
+    "typescript",
+    "webview-bridge",
+    "geospatial",
+    "android"
+  ],
+  "homepage": "https://github.com/rixau/atak-reactive#readme",
+  "bugs": {
+    "url": "https://github.com/rixau/atak-reactive/issues"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
