@@ -41,7 +41,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "license": "Unlicense",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/rixau/atak-reactive.git",

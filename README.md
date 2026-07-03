@@ -356,4 +356,9 @@ cd example && ./scripts/integration-test.sh
 
 ## License
 
-Public domain.
+This repository is split by component:
+
+- **Bridge library (`lib/`, published as the `dev.atakreactive:bridge-*` AAR)** — **GPLv3** (see [LICENSE](LICENSE)). It links the ATAK SDK, which is itself GPLv3, so a plugin built with the bridge is a GPLv3 work: if you distribute that plugin, its Corresponding Source must be available under GPLv3.
+- **CLI (`@atak-reactive/cli`) and TypeScript SDK (`@atak-reactive/sdk`)** — **MIT** (see [cli/LICENSE](cli/LICENSE), [sdk/LICENSE](sdk/LICENSE)). These do not link ATAK and can be reused freely.
+
+*Not affiliated with or endorsed by the TAK Product Center or the U.S. Government. "ATAK" and "TAK" are used only to describe compatibility.*
