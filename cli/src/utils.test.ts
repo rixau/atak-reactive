@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { parseDefaultFlavor, parseAtakVersion, parseAarVersion, deriveIntentAction } from './utils.js';
+import {
+  parseDefaultFlavor,
+  parseAtakVersion,
+  parseAarVersion,
+  deriveIntentAction,
+  isNewerVersion,
+  fetchLatestVersion,
+} from './utils.js';
 
 describe('parseDefaultFlavor', () => {
   // --- Pattern 2: direct productFlavors with getIsDefault ---
@@ -321,5 +328,40 @@ describe('deriveIntentAction', () => {
 
   it('works with short package names', () => {
     expect(deriveIntentAction('com.myplugin')).toBe('com.myplugin.SHOW_REACT');
+  });
+});
+
+describe('isNewerVersion', () => {
+  it('detects a newer patch, minor, and major', () => {
+    expect(isNewerVersion('0.1.13', '0.1.2')).toBe(true);
+    expect(isNewerVersion('0.2.0', '0.1.13')).toBe(true);
+    expect(isNewerVersion('1.0.0', '0.9.9')).toBe(true);
+  });
+
+  it('is false for equal or older versions', () => {
+    expect(isNewerVersion('0.1.13', '0.1.13')).toBe(false);
+    expect(isNewerVersion('0.1.2', '0.1.13')).toBe(false);
+    expect(isNewerVersion('0.9.9', '1.0.0')).toBe(false);
+  });
+
+  it('compares numerically, not lexically (the 0.1.2 vs 0.1.13 trap)', () => {
+    expect(isNewerVersion('0.1.13', '0.1.9')).toBe(true);
+    expect('0.1.13' > '0.1.9').toBe(false); // string compare would get this wrong
+  });
+
+  it('handles pre-release suffixes and uneven segment counts', () => {
+    expect(isNewerVersion('0.2.0-beta.1', '0.1.13')).toBe(true);
+    expect(isNewerVersion('0.1.13', '0.1')).toBe(true);
+    expect(isNewerVersion('0.1', '0.1.0')).toBe(false);
+  });
+});
+
+describe('fetchLatestVersion', () => {
+  it('returns null immediately when opted out', async () => {
+    const prev = process.env.ATAK_REACTIVE_NO_UPDATE_CHECK;
+    process.env.ATAK_REACTIVE_NO_UPDATE_CHECK = '1';
+    expect(await fetchLatestVersion()).toBeNull();
+    if (prev === undefined) delete process.env.ATAK_REACTIVE_NO_UPDATE_CHECK;
+    else process.env.ATAK_REACTIVE_NO_UPDATE_CHECK = prev;
   });
 });

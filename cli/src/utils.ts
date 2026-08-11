@@ -5,6 +5,48 @@ import { execSync, type SpawnSyncReturns } from 'child_process';
 declare const __CLI_VERSION__: string;
 export const CLI_VERSION: string = typeof __CLI_VERSION__ !== 'undefined' ? __CLI_VERSION__ : '0.0.0';
 
+/**
+ * Compare two dot-separated versions. Returns true if `candidate` is newer than `current`.
+ * Pre-release suffixes (e.g. "0.2.0-beta.1") are compared on their numeric core only,
+ * which is sufficient for "is there a newer release" reporting.
+ */
+export function isNewerVersion(candidate: string, current: string): boolean {
+  const parse = (v: string) =>
+    v
+      .split('-')[0]!
+      .split('.')
+      .map((n) => parseInt(n, 10) || 0);
+  const a = parse(candidate);
+  const b = parse(current);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
+
+/**
+ * Look up the latest published version on npm. Best-effort: returns null on any
+ * failure (offline, timeout, registry error) so the CLI never blocks on it.
+ * Set ATAK_REACTIVE_NO_UPDATE_CHECK=1 to skip entirely.
+ */
+export async function fetchLatestVersion(timeoutMs = 1500): Promise<string | null> {
+  if (process.env.ATAK_REACTIVE_NO_UPDATE_CHECK) return null;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch('https://registry.npmjs.org/@atak-reactive%2Fcli/latest', {
+      signal: ctrl.signal,
+    }).finally(() => clearTimeout(timer));
+    if (!res.ok) return null;
+    const body = (await res.json()) as { version?: string };
+    return body.version ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function findProjectRoot(startDir: string = process.cwd()): string | null {
   let dir = startDir;
   while (dir !== '/') {
