@@ -21,6 +21,45 @@ import {
   logError,
 } from '../utils.js';
 
+/**
+ * Ensure the project's .gitignore covers what we generate — and, importantly,
+ * `local.properties`, which holds tak.gov Artifactory credentials
+ * (takrepo.user / takrepo.password). The ATAK plugin template ships without a
+ * .gitignore at all, so without this a `git add .` publishes those credentials.
+ *
+ * Runs on EVERY init (including "already up to date"), because existing projects
+ * scaffolded by older versions still need the protection.
+ */
+function ensureGitignore(root: string): void {
+  logStep('Updating .gitignore...');
+  const gitignore = join(root, '.gitignore');
+  if (!existsSync(gitignore)) {
+    writeFileSync(gitignore, '');
+  }
+  const added: string[] = [];
+  if (appendIfMissing(gitignore, 'dist-assets', '\n# atak-reactive build output\ndist-assets/\n')) {
+    added.push('dist-assets/');
+  }
+  if (appendIfMissing(gitignore, 'node_modules', '\n# npm\nnode_modules/\n')) {
+    added.push('node_modules/');
+  }
+  if (
+    existsSync(join(root, 'local.properties')) ||
+    existsSync(join(root, 'template.local.properties'))
+  ) {
+    if (
+      appendIfMissing(
+        gitignore,
+        'local.properties',
+        '\n# local machine config — contains SDK paths and tak.gov credentials\nlocal.properties\n',
+      )
+    ) {
+      added.push('local.properties');
+    }
+  }
+  log(added.length ? `.gitignore updated (${added.join(', ')})` : '.gitignore already up to date');
+}
+
 export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void {
   if (opts.dryRun) {
     console.log('\n  atak-reactive init (dry run)\n');
@@ -65,6 +104,12 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
   // 3. Detect existing installation
   const installType = detectInstallType(appDir, buildGradle);
   const installedVersion = installType === 'aar' ? getAarVersion(buildGradle) : null;
+
+  // Safety fixes apply on every run, before any early return — projects scaffolded
+  // by older versions still need them.
+  if (!opts.dryRun) {
+    ensureGitignore(root);
+  }
 
   // Already matches the version this CLI provides.
   // NOTE: this means "matches the running CLI", not "matches npm latest" — a stale
@@ -213,10 +258,22 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
 
     // Gitignore
-    if (existsSync(gitignore) && readFileSync(gitignore, 'utf-8').includes('dist-assets')) {
-      log('  ✓ .gitignore already has dist-assets');
-    } else {
-      log('  + Add dist-assets/ to .gitignore');
+    const gi = existsSync(gitignore) ? readFileSync(gitignore, 'utf-8') : '';
+    const wants: Array<[string, boolean]> = [
+      ['dist-assets/', gi.includes('dist-assets')],
+      ['node_modules/', gi.includes('node_modules')],
+      [
+        'local.properties',
+        gi.includes('local.properties') ||
+          !(
+            existsSync(join(root, 'local.properties')) ||
+            existsSync(join(root, 'template.local.properties'))
+          ),
+      ],
+    ];
+    for (const [entry, present] of wants) {
+      if (present) log(`  ✓ .gitignore already has ${entry}`);
+      else log(`  + Add ${entry} to .gitignore`);
     }
 
     // MapComponent registration
@@ -381,15 +438,7 @@ preBuild.dependsOn buildWebAssets
     log('Created web/ with React + Vite + TypeScript');
   }
 
-  // 10. Update .gitignore
-  logStep('Updating .gitignore...');
-  const gitignore = join(root, '.gitignore');
-  if (existsSync(gitignore)) {
-    appendIfMissing(gitignore, 'dist-assets', '\n# atak-reactive build output\ndist-assets/\n');
-  } else {
-    writeFileSync(gitignore, '# atak-reactive build output\ndist-assets/\n');
-  }
-  log('.gitignore updated');
+  // 10. .gitignore — already handled up front (applies to every path, see ensureGitignore)
 
   // 11. Install npm deps
   logStep('Installing web dependencies...');
