@@ -60,6 +60,12 @@ public class ReactiveWebView extends FrameLayout {
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener;
     private boolean destroyed = false;
     private boolean loaded = false;
+    /**
+     * Set when onResume() is called before the deferred WebView initialization has
+     * run. Without this, an early onResume() silently no-ops forever and the view
+     * stays on about:blank — see the mapView.post(...) block in the constructor.
+     */
+    private boolean pendingResume = false;
 
     /**
      * Create a reactive web view.
@@ -118,6 +124,12 @@ public class ReactiveWebView extends FrameLayout {
             webView.loadUrl("about:blank");
 
             addView(webView);
+
+            // Replay an onResume() that arrived before this runnable executed.
+            if (pendingResume) {
+                pendingResume = false;
+                onResume();
+            }
         });
     }
 
@@ -145,7 +157,15 @@ public class ReactiveWebView extends FrameLayout {
     public void onResume() {
         if (destroyed) return;
 
-        if (!loaded && webView != null) {
+        // WebView creation is deferred to mapView.post(...) in the constructor, so a
+        // caller that resumes immediately after construction arrives before it exists.
+        // Remember the request and replay it once initialization completes.
+        if (webView == null) {
+            pendingResume = true;
+            return;
+        }
+
+        if (!loaded) {
             loaded = true;
             loadContent();
         }
