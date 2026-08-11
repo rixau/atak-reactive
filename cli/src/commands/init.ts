@@ -66,16 +66,18 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
   const installType = detectInstallType(appDir, buildGradle);
   const installedVersion = installType === 'aar' ? getAarVersion(buildGradle) : null;
 
-  // Already up to date (AAR install with matching version)
+  // Already matches the version this CLI provides.
+  // NOTE: this means "matches the running CLI", not "matches npm latest" — a stale
+  // npx cache can make an old version look current. index.ts warns when that happens.
   if (installType === 'aar' && installedVersion === CLI_VERSION) {
-    log(`Already up to date (${CLI_VERSION}).`);
+    log(`Already on ${CLI_VERSION} (the version this CLI installs).`);
     return;
   }
 
   // --- Update path: existing AAR install, different version ---
   if (installType === 'aar') {
     log(`Existing AAR installation detected (${installedVersion}).`);
-    log(`Latest available: ${CLI_VERSION}`);
+    log(`This CLI installs: ${CLI_VERSION}`);
 
     if (opts.dryRun) {
       log('');
