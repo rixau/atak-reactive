@@ -15,6 +15,15 @@ import { fileURLToPath } from 'url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const CLI_ENTRY = join(HERE, '..', 'dist', 'index.cjs');
 
+/**
+ * The version the BUILT cli reports. Not utils.CLI_VERSION — that is injected at
+ * build time, so importing it from source under vitest yields the '0.0.0' fallback
+ * and would not match what dist/index.cjs actually compares against.
+ */
+export const BUILT_CLI_VERSION: string = JSON.parse(
+  readFileSync(join(HERE, '..', 'package.json'), 'utf-8'),
+).version;
+
 export interface Fixture {
   root: string;
   callLog: string;
@@ -44,6 +53,8 @@ export interface FixtureOpts {
   withNodeModules?: boolean;
   /** Omit web/ entirely so `init` performs a real scaffold. */
   withWeb?: boolean;
+  /** Pretend the project already has the AAR dependency at this version. */
+  aarVersion?: string;
 }
 
 export function makeFixture(opts: FixtureOpts = {}): Fixture {
@@ -54,6 +65,7 @@ export function makeFixture(opts: FixtureOpts = {}): Fixture {
     localProperties = 'sdk.dir=/x\n',
     withNodeModules = true,
     withWeb = true,
+    aarVersion,
   } = opts;
   const port = opts.port ?? 41000 + Math.floor(Math.random() * 8000);
 
@@ -72,7 +84,11 @@ export function makeFixture(opts: FixtureOpts = {}): Fixture {
   writeFileSync(join(root, 'local.properties'), `${localProperties}devServerPort=${port}\n`);
   writeFileSync(
     join(root, 'app', 'build.gradle'),
-    'android {\n    buildTypes {\n        debug {\n        }\n    }\n}\n' + gradleExtra,
+    'android {\n    buildTypes {\n        debug {\n        }\n    }\n}\n' +
+      (aarVersion
+        ? `dependencies {\n    implementation "dev.atakreactive:bridge-5.6.0:${aarVersion}"\n}\n`
+        : '') +
+      gradleExtra,
   );
   if (withWeb) {
     writeFileSync(

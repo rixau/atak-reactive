@@ -37,19 +37,25 @@ npx @atak-reactive/cli dev
 
 Builds the debug APK, installs it, sets up `adb reverse`, and starts Vite. Edit `web/src/App.tsx` — changes appear instantly in ATAK.
 
-To restart just the dev server later — without rebuilding or reinstalling the APK:
+`dev` is two halves, and each can be run on its own:
 
 ```bash
-npx @atak-reactive/cli serve
+npx @atak-reactive/cli dev install   # build + install, leave the server alone
+npx @atak-reactive/cli dev serve     # tunnel + dev server, don't touch the APK
 ```
 
-`serve` also re-opens the `adb reverse` tunnel, which `dev` removes when it exits. Running Vite directly does not, so the device would have no route to the server. (In a scaffolded project `npm run dev` is wired to `atak-reactive dev`, so it does the full cycle.)
+| | builds + installs | opens tunnel | serves |
+|---|---|---|---|
+| `dev` | yes | yes | yes |
+| `dev install` | yes | no | no |
+| `dev serve` | no | yes | yes |
+| `vite` directly (in `web/`) | no | **no** | yes |
 
-| | rebuilds APK | reinstalls | opens tunnel | serves |
-|---|---|---|---|---|
-| `dev` | yes | yes | yes | yes |
-| `serve` | no | no | yes | yes |
-| `vite` directly (in `web/`) | no | no | **no** | yes |
+Use `dev serve` to restart the dev server: `dev` removes the `adb reverse` tunnel when it exits, and running Vite by hand does not re-open it, so the device would have no route to the server.
+
+Use `dev install` when native code changed but a server is already running. Worth avoiding otherwise — **reinstalling a plugin APK resets ATAK's per-plugin "load" setting**, so you may need to re-enable the plugin in ATAK's Plugins manager afterwards.
+
+(In a scaffolded project `npm run dev` is wired to `atak-reactive dev`, so it does the full cycle.)
 
 **3. Running two plugins at once**
 

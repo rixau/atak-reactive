@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createServer } from 'net';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { makeFixture, runCli, type Fixture } from './__testkit.js';
+import { makeFixture, runCli, BUILT_CLI_VERSION, type Fixture } from './__testkit.js';
 
 const isWin = process.platform === 'win32';
 
@@ -127,10 +127,10 @@ describe.skipIf(isWin)('dev — APK selection', () => {
   });
 });
 
-describe.skipIf(isWin)('serve — no build, no install', () => {
+describe.skipIf(isWin)('dev serve — no build, no install', () => {
   it('opens the tunnel and starts Vite without touching Gradle or the APK', () => {
     const fx = makeFixture();
-    runCli(fx, ['serve']);
+    runCli(fx, ['dev', 'serve']);
 
     expect(gradleCalls(fx)).toHaveLength(0);
     expect(fx.calls().some((c) => c.startsWith('adb install'))).toBe(false);
@@ -140,7 +140,7 @@ describe.skipIf(isWin)('serve — no build, no install', () => {
 
   it('runs the same preflight as dev', () => {
     const fx = makeFixture();
-    const r = runCli(fx, ['serve'], { devices: 'List of devices attached' });
+    const r = runCli(fx, ['dev', 'serve'], { devices: 'List of devices attached' });
     expect(r.status).toBe(1);
     expect(r.out).toContain('No device or emulator connected');
     expect(adbCalls(fx).some((c) => c.startsWith('adb reverse tcp:'))).toBe(false);
@@ -252,5 +252,79 @@ describe.skipIf(isWin)('--port forms', () => {
     expect(r.status).toBe(1);
     expect(r.out).toContain('Invalid --port');
     expect(fx.calls()).toHaveLength(0);
+  });
+});
+
+describe.skipIf(isWin)('init — existing AAR install (the upgrade path)', () => {
+  it('still applies the resValues when already on the current version', () => {
+    // init short-circuits with "Already on <version>" for a matching AAR install.
+    // The dev host/port resValues must still be applied, or a project scaffolded
+    // before they existed can never acquire them — and `dev` tells users to run
+    // init for exactly that.
+    const fx = makeFixture({ aarVersion: BUILT_CLI_VERSION });
+    const r = runCli(fx, ['init']);
+    expect(r.out).toContain('Already on');
+
+    const gradle = readFileSync(join(fx.root, 'app', 'build.gradle'), 'utf-8');
+    expect(gradle).toContain('atak_reactive_dev_port');
+    expect(gradle).toContain('atak_reactive_dev_host');
+    expect(gradle).toContain("rootProject.file('local.properties')");
+  });
+
+  it('still refreshes a stale vite.config.ts on that path', () => {
+    const fx = makeFixture({ aarVersion: BUILT_CLI_VERSION });
+    const cfg = join(fx.root, 'web', 'vite.config.ts');
+    writeFileSync(cfg, "export default { server: { port: 5173 } };\n");
+    runCli(fx, ['init']);
+    expect(readFileSync(cfg, 'utf-8')).toContain('strictPort');
+    expect(existsSync(`${cfg}.bak`)).toBe(true);
+  });
+});
+
+
+describe.skipIf(isWin)('dev install — build and install, no server', () => {
+  it('builds and installs but never opens a tunnel or starts Vite', () => {
+    const fx = makeFixture();
+    fx.addApk('debug', 'app-civ-debug.apk', Date.now());
+    runCli(fx, ['dev', 'install']);
+
+    expect(gradleCalls(fx).join()).toContain('assembleCivDebug');
+    expect(fx.calls().some((c) => c.startsWith('adb install'))).toBe(true);
+    expect(fx.calls().some((c) => c.startsWith('adb reverse tcp:'))).toBe(false);
+    expect(fx.calls().some((c) => c.includes('vite'))).toBe(false);
+  });
+
+  it('does not fail when the port is busy — it needs no port', async () => {
+    const fx = makeFixture();
+    fx.addApk('debug', 'app-civ-debug.apk', Date.now());
+    const r = await withPortHeld(fx.port, () => runCli(fx, ['dev', 'install']));
+    expect(r.status).toBe(0);
+    expect(fx.calls().some((c) => c.startsWith('adb install'))).toBe(true);
+  });
+
+  it('still passes the resolved port to Gradle so the APK bakes it', () => {
+    const fx = makeFixture();
+    fx.addApk('debug', 'app-civ-debug.apk', Date.now());
+    runCli(fx, ['dev', 'install']);
+    expect(gradleCalls(fx).join()).toContain(`-PdevServerPort=${fx.port}`);
+  });
+});
+
+describe.skipIf(isWin)('dev — subcommand routing', () => {
+  it('rejects an unknown dev subcommand', () => {
+    const fx = makeFixture();
+    const r = runCli(fx, ['dev', 'bogus']);
+    expect(r.status).toBe(1);
+    expect(r.out).toContain('unknown "dev bogus"');
+    expect(fx.calls()).toHaveLength(0);
+  });
+
+  it('treats a flag after dev as the full cycle, not a subcommand', () => {
+    const fx = makeFixture();
+    fx.addApk('debug', 'app-civ-debug.apk', Date.now());
+    const p = fx.port + 5;
+    runCli(fx, ['dev', '--port', String(p)]);
+    expect(gradleCalls(fx).join()).toContain(`-PdevServerPort=${p}`);
+    expect(fx.calls()).toContain(`adb reverse tcp:${p} tcp:${p}`);
   });
 });

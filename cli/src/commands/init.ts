@@ -83,6 +83,84 @@ function localPropertyResValue(resName: string, key: string, fallback: string): 
   );
 }
 
+
+/**
+ * Patches that must run on EVERY init, including the early-return paths for an
+ * existing AAR install. All are idempotent ("already present" guards). A project
+ * scaffolded before these settings existed can only acquire them here — otherwise
+ * init reports "Already on <version>" and silently changes nothing, which is
+ * exactly what upgraders are told to run it for.
+ */
+function applyAlwaysOnPatches(
+  root: string,
+  buildGradle: string,
+  opts: { dryRun?: boolean },
+): void {
+  if (!existsSync(buildGradle)) return;
+
+  // 7. Patch build.gradle — dev server host for wireless debugging
+  const gradleForDevHost = readFileSync(buildGradle, 'utf-8');
+  if (gradleForDevHost.includes('atak_reactive_dev_host')) {
+    log('Dev server host resValue already present');
+  } else {
+    const debugBlockMatch = /buildTypes\s*\{[\s\S]*?debug\s*\{/.exec(gradleForDevHost);
+    if (debugBlockMatch) {
+      const insertAfter = debugBlockMatch.index + debugBlockMatch[0].length;
+      const devHostLines =
+        "\n            // atak-reactive: dev server host (set devServerHost in local.properties for wireless debugging)" +
+        localPropertyResValue('atak_reactive_dev_host', 'devServerHost', 'localhost');
+      const patched = gradleForDevHost.slice(0, insertAfter) + devHostLines + gradleForDevHost.slice(insertAfter);
+      writeFileSync(buildGradle, patched);
+      log('Added dev server host resValue to debug build type');
+    } else {
+      log('Warning: Could not find buildTypes.debug block — add manually if needed for wireless debugging');
+    }
+  }
+
+  // 7b. Patch build.gradle — dev server port, so each plugin can hold its own
+  const gradleForDevPort = readFileSync(buildGradle, 'utf-8');
+  if (gradleForDevPort.includes('atak_reactive_dev_port')) {
+    log('Dev server port resValue already present');
+  } else {
+    const debugPortMatch = /buildTypes\s*\{[\s\S]*?debug\s*\{/.exec(gradleForDevPort);
+    if (debugPortMatch) {
+      const insertAfter = debugPortMatch.index + debugPortMatch[0].length;
+      const devPortLines =
+        "\n            // atak-reactive: dev server port (set devServerPort in local.properties to run two plugins at once)" +
+        localPropertyResValue('atak_reactive_dev_port', 'devServerPort', '5173');
+      const patched = gradleForDevPort.slice(0, insertAfter) + devPortLines + gradleForDevPort.slice(insertAfter);
+      writeFileSync(buildGradle, patched);
+      log('Added dev server port resValue to debug build type');
+    } else {
+      log('Warning: Could not find buildTypes.debug block — add the dev server port resValue manually');
+    }
+  }
+
+  // The dev server config is ours and carries behaviour, not preference.
+  const webDir = join(root, 'web');
+  if (existsSync(join(webDir, 'package.json'))) {
+  // ...but the dev server config is ours and carries behaviour, not preferences.
+  // An older one has `port: 5173` with no strictPort, so Vite silently walks to
+  // the next free port while the APK still probes the configured one. Refresh it,
+  // keeping a backup since the developer may have edited it.
+  const viteConfig = join(webDir, 'vite.config.ts');
+  const templateConfig = join(__dirname, 'templates', 'web', 'vite.config.ts');
+  if (existsSync(viteConfig) && existsSync(templateConfig)) {
+    const current = readFileSync(viteConfig, 'utf-8');
+    if (!current.includes('strictPort')) {
+      if (opts.dryRun) {
+        log('  + Update web/vite.config.ts (adds strictPort + devServerPort support)');
+      } else {
+        writeFileSync(`${viteConfig}.bak`, current);
+        cpSync(templateConfig, viteConfig);
+        log('Updated web/vite.config.ts for strictPort + devServerPort');
+        log('  previous version saved as web/vite.config.ts.bak');
+      }
+    }
+  }
+  }
+}
+
 export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void {
   if (opts.dryRun) {
     console.log('\n  atak-reactive init (dry run)\n');
@@ -133,6 +211,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
   if (!opts.dryRun) {
     ensureGitignore(root);
   }
+  applyAlwaysOnPatches(root, buildGradle, opts);
 
   // Already matches the version this CLI provides.
   // NOTE: this means "matches the running CLI", not "matches npm latest" — a stale
@@ -385,44 +464,6 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
   }
 
-  // 7. Patch build.gradle — dev server host for wireless debugging
-  const gradleForDevHost = readFileSync(buildGradle, 'utf-8');
-  if (gradleForDevHost.includes('atak_reactive_dev_host')) {
-    log('Dev server host resValue already present');
-  } else {
-    const debugBlockMatch = /buildTypes\s*\{[\s\S]*?debug\s*\{/.exec(gradleForDevHost);
-    if (debugBlockMatch) {
-      const insertAfter = debugBlockMatch.index + debugBlockMatch[0].length;
-      const devHostLines =
-        "\n            // atak-reactive: dev server host (set devServerHost in local.properties for wireless debugging)" +
-        localPropertyResValue('atak_reactive_dev_host', 'devServerHost', 'localhost');
-      const patched = gradleForDevHost.slice(0, insertAfter) + devHostLines + gradleForDevHost.slice(insertAfter);
-      writeFileSync(buildGradle, patched);
-      log('Added dev server host resValue to debug build type');
-    } else {
-      log('Warning: Could not find buildTypes.debug block — add manually if needed for wireless debugging');
-    }
-  }
-
-  // 7b. Patch build.gradle — dev server port, so each plugin can hold its own
-  const gradleForDevPort = readFileSync(buildGradle, 'utf-8');
-  if (gradleForDevPort.includes('atak_reactive_dev_port')) {
-    log('Dev server port resValue already present');
-  } else {
-    const debugPortMatch = /buildTypes\s*\{[\s\S]*?debug\s*\{/.exec(gradleForDevPort);
-    if (debugPortMatch) {
-      const insertAfter = debugPortMatch.index + debugPortMatch[0].length;
-      const devPortLines =
-        "\n            // atak-reactive: dev server port (set devServerPort in local.properties to run two plugins at once)" +
-        localPropertyResValue('atak_reactive_dev_port', 'devServerPort', '5173');
-      const patched = gradleForDevPort.slice(0, insertAfter) + devPortLines + gradleForDevPort.slice(insertAfter);
-      writeFileSync(buildGradle, patched);
-      log('Added dev server port resValue to debug build type');
-    } else {
-      log('Warning: Could not find buildTypes.debug block — add the dev server port resValue manually');
-    }
-  }
-
   // 8. Patch build.gradle — auto-build web assets before APK
   const gradleAfterAssets = readFileSync(buildGradle, 'utf-8');
   if (gradleAfterAssets.includes('buildWebAssets')) {
@@ -457,25 +498,6 @@ preBuild.dependsOn buildWebAssets
   const webDir = join(root, 'web');
   if (existsSync(join(webDir, 'package.json'))) {
     log('web/ folder already exists, skipping scaffold');
-    // ...but the dev server config is ours and carries behaviour, not preferences.
-    // An older one has `port: 5173` with no strictPort, so Vite silently walks to
-    // the next free port while the APK still probes the configured one. Refresh it,
-    // keeping a backup since the developer may have edited it.
-    const viteConfig = join(webDir, 'vite.config.ts');
-    const templateConfig = join(__dirname, 'templates', 'web', 'vite.config.ts');
-    if (existsSync(viteConfig) && existsSync(templateConfig)) {
-      const current = readFileSync(viteConfig, 'utf-8');
-      if (!current.includes('strictPort')) {
-        if (opts.dryRun) {
-          log('  + Update web/vite.config.ts (adds strictPort + devServerPort support)');
-        } else {
-          writeFileSync(`${viteConfig}.bak`, current);
-          cpSync(templateConfig, viteConfig);
-          log('Updated web/vite.config.ts for strictPort + devServerPort');
-          log('  previous version saved as web/vite.config.ts.bak');
-        }
-      }
-    }
   } else {
     logStep('Creating web/ folder...');
     const webTemplates = join(__dirname, 'templates', 'web');

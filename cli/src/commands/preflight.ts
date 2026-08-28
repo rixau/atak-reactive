@@ -30,12 +30,8 @@ export function releasePort(held: Server | null): Promise<void> {
   });
 }
 
-/**
- * Everything that can fail cheaply, before anything expensive runs. Exits the
- * process on failure. Returns the held port, which the caller must release just
- * before handing the port to Vite.
- */
-export async function preflight(port: number): Promise<Server> {
+/** Resolve the single device to act on. Exits on failure. */
+export function preflightDevice(): string {
   if (!exec('adb version').ok) {
     logError('adb not found on PATH. Install Android platform-tools and try again.');
     process.exit(1);
@@ -66,6 +62,15 @@ export async function preflight(port: number): Promise<Server> {
     process.exit(1);
   }
 
+  return serial;
+}
+
+/**
+ * Reserve the dev server port and confirm the device port is not already
+ * forwarded. Exits on failure. The returned server must be released just before
+ * the dev server binds.
+ */
+export async function preflightPort(port: number): Promise<Server> {
   const reverseList = exec('adb reverse --list');
   if (reverseList.ok && parseReversedPorts(reverseList.output).includes(port)) {
     logError(
@@ -89,8 +94,6 @@ export async function preflight(port: number): Promise<Server> {
     );
     process.exit(1);
   }
-
-  log(`Preflight OK — device ${serial}, port ${port} reserved`);
   return held;
 }
 
