@@ -468,13 +468,19 @@ public class ReactiveWebView extends FrameLayout {
             "height:100vh;font-family:sans-serif;color:%238d99ae'>" +
             "<div style='font-size:13px;letter-spacing:1px;text-transform:uppercase;" +
             "opacity:0.5;margin-bottom:8px'>atak-reactive dev</div>" +
-            "<div style='font-size:14px;color:%23f87171'>Dev server not running on port PORT</div>" +
+            "<div style='font-size:14px;color:%23f87171'>Dev server not running</div>" +
+            "<div style='font-size:13px;margin-top:6px;font-family:monospace;opacity:0.85'>ADDR</div>" +
             "<div style='font-size:12px;margin-top:12px;opacity:0.7'>Run: npx @atak-reactive/cli dev</div>" +
             "</body></html>";
 
     /** The port is resolved at build time, so show which one we actually looked for. */
+    /**
+     * Show the address that was actually tried. Host and port are both resolved at
+     * build time, so when either is wrong the screen otherwise reads as "the server
+     * is down" when the plugin was really looking somewhere else.
+     */
     private String devServerErrorHtml() {
-        return DEV_SERVER_ERROR_TEMPLATE.replace("PORT", String.valueOf(devPort));
+        return DEV_SERVER_ERROR_TEMPLATE.replace("ADDR", devUrl);
     }
 
     private class EmbeddedWebViewClient extends WebViewClient {
