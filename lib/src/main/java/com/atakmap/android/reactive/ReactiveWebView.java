@@ -169,6 +169,10 @@ public class ReactiveWebView extends FrameLayout {
         if (!loaded) {
             loaded = true;
             loadContent();
+        } else if (devErrorShowing) {
+            // onPause() stopped the poller and the error screen is still up. Without
+            // this, one tab-switch away and back disables reconnect for good.
+            startDevRetry();
         }
 
         if (webView != null) {
@@ -258,9 +262,11 @@ public class ReactiveWebView extends FrameLayout {
                     if (reachable) {
                         Log.d(TAG, "Dev server reachable, loading from " + devUrl);
                         stopDevRetry();
+                        devErrorShowing = false;
                         webView.loadUrl(devUrlForAsset());
                     } else {
                         Log.w(TAG, "Dev server not running — run: npx @atak-reactive/cli dev");
+                        devErrorShowing = true;
                         webView.loadUrl(devServerErrorHtml());
                         startDevRetry();
                     }
@@ -388,7 +394,22 @@ public class ReactiveWebView extends FrameLayout {
     // The dev URL is otherwise loaded once, when the panel opens, so restarting the
     // server (or restoring a dropped adb tunnel) does nothing until the panel is
     // closed and reopened. Poll while the error screen is showing.
+    /**
+     * True while the "dev server not running" screen is what the WebView is showing.
+     * onPause() stops the poller, so onResume() needs to know whether to start it
+     * again — loadContent() won't, since `loaded` is already true by then.
+     */
+    private boolean devErrorShowing;
+
     private volatile boolean devRetryRunning;
+
+    /**
+     * Bumped by every start and stop. devRetryRunning doubles as "the poller is
+     * alive" and the poller clears it itself on success, so it cannot also answer
+     * "were we cancelled?" — the generation can. Only touched from the main thread
+     * (onResume/onPause/destroy and the posted load callbacks), so ++ is safe.
+     */
+    private volatile int devRetryGeneration;
 
     /**
      * Never runs outside dev mode: guarded here, and both callers already sit inside
@@ -397,24 +418,29 @@ public class ReactiveWebView extends FrameLayout {
     private void startDevRetry() {
         if (!devMode || devRetryRunning) return;
         devRetryRunning = true;
+        final int generation = ++devRetryGeneration;
         Thread t = new Thread(() -> {
-            while (devRetryRunning) {
+            while (devRetryRunning && generation == devRetryGeneration) {
                 try {
                     Thread.sleep(2000);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     return;
                 }
-                if (!devRetryRunning) return;
+                if (!devRetryRunning || generation != devRetryGeneration) return;
                 if (isDevServerReachable()) {
                     devRetryRunning = false;
                     final WebView wv = webView;
                     if (wv != null) {
                         wv.post(() -> {
-                            if (!devRetryRunning) {
-                                Log.d(TAG, "Dev server came back — reloading " + devUrl);
-                                wv.loadUrl(devUrl);
-                            }
+                            // onPause() or destroy() can land between the probe above
+                            // and this dispatch; loading a destroyed WebView crashes.
+                            if (destroyed || generation != devRetryGeneration) return;
+                            // Same URL the initial load used, so a route-based
+                            // multi-view plugin reconnects to the view it was on.
+                            String url = devUrlForAsset();
+                            Log.d(TAG, "Dev server came back — reloading " + url);
+                            wv.loadUrl(url);
                         });
                     }
                     return;
@@ -427,6 +453,7 @@ public class ReactiveWebView extends FrameLayout {
 
     private void stopDevRetry() {
         devRetryRunning = false;
+        devRetryGeneration++;
     }
 
     /** Dev URL including the hash fragment, for route-based multi-view setups. */
@@ -504,6 +531,7 @@ public class ReactiveWebView extends FrameLayout {
                 WebResourceError error) {
             if (devMode && !devFallbackTriggered && request.isForMainFrame()) {
                 devFallbackTriggered = true;
+                devErrorShowing = true;
                 Log.w(TAG, "Dev server connection lost");
                 view.loadUrl(devServerErrorHtml());
                 startDevRetry();
@@ -523,6 +551,7 @@ public class ReactiveWebView extends FrameLayout {
             Log.d(TAG, "Loaded: " + url);
             if (url.equals(prodUrl) || url.startsWith(devUrl)) {
                 devFallbackTriggered = false;
+                devErrorShowing = false;
             }
             super.onPageFinished(view, url);
         }

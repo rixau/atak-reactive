@@ -58,6 +58,9 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private final LinearLayout container;
     private final boolean devMode;
 
+    /** Set by disposeImpl(); the WebView is destroyed and must not be loaded again. */
+    private volatile boolean disposed = false;
+
     private WebView webView;
     private WebViewAssetLoader assetLoader;
     private AtakBridge bridge;
@@ -311,6 +314,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
             new Thread(() -> {
                 boolean reachable = isDevServerReachable();
                 webView.post(() -> {
+                    if (disposed) return;
                     if (reachable) {
                         Log.d(TAG, "Dev server reachable, loading from " + devUrl);
                         stopDevRetry();
@@ -340,30 +344,40 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private volatile boolean devRetryRunning;
 
     /**
+     * Bumped by every start and stop. devRetryRunning doubles as "the poller is
+     * alive" and the poller clears it itself on success, so it cannot also answer
+     * "were we cancelled?" — the generation can. Only touched from the main thread
+     * (onReceive/onDropDownClose/disposeImpl), so ++ is safe.
+     */
+    private volatile int devRetryGeneration;
+
+    /**
      * Never runs outside dev mode: guarded here, and both callers already sit inside
      * `if (devMode)` blocks. A polling thread in a release build would be a leak.
      */
     private void startDevRetry() {
         if (!devMode || devRetryRunning) return;
         devRetryRunning = true;
+        final int generation = ++devRetryGeneration;
         Thread t = new Thread(() -> {
-            while (devRetryRunning) {
+            while (devRetryRunning && generation == devRetryGeneration) {
                 try {
                     Thread.sleep(2000);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     return;
                 }
-                if (!devRetryRunning) return;
+                if (!devRetryRunning || generation != devRetryGeneration) return;
                 if (isDevServerReachable()) {
                     devRetryRunning = false;
                     final WebView wv = webView;
                     if (wv != null) {
                         wv.post(() -> {
-                            if (!devRetryRunning) {
-                                Log.d(TAG, "Dev server came back — reloading " + devUrl);
-                                wv.loadUrl(devUrl);
-                            }
+                            // disposeImpl() can land between the probe above and this
+                            // dispatch; loading a destroyed WebView crashes.
+                            if (disposed || generation != devRetryGeneration) return;
+                            Log.d(TAG, "Dev server came back — reloading " + devUrl);
+                            wv.loadUrl(devUrl);
                         });
                     }
                     return;
@@ -376,6 +390,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
     private void stopDevRetry() {
         devRetryRunning = false;
+        devRetryGeneration++;
     }
 
     private boolean isDevServerReachable() {
@@ -486,6 +501,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     @Override
     public void disposeImpl() {
         stopDevRetry();
+        disposed = true;
         stopPreferenceListener();
         if (eventEmitter != null) {
             eventEmitter.stopListening();
