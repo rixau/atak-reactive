@@ -1,6 +1,6 @@
 import { execSync, type ChildProcess } from 'child_process';
 import { createServer, type Server } from 'net';
-import { log, logError, exec, parseReversedPorts, parseAdbDevices } from '../utils.js';
+import { log, logError, exec, parseReversedPorts, parseAdbDeviceList } from '../utils.js';
 
 /**
  * Bind the port and keep it bound. Checking alone is not enough: work can happen
@@ -38,21 +38,43 @@ export function preflightDevice(): string {
   }
 
   const devices = exec('adb devices');
-  const serials = devices.ok ? parseAdbDevices(devices.output) : [];
-  if (serials.length === 0) {
+  const attached = devices.ok ? parseAdbDeviceList(devices.output) : [];
+  const serials = attached.filter((d) => d.state === 'device').map((d) => d.serial);
+
+  if (attached.length === 0) {
     logError('No device or emulator connected. Connect one and try again.');
     process.exit(1);
   }
+
+  // Something is attached but adb cannot drive it. Naming the state matters: an
+  // unauthorized device looks identical to a missing one from the error alone.
+  if (serials.length === 0) {
+    const listed = attached.map((d) => `${d.serial} (${d.state})`).join(', ');
+    logError(
+      `No usable device — adb reports: ${listed}.\n` +
+      `  "unauthorized" means the RSA prompt on the device has not been accepted.\n` +
+      `  "offline" usually clears with: adb disconnect && adb kill-server.`,
+    );
+    process.exit(1);
+  }
+
   // adb honours ANDROID_SERIAL for install/reverse, so respect it here too rather
   // than refusing outright and telling the user to set a variable we then ignore.
   const wanted = process.env.ANDROID_SERIAL;
   let serial = serials[0];
-  if (serials.length > 1) {
+
+  // Ambiguity is counted over every transport, not just the usable ones — that is
+  // what adb itself does. Counting only `device` would pass preflight here, then
+  // fail at `adb install` after the whole Gradle build, which is the exact failure
+  // this function exists to get ahead of.
+  if (attached.length > 1) {
     if (wanted && serials.includes(wanted)) {
       serial = wanted;
     } else {
+      const listed = attached.map((d) => `${d.serial} (${d.state})`).join(', ');
       logError(
-        `More than one device connected (${serials.join(', ')}).\n` +
+        `More than one device connected (${listed}).\n` +
+        `  adb refuses to choose, even when only one is usable.\n` +
         `  Set ANDROID_SERIAL to one of them, or disconnect the others.`,
       );
       process.exit(1);

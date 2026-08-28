@@ -15,6 +15,7 @@ import {
   DEFAULT_DEV_PORT,
   parseReversedPorts,
   parseAdbDevices,
+  parseAdbDeviceList,
 } from './utils.js';
 
 describe('parseDefaultFlavor', () => {
@@ -413,5 +414,34 @@ describe('dev server port resolution', () => {
   it('parses attached devices, ignoring offline/unauthorized', () => {
     const out = 'List of devices attached\nemulator-5554\tdevice\nfoo\toffline\nbar\tunauthorized';
     expect(parseAdbDevices(out)).toEqual(['emulator-5554']);
+  });
+
+  it('keeps unusable transports in the full list, with their state', () => {
+    // adb counts these when it refuses to pick a device, so preflight has to see
+    // them — filtering them out here is what let a doomed run reach adb install.
+    const out = 'List of devices attached\nemulator-5554\tdevice\nfoo\toffline\nbar\tunauthorized';
+    expect(parseAdbDeviceList(out)).toEqual([
+      { serial: 'emulator-5554', state: 'device' },
+      { serial: 'foo', state: 'offline' },
+      { serial: 'bar', state: 'unauthorized' },
+    ]);
+  });
+
+  it('ignores daemon chatter and blank lines', () => {
+    const out =
+      '* daemon not running; starting now at tcp:5037 *\n' +
+      '* daemon started successfully *\n' +
+      'List of devices attached\n\nemulator-5554\tdevice\n\n';
+    expect(parseAdbDeviceList(out)).toEqual([{ serial: 'emulator-5554', state: 'device' }]);
+    expect(parseAdbDevices(out)).toEqual(['emulator-5554']);
+  });
+
+  it('handles adb devices -l extra columns', () => {
+    const out = 'List of devices attached\nemulator-5554     device product:sdk_gphone64 model:Pixel_7';
+    expect(parseAdbDeviceList(out)).toEqual([{ serial: 'emulator-5554', state: 'device' }]);
+  });
+
+  it('returns nothing for an empty list', () => {
+    expect(parseAdbDeviceList('List of devices attached\n')).toEqual([]);
   });
 });

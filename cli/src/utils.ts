@@ -444,13 +444,35 @@ export function parseReversedPorts(listOutput: string): number[] {
 }
 
 /** Serial numbers of attached devices, from `adb devices`. */
-export function parseAdbDevices(listOutput: string): string[] {
-  const serials: string[] = [];
-  for (const line of listOutput.split('\n').slice(1)) {
-    const m = /^(\S+)\s+device\b/.exec(line.trim());
-    if (m) serials.push(m[1]);
+export interface AdbDevice {
+  serial: string;
+  /** adb's transport state: device, unauthorized, offline, recovery, sideload, ... */
+  state: string;
+}
+
+/**
+ * Every transport adb lists, whatever its state — not just the usable ones.
+ * adb's "more than one device/emulator" error counts unauthorized and offline
+ * transports too, so a check that saw only `device` would report a clean single
+ * device and then let `adb install` fail after a full Gradle build.
+ */
+export function parseAdbDeviceList(listOutput: string): AdbDevice[] {
+  const devices: AdbDevice[] = [];
+  for (const raw of listOutput.split('\n')) {
+    const line = raw.trim();
+    // Header, blank lines, and "* daemon started successfully *" chatter.
+    if (!line || line.startsWith('*') || line.startsWith('List of devices')) continue;
+    const m = /^(\S+)\s+(\S+)/.exec(line);
+    if (m) devices.push({ serial: m[1], state: m[2] });
   }
-  return serials;
+  return devices;
+}
+
+/** Serials adb can actually act on. */
+export function parseAdbDevices(listOutput: string): string[] {
+  return parseAdbDeviceList(listOutput)
+    .filter((d) => d.state === 'device')
+    .map((d) => d.serial);
 }
 
 /** Newest .apk in a directory by mtime — filenames embed a git sha, so stale ones linger. */

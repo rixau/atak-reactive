@@ -55,6 +55,8 @@ export interface FixtureOpts {
   withWeb?: boolean;
   /** Pretend the project already has the AAR dependency at this version. */
   aarVersion?: string;
+  /** Extra environment for the CLI process (e.g. ANDROID_SERIAL). */
+  env?: Record<string, string>;
 }
 
 export function makeFixture(opts: FixtureOpts = {}): Fixture {
@@ -152,6 +154,10 @@ export function runCli(fx: Fixture, args: string[], opts: FixtureOpts = {}): Run
       ADB_DEVICES: opts.devices ?? 'List of devices attached\nemulator-5554\tdevice',
       ADB_REVERSE_LIST: opts.reverseList ?? '',
       ATAK_REACTIVE_NO_UPDATE_CHECK: '1',
+      // process.env is spread above, so a developer with a real device plugged in
+      // and ANDROID_SERIAL exported would otherwise change what these tests assert.
+      ANDROID_SERIAL: '',
+      ...opts.env,
     },
   });
   return {

@@ -45,6 +45,47 @@ describe.skipIf(isWin)('dev — preflight runs before anything expensive', () =>
     expect(gradleCalls(fx)).toHaveLength(0);
   });
 
+  // adb counts every transport when it complains about ambiguity, so an
+  // unauthorized or offline sibling is just as fatal as a second usable device.
+  // Counting only `device` let preflight pass and `adb install` fail after a
+  // full Gradle build — the failure preflight exists to get ahead of.
+  it('aborts when a second device is attached but unusable', () => {
+    const fx = makeFixture();
+    const r = runCli(fx, ['dev'], {
+      devices: 'List of devices attached\nemulator-5554\tdevice\nR58M\tunauthorized',
+    });
+    expect(r.status).toBe(1);
+    expect(r.out).toContain('More than one device');
+    expect(r.out).toContain('R58M (unauthorized)');
+    expect(gradleCalls(fx)).toHaveLength(0);
+    expect(fx.calls().some((c) => c.startsWith('adb install'))).toBe(false);
+  });
+
+  it('proceeds past an unusable sibling when ANDROID_SERIAL picks the usable one', () => {
+    const fx = makeFixture();
+    fx.addApk('debug', 'app-civ-debug.apk', Date.now());
+    const r = runCli(fx, ['dev', 'install'], {
+      devices: 'List of devices attached\nemulator-5554\tdevice\nR58M\toffline',
+      env: { ANDROID_SERIAL: 'emulator-5554' },
+    });
+    expect(r.status).toBe(0);
+    expect(r.out).toContain('Preflight OK — device emulator-5554');
+    expect(fx.calls().some((c) => c.startsWith('adb install'))).toBe(true);
+  });
+
+  it('names the state when the only device is attached but unusable', () => {
+    const fx = makeFixture();
+    const r = runCli(fx, ['dev'], {
+      devices: 'List of devices attached\nR58M\tunauthorized',
+    });
+    expect(r.status).toBe(1);
+    expect(r.out).toContain('No usable device');
+    expect(r.out).toContain('R58M (unauthorized)');
+    // not the "nothing connected" message — something is plugged in
+    expect(r.out).not.toContain('No device or emulator connected');
+    expect(gradleCalls(fx)).toHaveLength(0);
+  });
+
   it('aborts when the device port is already forwarded, leaving the tunnel alone', () => {
     const fx = makeFixture();
     const r = runCli(fx, ['dev'], { reverseList: `host-19 tcp:${fx.port} tcp:${fx.port}` });
@@ -278,6 +319,58 @@ describe.skipIf(isWin)('init — existing AAR install (the upgrade path)', () =>
     runCli(fx, ['init']);
     expect(readFileSync(cfg, 'utf-8')).toContain('strictPort');
     expect(existsSync(`${cfg}.bak`)).toBe(true);
+  });
+});
+
+
+describe.skipIf(isWin)('init --dry-run — reports without writing', () => {
+  // Moving the always-on patches ahead of the early returns put them ahead of the
+  // dry-run guard too, so --dry-run wrote the resValues into build.gradle for real.
+  it('does not touch build.gradle on a fresh project', () => {
+    const fx = makeFixture({ withWeb: false });
+    const gradlePath = join(fx.root, 'app', 'build.gradle');
+    const before = readFileSync(gradlePath, 'utf-8');
+
+    const r = runCli(fx, ['init', '--dry-run']);
+
+    expect(readFileSync(gradlePath, 'utf-8')).toBe(before);
+    expect(r.out).toContain('+ Add dev server host resValue');
+    expect(r.out).toContain('+ Add dev server port resValue');
+    // it used to write, then read its own writes back and call them pre-existing
+    expect(r.out).not.toContain('Added dev server host resValue');
+    expect(r.out).not.toContain('already present');
+  });
+
+  it('does not touch build.gradle on the existing-AAR path', () => {
+    // This path early-returns on "Already on <version>", which is where the
+    // unguarded write was reached first.
+    const fx = makeFixture({ aarVersion: BUILT_CLI_VERSION });
+    const gradlePath = join(fx.root, 'app', 'build.gradle');
+    const before = readFileSync(gradlePath, 'utf-8');
+
+    const r = runCli(fx, ['init', '--dry-run']);
+
+    expect(readFileSync(gradlePath, 'utf-8')).toBe(before);
+    expect(r.out).toContain('+ Add dev server port resValue');
+  });
+
+  it('does not refresh a stale vite.config.ts or leave a .bak', () => {
+    const fx = makeFixture({ aarVersion: BUILT_CLI_VERSION });
+    const cfg = join(fx.root, 'web', 'vite.config.ts');
+    writeFileSync(cfg, "export default { server: { port: 5173 } };\n");
+
+    const r = runCli(fx, ['init', '--dry-run']);
+
+    expect(readFileSync(cfg, 'utf-8')).not.toContain('strictPort');
+    expect(existsSync(`${cfg}.bak`)).toBe(false);
+    expect(r.out).toContain('Update web/vite.config.ts');
+  });
+
+  it('is a no-op the second time too — the first run must not have changed the report', () => {
+    const fx = makeFixture({ withWeb: false });
+    const first = runCli(fx, ['init', '--dry-run']);
+    const second = runCli(fx, ['init', '--dry-run']);
+    expect(second.out).toBe(first.out);
   });
 });
 
