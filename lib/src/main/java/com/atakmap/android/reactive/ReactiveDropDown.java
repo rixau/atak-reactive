@@ -115,24 +115,34 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
      * back to 5173 when the resource is absent.
      */
     private static int resolveDevPort(Context context) {
+        // Every failure below is logged. A silent fallback here is indistinguishable
+        // from "the port really is 5173", which makes a misconfigured or missing
+        // resource impossible to diagnose from the device.
         try {
+            String pkg = context.getPackageName();
             int resId = context.getResources().getIdentifier(
-                    "atak_reactive_dev_port", "string", context.getPackageName());
-            if (resId != 0) {
-                String raw = context.getString(resId);
-                if (raw != null && !raw.isEmpty()) {
-                    int port = Integer.parseInt(raw.trim());
-                    if (port > 0 && port < 65536) {
-                        if (port != 5173) Log.d(TAG, "Dev server port: " + port);
-                        return port;
-                    }
-                    Log.w(TAG, "Invalid atak_reactive_dev_port \"" + raw + "\" — using 5173");
-                }
+                    "atak_reactive_dev_port", "string", pkg);
+            if (resId == 0) {
+                Log.w(TAG, "atak_reactive_dev_port not found in package " + pkg
+                        + " — using 5173. Run 'atak-reactive init' to add the resValue.");
+                return 5173;
             }
+            String raw = context.getString(resId);
+            if (raw == null || raw.isEmpty()) {
+                Log.w(TAG, "atak_reactive_dev_port is empty — using 5173");
+                return 5173;
+            }
+            int port = Integer.parseInt(raw.trim());
+            if (port <= 0 || port >= 65536) {
+                Log.w(TAG, "Invalid atak_reactive_dev_port \"" + raw + "\" — using 5173");
+                return 5173;
+            }
+            Log.d(TAG, "Dev server port: " + port + " (from " + pkg + ")");
+            return port;
         } catch (Exception e) {
-            // Fall through to default
+            Log.w(TAG, "Could not read atak_reactive_dev_port — using 5173", e);
+            return 5173;
         }
-        return 5173;
     }
 
     /**
