@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync, mkdirSync, rmSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync, mkdirSync, rmSync, statSync } from 'fs';
 import { join, dirname, relative } from 'path';
 import { execSync, type SpawnSyncReturns } from 'child_process';
 
@@ -365,4 +365,88 @@ export function injectReactiveRegistration(
 
   writeFileSync(filePath, patched);
   return 'injected';
+}
+
+// ---------------------------------------------------------------------------
+// Dev server port
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_DEV_PORT = 5173;
+
+/**
+ * Read a single key from the project's local.properties (per-developer, gitignored).
+ * Returns null when the file or key is absent.
+ */
+export function readLocalProperty(root: string, key: string): string | null {
+  const path = join(root, 'local.properties');
+  if (!existsSync(path)) return null;
+  for (const line of readFileSync(path, 'utf-8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 0) continue;
+    if (trimmed.slice(0, eq).trim() === key) return trimmed.slice(eq + 1).trim();
+  }
+  return null;
+}
+
+/** Parse `--port <n>` out of argv. Throws on a present-but-invalid value. */
+export function parsePortArg(args: string[]): number | undefined {
+  const idx = args.indexOf('--port');
+  if (idx < 0) return undefined;
+  const raw = args[idx + 1];
+  const port = Number(raw);
+  if (!raw || !Number.isInteger(port) || port < 1024 || port > 65535) {
+    throw new Error(`Invalid --port "${raw ?? ''}" — expected an integer 1024-65535.`);
+  }
+  return port;
+}
+
+/**
+ * Resolve the dev server port. Precedence: --port > local.properties > default.
+ *
+ * The port is compiled into the APK (as the atak_reactive_dev_port resValue), so it
+ * must be identical for the Gradle build, the adb reverse tunnel and Vite. This is
+ * the single source of truth for all three.
+ */
+export function resolveDevPort(root: string, cliPort?: number): number {
+  if (cliPort !== undefined) return cliPort;
+  const fromProps = readLocalProperty(root, 'devServerPort');
+  if (fromProps) {
+    const port = Number(fromProps);
+    if (Number.isInteger(port) && port >= 1024 && port <= 65535) return port;
+    log(`Warning: ignoring invalid devServerPort "${fromProps}" in local.properties`);
+  }
+  return DEFAULT_DEV_PORT;
+}
+
+/** Device ports already claimed by an adb reverse tunnel, from `adb reverse --list`. */
+export function parseReversedPorts(listOutput: string): number[] {
+  const ports: number[] = [];
+  for (const line of listOutput.split('\n')) {
+    // e.g. "host-19 tcp:5173 tcp:5173"
+    const m = /\btcp:(\d+)\s+tcp:\d+/.exec(line.trim());
+    if (m) ports.push(Number(m[1]));
+  }
+  return ports;
+}
+
+/** Serial numbers of attached devices, from `adb devices`. */
+export function parseAdbDevices(listOutput: string): string[] {
+  const serials: string[] = [];
+  for (const line of listOutput.split('\n').slice(1)) {
+    const m = /^(\S+)\s+device\b/.exec(line.trim());
+    if (m) serials.push(m[1]);
+  }
+  return serials;
+}
+
+/** Newest .apk in a directory by mtime — filenames embed a git sha, so stale ones linger. */
+export function newestApk(dir: string): string | null {
+  if (!existsSync(dir)) return null;
+  const apks = readdirSync(dir)
+    .filter((f) => f.endsWith('.apk'))
+    .map((f) => ({ f, m: statSync(join(dir, f)).mtimeMs }))
+    .sort((a, b) => b.m - a.m);
+  return apks.length ? apks[0].f : null;
 }

@@ -41,7 +41,6 @@ public class ReactiveWebView extends FrameLayout {
 
     private static final String TAG = "ReactiveWebView";
 
-    private static final int DEV_PORT = 5173;
     private static final String ASSET_BASE = "https://appassets.androidplatform.net/assets/";
 
     private final MapView mapView;
@@ -49,6 +48,7 @@ public class ReactiveWebView extends FrameLayout {
     private final String prodUrl;
     private final String devUrl;
     private final String devHost;
+    private final int devPort;
     private final boolean devMode;
 
     private WebView webView;
@@ -86,7 +86,8 @@ public class ReactiveWebView extends FrameLayout {
         this.prodUrl = ASSET_BASE + assetPath;
         this.devMode = devMode;
         this.devHost = resolveDevHost(pluginContext);
-        this.devUrl = "http://" + devHost + ":" + DEV_PORT;
+        this.devPort = resolveDevPort(pluginContext);
+        this.devUrl = "http://" + devHost + ":" + devPort;
 
         setBackgroundColor(0xFF1a1a2e);
 
@@ -349,10 +350,36 @@ public class ReactiveWebView extends FrameLayout {
         return "localhost";
     }
 
+    /**
+     * The dev server port, compiled in via the atak_reactive_dev_port resValue so
+     * each plugin can hold its own and two can run in dev at the same time. Falls
+     * back to 5173 when the resource is absent.
+     */
+    private static int resolveDevPort(Context context) {
+        try {
+            int resId = context.getResources().getIdentifier(
+                    "atak_reactive_dev_port", "string", context.getPackageName());
+            if (resId != 0) {
+                String raw = context.getString(resId);
+                if (raw != null && !raw.isEmpty()) {
+                    int port = Integer.parseInt(raw.trim());
+                    if (port > 0 && port < 65536) {
+                        if (port != 5173) Log.d(TAG, "Dev server port: " + port);
+                        return port;
+                    }
+                    Log.w(TAG, "Invalid atak_reactive_dev_port \"" + raw + "\" — using 5173");
+                }
+            }
+        } catch (Exception e) {
+            // Fall through to default
+        }
+        return 5173;
+    }
+
     private boolean isDevServerReachable() {
         try {
             java.net.Socket socket = new java.net.Socket();
-            socket.connect(new java.net.InetSocketAddress(devHost, DEV_PORT), 500);
+            socket.connect(new java.net.InetSocketAddress(devHost, devPort), 500);
             socket.close();
             return true;
         } catch (Exception e) {

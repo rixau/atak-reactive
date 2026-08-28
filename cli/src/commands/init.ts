@@ -380,6 +380,25 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
   }
 
+  // 7b. Patch build.gradle — dev server port, so each plugin can hold its own
+  const gradleForDevPort = readFileSync(buildGradle, 'utf-8');
+  if (gradleForDevPort.includes('atak_reactive_dev_port')) {
+    log('Dev server port resValue already present');
+  } else {
+    const debugPortMatch = /buildTypes\s*\{[\s\S]*?debug\s*\{/.exec(gradleForDevPort);
+    if (debugPortMatch) {
+      const insertAfter = debugPortMatch.index + debugPortMatch[0].length;
+      const devPortLines =
+        "\n            // atak-reactive: dev server port (set devServerPort in local.properties to run two plugins at once)" +
+        "\n            resValue \"string\", \"atak_reactive_dev_port\", project.properties['devServerPort'] ?: '5173'";
+      const patched = gradleForDevPort.slice(0, insertAfter) + devPortLines + gradleForDevPort.slice(insertAfter);
+      writeFileSync(buildGradle, patched);
+      log('Added dev server port resValue to debug build type');
+    } else {
+      log('Warning: Could not find buildTypes.debug block — add the dev server port resValue manually');
+    }
+  }
+
   // 8. Patch build.gradle — auto-build web assets before APK
   const gradleAfterAssets = readFileSync(buildGradle, 'utf-8');
   if (gradleAfterAssets.includes('buildWebAssets')) {

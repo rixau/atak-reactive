@@ -37,25 +37,61 @@ npx @atak-reactive/cli dev
 
 Builds the debug APK, installs it, sets up `adb reverse`, and starts Vite. Edit `web/src/App.tsx` — changes appear instantly in ATAK.
 
-For wireless debugging (no USB), add this to your debug build type in `app/build.gradle` and set your dev machine's IP in `local.properties`:
+To restart just the dev server later — without rebuilding or reinstalling the APK:
 
-```groovy
-// app/build.gradle → buildTypes → debug
-resValue "string", "atak_reactive_dev_host", project.properties['devServerHost'] ?: 'localhost'
+```bash
+npx @atak-reactive/cli serve
 ```
+
+`serve` also re-opens the `adb reverse` tunnel, which `dev` removes when it exits. A bare `npm run dev` does not, so the device would have no route to the server.
+
+| | rebuilds APK | reinstalls | opens tunnel | serves |
+|---|---|---|---|---|
+| `dev` | yes | yes | yes | yes |
+| `serve` | no | no | yes | yes |
+| `npm run dev` (in `web/`) | no | no | **no** | yes |
+
+**3. Running two plugins at once**
+
+The dev server port is compiled into the debug APK, so each plugin needs its own. Set it once per plugin:
+
+```properties
+# local.properties
+devServerPort=5174
+```
+
+`dev` and `serve` both read it, and use it for the Gradle build, the `adb reverse` tunnel, and Vite. Pass `--port <n>` to override for a single run. Changing the port requires `dev`, since it rebuilds the APK.
+
+If the port is busy, the CLI stops before building and tells you — it will not silently move to another port or disturb another plugin's session.
+
+**4. Wireless debugging (no USB)**
+
+Set your dev machine's IP in `local.properties`:
 
 ```properties
 # local.properties
 devServerHost=192.168.1.50
 ```
 
-**3. Build for release**
+`init` adds the matching `resValue` entries to your debug build type. If you are wiring an existing project by hand, they look like this:
+
+```groovy
+// app/build.gradle → buildTypes → debug
+resValue "string", "atak_reactive_dev_host", { /* reads devServerHost from local.properties */ }()
+resValue "string", "atak_reactive_dev_port", { /* reads devServerPort from local.properties */ }()
+```
+
+**5. Build for release**
 
 ```bash
 npx @atak-reactive/cli build
 ```
 
-Builds web assets into the APK. Output is a signed release APK ready for distribution.
+Builds web assets into the APK.
+
+Signing is your project's `signingConfig`, not something the CLI does. The ATAK plugin template ships a release config using the ATAK **development** keystore — that produces a signed APK suitable for sideloading and testing, but it is a keystore every ATAK developer has, not yours. If your project has no release `signingConfig`, Gradle emits an `-unsigned.apk`, which ATAK will not load.
+
+Substitute your own signing config before distributing through TAK.gov or an organization's plugin store.
 
 ## React Hooks
 

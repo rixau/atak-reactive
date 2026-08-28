@@ -48,13 +48,13 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
     private static final String TAG = "ReactiveDropDown";
 
-    private static final int DEV_PORT = 5173;
     private static final String ASSET_BASE = "https://appassets.androidplatform.net/assets/";
 
     private final String assetPath;
     private final String prodUrl;
     private final String devUrl;
     private final String devHost;
+    private final int devPort;
     private final LinearLayout container;
     private final boolean devMode;
 
@@ -110,6 +110,32 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     }
 
     /**
+     * The dev server port, compiled in via the atak_reactive_dev_port resValue so
+     * each plugin can hold its own and two can run in dev at the same time. Falls
+     * back to 5173 when the resource is absent.
+     */
+    private static int resolveDevPort(Context context) {
+        try {
+            int resId = context.getResources().getIdentifier(
+                    "atak_reactive_dev_port", "string", context.getPackageName());
+            if (resId != 0) {
+                String raw = context.getString(resId);
+                if (raw != null && !raw.isEmpty()) {
+                    int port = Integer.parseInt(raw.trim());
+                    if (port > 0 && port < 65536) {
+                        if (port != 5173) Log.d(TAG, "Dev server port: " + port);
+                        return port;
+                    }
+                    Log.w(TAG, "Invalid atak_reactive_dev_port \"" + raw + "\" — using 5173");
+                }
+            }
+        } catch (Exception e) {
+            // Fall through to default
+        }
+        return 5173;
+    }
+
+    /**
      * Add a custom bridge that will be accessible from JS as window._className.
      * Call before the dropdown is first shown.
      *
@@ -139,7 +165,8 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         this.prodUrl = ASSET_BASE + assetPath;
         this.devMode = devMode;
         this.devHost = resolveDevHost(pluginContext);
-        this.devUrl = "http://" + devHost + ":" + DEV_PORT;
+        this.devPort = resolveDevPort(pluginContext);
+        this.devUrl = "http://" + devHost + ":" + devPort;
 
         container = new LinearLayout(pluginContext);
         container.setLayoutParams(new LayoutParams(
@@ -286,7 +313,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private boolean isDevServerReachable() {
         try {
             java.net.Socket socket = new java.net.Socket();
-            socket.connect(new java.net.InetSocketAddress(devHost, DEV_PORT), 500);
+            socket.connect(new java.net.InetSocketAddress(devHost, devPort), 500);
             socket.close();
             return true;
         } catch (Exception e) {

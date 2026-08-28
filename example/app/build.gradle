@@ -154,6 +154,32 @@ android {
             debuggable true
             matchingFallbacks = ['sdk']
             buildConfigField 'boolean', 'DEV_MODE', 'true'
+            // atak-reactive: dev server host (set devServerHost in local.properties for wireless debugging)
+            resValue "string", "atak_reactive_dev_host", {
+                def v = project.findProperty('devServerHost')
+                if (v == null) {
+                    def f = rootProject.file('local.properties')
+                    if (f.exists()) {
+                        def props = new Properties()
+                        f.withInputStream { props.load(it) }
+                        v = props.getProperty('devServerHost')
+                    }
+                }
+                return v ?: 'localhost'
+            }()
+            // atak-reactive: dev server port (set devServerPort in local.properties to run two plugins at once)
+            resValue "string", "atak_reactive_dev_port", {
+                def v = project.findProperty('devServerPort')
+                if (v == null) {
+                    def f = rootProject.file('local.properties')
+                    if (f.exists()) {
+                        def props = new Properties()
+                        f.withInputStream { props.load(it) }
+                        v = props.getProperty('devServerPort')
+                    }
+                }
+                return v ?: '5173'
+            }()
         }
         release {
             minifyEnabled true

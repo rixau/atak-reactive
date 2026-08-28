@@ -5,9 +5,11 @@ import { join } from 'path';
 import { init } from './commands/init.js';
 import { dev } from './commands/dev.js';
 import { build } from './commands/build.js';
+import { serve } from './commands/serve.js';
 import {
   findProjectRoot,
   parseDefaultFlavor,
+  parsePortArg,
   CLI_VERSION,
   fetchLatestVersion,
   isNewerVersion,
@@ -57,7 +59,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (command === 'init' || command === 'dev' || command === 'build') {
+  if (command === 'init' || command === 'dev' || command === 'build' || command === 'serve') {
     // Always state which version is running — makes a stale npx cache obvious.
     console.log(`\n  atak-reactive v${CLI_VERSION}`);
     await warnIfOutdated();
@@ -67,9 +69,28 @@ async function main(): Promise<void> {
     case 'init':
       init({ embedded: args.includes('--embedded'), dryRun: args.includes('--dry-run') });
       break;
-    case 'dev':
-      dev(getFlavor());
+    case 'dev': {
+      let port: number | undefined;
+      try {
+        port = parsePortArg(args);
+      } catch (e) {
+        console.error(`\n  Error: ${(e as Error).message}\n`);
+        process.exit(1);
+      }
+      await dev(getFlavor(), { port });
       break;
+    }
+    case 'serve': {
+      let port: number | undefined;
+      try {
+        port = parsePortArg(args);
+      } catch (e) {
+        console.error(`\n  Error: ${(e as Error).message}\n`);
+        process.exit(1);
+      }
+      await serve({ port });
+      break;
+    }
     case 'build':
       build(getFlavor());
       break;
@@ -78,13 +99,21 @@ async function main(): Promise<void> {
   atak-reactive v${CLI_VERSION} — React UI for ATAK plugins
 
   Commands:
-    init [--embedded] [--dry-run]  Set up or update atak-reactive in an ATAK plugin
-    dev [--flavor name]   Build debug APK, install, start dev server
-    build [--flavor name] Build web assets + release APK
-    --version, -v         Print the CLI version
+    init  [--embedded] [--dry-run]   Set up or update atak-reactive in an ATAK plugin
+    dev   [--flavor name] [--port n] Build debug APK, install, tunnel, start dev server
+    serve [--port n]                 Start dev server + adb tunnel (no build/install)
+    build [--flavor name]            Build web assets + signed release APK
+    --version, -v                    Print the CLI version
 
   Flavor is auto-detected from build.gradle (default: civ).
   Use --flavor to override.
+
+  dev  = build + install + tunnel + server. Use after changing Java or the port.
+  serve = tunnel + server only. Use to restart the server without reinstalling.
+
+  The dev server port defaults to 5173. Set devServerPort in local.properties to
+  give each plugin its own port (so two can run at once), or pass --port for a
+  single run. The port is compiled into the debug APK, so changing it needs "dev".
 
   Tip: pin to the newest release with @latest —
     npx @atak-reactive/cli@latest init
@@ -95,6 +124,9 @@ async function main(): Promise<void> {
     npx @atak-reactive/cli init
     npx @atak-reactive/cli dev
     npx @atak-reactive/cli dev --flavor mil
+    npx @atak-reactive/cli dev --port 5174
+    npx @atak-reactive/cli serve
+    npx @atak-reactive/cli serve --port 5174
     npx @atak-reactive/cli build
     npx @atak-reactive/cli build --flavor gov
 `);
