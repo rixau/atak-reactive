@@ -390,13 +390,25 @@ export function readLocalProperty(root: string, key: string): string | null {
   return null;
 }
 
-/** Parse `--port <n>` out of argv. Throws on a present-but-invalid value. */
+/**
+ * Parse `--port <n>` or `--port=<n>` out of argv. Throws on a malformed value
+ * rather than falling through to the default — a silently wrong port gets baked
+ * into the APK, which is the failure this whole setting exists to prevent.
+ */
 export function parsePortArg(args: string[]): number | undefined {
-  const idx = args.indexOf('--port');
-  if (idx < 0) return undefined;
-  const raw = args[idx + 1];
+  let raw: string | undefined;
+
+  const eq = args.find((a) => a.startsWith('--port='));
+  if (eq) {
+    raw = eq.slice('--port='.length);
+  } else {
+    const idx = args.indexOf('--port');
+    if (idx < 0) return undefined;
+    raw = args[idx + 1];
+  }
+
   const port = Number(raw);
-  if (!raw || !Number.isInteger(port) || port < 1024 || port > 65535) {
+  if (!raw || !/^\d+$/.test(raw) || !Number.isInteger(port) || port < 1024 || port > 65535) {
     throw new Error(`Invalid --port "${raw ?? ''}" — expected an integer 1024-65535.`);
   }
   return port;

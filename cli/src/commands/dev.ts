@@ -82,14 +82,32 @@ export async function dev(
   }
 
   // Step 3: ADB reverse tunnel
+  // Registered before the tunnel is opened: otherwise a Ctrl+C in the window
+  // between opening it and installing these handlers leaks the tunnel, which then
+  // blocks the next run's preflight.
+  let tunnelOpen = false;
+  let vite: ReturnType<typeof spawn> | undefined;
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    if (vite) killProcessTree(vite);
+    if (tunnelOpen) closeTunnel(port);
+  };
+  process.on('SIGINT', () => { cleanup(); process.exit(0); });
+  process.on('SIGTERM', () => { cleanup(); process.exit(0); });
+  process.on('SIGHUP', () => { cleanup(); process.exit(0); });
+  process.on('exit', cleanup);
+
   await openTunnel(port, () => releasePort(held));
+  tunnelOpen = true;
 
   // Step 4: Hand the port to Vite. --strictPort so the millisecond gap between
   // releasing our hold and Vite binding fails loudly instead of drifting.
   await releasePort(held);
 
   log('Starting Vite dev server...\n');
-  const vite = spawn(
+  vite = spawn(
     'npx',
     ['vite', '--host', '--port', String(port), '--strictPort'],
     {
@@ -103,20 +121,6 @@ export async function dev(
   );
   viteStarted = true;
 
-  let cleanedUp = false;
-  const cleanup = () => {
-    if (cleanedUp) return;
-    cleanedUp = true;
-    killProcessTree(vite);
-    // Deliberately NOT `kill $(lsof -t -i :port)` — that killed whatever held the
-    // port, including other developers' servers, and is POSIX-only besides.
-    // vite.kill above already terminates the process we started.
-    closeTunnel(port);
-  };
-
-  process.on('SIGINT', () => { cleanup(); process.exit(0); });
-  process.on('SIGTERM', () => { cleanup(); process.exit(0); });
-  process.on('exit', cleanup);
 
   vite.on('exit', (code) => {
     cleanup();

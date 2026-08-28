@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createServer } from 'net';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import { makeFixture, runCli, type Fixture } from './__testkit.js';
 
 const isWin = process.platform === 'win32';
@@ -181,5 +183,74 @@ preBuild.dependsOn buildWebAssets
     expect(r.status).toBe(1);
     expect(r.out).toContain('dependencies not installed');
     expect(gradleCalls(fx)).toHaveLength(0);
+  });
+});
+
+describe.skipIf(isWin)('init — generated Gradle and config', () => {
+  it('emits a resValue that reads local.properties, not project.properties', () => {
+    const fx = makeFixture();
+    runCli(fx, ['init']);
+    const gradle = readFileSync(join(fx.root, 'app', 'build.gradle'), 'utf-8');
+
+    // Gradle only loads gradle.properties into project properties, so the
+    // project.properties[...] form always resolves to the default.
+    expect(gradle).not.toContain("project.properties['devServerPort']");
+    expect(gradle).not.toContain("project.properties['devServerHost']");
+    expect(gradle).toContain('atak_reactive_dev_port');
+    expect(gradle).toContain('atak_reactive_dev_host');
+    expect(gradle).toContain("rootProject.file('local.properties')");
+  });
+
+  it('refreshes a stale vite.config.ts on an existing project, keeping a backup', () => {
+    const fx = makeFixture();
+    runCli(fx, ['init']);
+
+    // simulate a project scaffolded before strictPort existed
+    const cfg = join(fx.root, 'web', 'vite.config.ts');
+    writeFileSync(cfg, "export default { server: { port: 5173 } };\n");
+    runCli(fx, ['init']);
+
+    const updated = readFileSync(cfg, 'utf-8');
+    expect(updated).toContain('strictPort');
+    expect(existsSync(`${cfg}.bak`)).toBe(true);
+    expect(readFileSync(`${cfg}.bak`, 'utf-8')).toContain('port: 5173');
+  });
+
+  it('leaves an already-current vite.config.ts alone', () => {
+    const fx = makeFixture({ withWeb: false });
+    runCli(fx, ['init']);
+    const cfg = join(fx.root, 'web', 'vite.config.ts');
+    const before = readFileSync(cfg, 'utf-8');
+    runCli(fx, ['init']);
+    expect(readFileSync(cfg, 'utf-8')).toBe(before);
+    expect(existsSync(`${cfg}.bak`)).toBe(false);
+  });
+
+  it('is idempotent — re-running does not duplicate the resValues', () => {
+    const fx = makeFixture();
+    runCli(fx, ['init']);
+    runCli(fx, ['init']);
+    const gradle = readFileSync(join(fx.root, 'app', 'build.gradle'), 'utf-8');
+    expect(gradle.split('atak_reactive_dev_port').length - 1).toBe(1);
+    expect(gradle.split('atak_reactive_dev_host').length - 1).toBe(1);
+  });
+});
+
+describe.skipIf(isWin)('--port forms', () => {
+  it('accepts --port=N as well as --port N', () => {
+    const fx = makeFixture();
+    fx.addApk('debug', 'app-civ-debug.apk', Date.now());
+    const p = fx.port + 3;
+    runCli(fx, ['dev', `--port=${p}`]);
+    expect(gradleCalls(fx).join()).toContain(`-PdevServerPort=${p}`);
+    expect(fx.calls()).toContain(`adb reverse tcp:${p} tcp:${p}`);
+  });
+
+  it('rejects a malformed --port= value instead of falling back', () => {
+    const fx = makeFixture();
+    const r = runCli(fx, ['dev', '--port=abc']);
+    expect(r.status).toBe(1);
+    expect(r.out).toContain('Invalid --port');
+    expect(fx.calls()).toHaveLength(0);
   });
 });

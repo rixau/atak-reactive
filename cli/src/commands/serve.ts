@@ -39,11 +39,29 @@ export async function serve(opts: { port?: number } = {}): Promise<void> {
   // one and only `dev` can fix that.
   log(`Assumes the installed APK was built for port ${port} — run "dev" if it changed.`);
 
+  // Registered before the tunnel is opened: otherwise a Ctrl+C in the window
+  // between opening it and installing these handlers leaks the tunnel, which then
+  // blocks the next run's preflight.
+  let tunnelOpen = false;
+  let vite: ReturnType<typeof spawn> | undefined;
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    if (vite) killProcessTree(vite);
+    if (tunnelOpen) closeTunnel(port);
+  };
+  process.on('SIGINT', () => { cleanup(); process.exit(0); });
+  process.on('SIGTERM', () => { cleanup(); process.exit(0); });
+  process.on('SIGHUP', () => { cleanup(); process.exit(0); });
+  process.on('exit', cleanup);
+
   await openTunnel(port, () => releasePort(held));
+  tunnelOpen = true;
   await releasePort(held);
 
   log('Starting Vite dev server...\n');
-  const vite = spawn(
+  vite = spawn(
     'npx',
     ['vite', '--host', '--port', String(port), '--strictPort'],
     {
@@ -53,17 +71,6 @@ export async function serve(opts: { port?: number } = {}): Promise<void> {
     },
   );
 
-  let cleanedUp = false;
-  const cleanup = () => {
-    if (cleanedUp) return;
-    cleanedUp = true;
-    killProcessTree(vite);
-    closeTunnel(port);
-  };
-
-  process.on('SIGINT', () => { cleanup(); process.exit(0); });
-  process.on('SIGTERM', () => { cleanup(); process.exit(0); });
-  process.on('exit', cleanup);
 
   vite.on('exit', (code) => {
     cleanup();

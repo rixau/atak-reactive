@@ -43,13 +43,13 @@ To restart just the dev server later — without rebuilding or reinstalling the 
 npx @atak-reactive/cli serve
 ```
 
-`serve` also re-opens the `adb reverse` tunnel, which `dev` removes when it exits. A bare `npm run dev` does not, so the device would have no route to the server.
+`serve` also re-opens the `adb reverse` tunnel, which `dev` removes when it exits. Running Vite directly does not, so the device would have no route to the server. (In a scaffolded project `npm run dev` is wired to `atak-reactive dev`, so it does the full cycle.)
 
 | | rebuilds APK | reinstalls | opens tunnel | serves |
 |---|---|---|---|---|
 | `dev` | yes | yes | yes | yes |
 | `serve` | no | no | yes | yes |
-| `npm run dev` (in `web/`) | no | no | **no** | yes |
+| `vite` directly (in `web/`) | no | no | **no** | yes |
 
 **3. Running two plugins at once**
 

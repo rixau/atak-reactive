@@ -42,6 +42,8 @@ export interface FixtureOpts {
   localProperties?: string;
   /** Omit web/node_modules to exercise the dependency guard. */
   withNodeModules?: boolean;
+  /** Omit web/ entirely so `init` performs a real scaffold. */
+  withWeb?: boolean;
 }
 
 export function makeFixture(opts: FixtureOpts = {}): Fixture {
@@ -51,6 +53,7 @@ export function makeFixture(opts: FixtureOpts = {}): Fixture {
     gradleExtra = '',
     localProperties = 'sdk.dir=/x\n',
     withNodeModules = true,
+    withWeb = true,
   } = opts;
   const port = opts.port ?? 41000 + Math.floor(Math.random() * 8000);
 
@@ -59,8 +62,10 @@ export function makeFixture(opts: FixtureOpts = {}): Fixture {
   const callLog = join(root, 'calls.log');
   mkdirSync(stubbin, { recursive: true });
   mkdirSync(join(root, 'app'), { recursive: true });
-  mkdirSync(join(root, 'web'), { recursive: true });
-  if (withNodeModules) mkdirSync(join(root, 'web', 'node_modules'), { recursive: true });
+  if (withWeb) {
+    mkdirSync(join(root, 'web'), { recursive: true });
+    if (withNodeModules) mkdirSync(join(root, 'web', 'node_modules'), { recursive: true });
+  }
   writeFileSync(callLog, '');
 
   writeFileSync(join(root, 'settings.gradle'), "include ':app'\n");
@@ -69,10 +74,12 @@ export function makeFixture(opts: FixtureOpts = {}): Fixture {
     join(root, 'app', 'build.gradle'),
     'android {\n    buildTypes {\n        debug {\n        }\n    }\n}\n' + gradleExtra,
   );
-  writeFileSync(
-    join(root, 'web', 'package.json'),
-    JSON.stringify({ name: 'w', scripts: { build: 'echo webbuild', dev: 'vite' } }),
-  );
+  if (withWeb) {
+    writeFileSync(
+      join(root, 'web', 'package.json'),
+      JSON.stringify({ name: 'w', scripts: { build: 'echo webbuild', dev: 'vite' } }),
+    );
+  }
 
   const stub = (name: string, body: string) => {
     const p = join(stubbin, name);

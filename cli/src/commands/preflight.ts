@@ -8,12 +8,19 @@ import { log, logError, exec, parseReversedPorts, parseAdbDevices } from '../uti
  * take it in that window. Callers release it immediately before spawning Vite.
  */
 export function holdPort(port: number): Promise<Server | null> {
-  return new Promise((resolve) => {
-    const server = createServer();
-    server.once('error', () => resolve(null));
-    server.once('listening', () => resolve(server));
-    server.listen(port, '0.0.0.0');
-  });
+  // Bind :: (dual-stack) rather than 0.0.0.0. Vite is started with --host, which
+  // binds ::, so a 0.0.0.0-only reservation can succeed while Vite later fails
+  // EADDRINUSE against an IPv6 listener — after the build and install have run.
+  // Fall back to 0.0.0.0 on hosts without IPv6.
+  const bind = (host?: string) =>
+    new Promise<Server | null>((resolve) => {
+      const server = createServer();
+      server.once('error', () => resolve(null));
+      server.once('listening', () => resolve(server));
+      if (host) server.listen(port, host);
+      else server.listen(port);
+    });
+  return bind().then((s) => s ?? bind('0.0.0.0'));
 }
 
 export function releasePort(held: Server | null): Promise<void> {
@@ -40,19 +47,33 @@ export async function preflight(port: number): Promise<Server> {
     logError('No device or emulator connected. Connect one and try again.');
     process.exit(1);
   }
+  // adb honours ANDROID_SERIAL for install/reverse, so respect it here too rather
+  // than refusing outright and telling the user to set a variable we then ignore.
+  const wanted = process.env.ANDROID_SERIAL;
+  let serial = serials[0];
   if (serials.length > 1) {
-    logError(
-      `More than one device connected (${serials.join(', ')}).\n` +
-      '  adb cannot pick one — disconnect the others, or set ANDROID_SERIAL.',
-    );
+    if (wanted && serials.includes(wanted)) {
+      serial = wanted;
+    } else {
+      logError(
+        `More than one device connected (${serials.join(', ')}).\n` +
+        `  Set ANDROID_SERIAL to one of them, or disconnect the others.`,
+      );
+      process.exit(1);
+    }
+  } else if (wanted && !serials.includes(wanted)) {
+    logError(`ANDROID_SERIAL is "${wanted}" but that device is not connected.`);
     process.exit(1);
   }
 
   const reverseList = exec('adb reverse --list');
   if (reverseList.ok && parseReversedPorts(reverseList.output).includes(port)) {
     logError(
-      `Device port ${port} is already forwarded — another plugin is in dev on it.\n` +
-      `  Set devServerPort in local.properties, or pass --port <n>.`,
+      `Device port ${port} is already forwarded.\n` +
+      `  Another plugin is in dev on it, or a previous session left it behind\n` +
+      `  (cleanup does not run on SIGKILL or a closed terminal).\n\n` +
+      `  Reclaim it:   adb reverse --remove tcp:${port}\n` +
+      `  Or use another port: devServerPort in local.properties, or --port <n>.`,
     );
     process.exit(1);
   }
@@ -61,12 +82,15 @@ export async function preflight(port: number): Promise<Server> {
   if (!held) {
     logError(
       `Port ${port} is already in use.\n` +
-      `  Set devServerPort in local.properties, or pass --port <n>.`,
+      `  Another dev server may have been left behind — a CLI killed with SIGKILL\n` +
+      `  or a closed terminal orphans its Vite process.\n\n` +
+      `  Find it:  lsof -i :${port}      (or: ss -ltnp | grep :${port})\n` +
+      `  Or use another port: devServerPort in local.properties, or --port <n>.`,
     );
     process.exit(1);
   }
 
-  log(`Preflight OK — device ${serials[0]}, port ${port} reserved`);
+  log(`Preflight OK — device ${serial}, port ${port} reserved`);
   return held;
 }
 

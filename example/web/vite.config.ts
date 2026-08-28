@@ -38,7 +38,9 @@ function assertPortFree(port: number): Promise<void> {
       process.exit(1);
     });
     probe.once('listening', () => probe.close(() => resolve()));
-    probe.listen(port, '0.0.0.0');
+    // Bind :: (dual-stack) — Vite runs with host:true and binds ::, so probing
+    // 0.0.0.0 alone can pass while Vite then fails against an IPv6 listener.
+    probe.listen(port);
   });
 }
 
