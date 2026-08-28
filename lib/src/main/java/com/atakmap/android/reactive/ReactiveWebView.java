@@ -185,6 +185,7 @@ public class ReactiveWebView extends FrameLayout {
      * Pause the web view. Call when the view is hidden (e.g. tab switched away).
      */
     public void onPause() {
+        stopDevRetry();
         if (destroyed) return;
 
         if (webView != null) {
@@ -197,6 +198,7 @@ public class ReactiveWebView extends FrameLayout {
      * Safe to call multiple times (subsequent calls are no-ops).
      */
     public void destroy() {
+        stopDevRetry();
         if (destroyed) return;
         destroyed = true;
 
@@ -255,16 +257,12 @@ public class ReactiveWebView extends FrameLayout {
                     if (destroyed) return;
                     if (reachable) {
                         Log.d(TAG, "Dev server reachable, loading from " + devUrl);
-                        String url = devUrl;
-                        // Preserve hash fragment for route-based multi-view setups
-                        int hashIndex = assetPath.indexOf('#');
-                        if (hashIndex >= 0) {
-                            url += "/" + assetPath.substring(hashIndex);
-                        }
-                        webView.loadUrl(url);
+                        stopDevRetry();
+                        webView.loadUrl(devUrlForAsset());
                     } else {
                         Log.w(TAG, "Dev server not running — run: npx @atak-reactive/cli dev");
-                        webView.loadUrl(DEV_SERVER_ERROR_HTML);
+                        webView.loadUrl(devServerErrorHtml());
+                        startDevRetry();
                     }
                 });
             }).start();
@@ -386,6 +384,57 @@ public class ReactiveWebView extends FrameLayout {
         }
     }
 
+// ---- dev-only: reconnect when the dev server comes back ----
+    // The dev URL is otherwise loaded once, when the panel opens, so restarting the
+    // server (or restoring a dropped adb tunnel) does nothing until the panel is
+    // closed and reopened. Poll while the error screen is showing.
+    private volatile boolean devRetryRunning;
+
+    /**
+     * Never runs outside dev mode: guarded here, and both callers already sit inside
+     * `if (devMode)` blocks. A polling thread in a release build would be a leak.
+     */
+    private void startDevRetry() {
+        if (!devMode || devRetryRunning) return;
+        devRetryRunning = true;
+        Thread t = new Thread(() -> {
+            while (devRetryRunning) {
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                if (!devRetryRunning) return;
+                if (isDevServerReachable()) {
+                    devRetryRunning = false;
+                    final WebView wv = webView;
+                    if (wv != null) {
+                        wv.post(() -> {
+                            if (!devRetryRunning) {
+                                Log.d(TAG, "Dev server came back — reloading " + devUrl);
+                                wv.loadUrl(devUrl);
+                            }
+                        });
+                    }
+                    return;
+                }
+            }
+        }, "atak-reactive-dev-retry");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void stopDevRetry() {
+        devRetryRunning = false;
+    }
+
+    /** Dev URL including the hash fragment, for route-based multi-view setups. */
+    private String devUrlForAsset() {
+        int hashIndex = assetPath.indexOf('#');
+        return hashIndex >= 0 ? devUrl + "/" + assetPath.substring(hashIndex) : devUrl;
+    }
+
     private boolean isDevServerReachable() {
         try {
             java.net.Socket socket = new java.net.Socket();
@@ -412,16 +461,21 @@ public class ReactiveWebView extends FrameLayout {
             "<div style='font-size:14px'>Connecting to dev server...</div>" +
             "</body></html>";
 
-    private static final String DEV_SERVER_ERROR_HTML =
+    private static final String DEV_SERVER_ERROR_TEMPLATE =
             "data:text/html;charset=utf-8," +
             "<html><body style='margin:0;background:%231a1a2e;display:flex;" +
             "flex-direction:column;align-items:center;justify-content:center;" +
             "height:100vh;font-family:sans-serif;color:%238d99ae'>" +
             "<div style='font-size:13px;letter-spacing:1px;text-transform:uppercase;" +
             "opacity:0.5;margin-bottom:8px'>atak-reactive dev</div>" +
-            "<div style='font-size:14px;color:%23f87171'>Dev server not running</div>" +
+            "<div style='font-size:14px;color:%23f87171'>Dev server not running on port PORT</div>" +
             "<div style='font-size:12px;margin-top:12px;opacity:0.7'>Run: npx @atak-reactive/cli dev</div>" +
             "</body></html>";
+
+    /** The port is resolved at build time, so show which one we actually looked for. */
+    private String devServerErrorHtml() {
+        return DEV_SERVER_ERROR_TEMPLATE.replace("PORT", String.valueOf(devPort));
+    }
 
     private class EmbeddedWebViewClient extends WebViewClient {
         private boolean devFallbackTriggered = false;
@@ -445,7 +499,8 @@ public class ReactiveWebView extends FrameLayout {
             if (devMode && !devFallbackTriggered && request.isForMainFrame()) {
                 devFallbackTriggered = true;
                 Log.w(TAG, "Dev server connection lost");
-                view.loadUrl(DEV_SERVER_ERROR_HTML);
+                view.loadUrl(devServerErrorHtml());
+                startDevRetry();
                 return;
             }
             super.onReceivedError(view, request, error);
