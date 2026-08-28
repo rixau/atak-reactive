@@ -328,3 +328,76 @@ describe.skipIf(isWin)('dev — subcommand routing', () => {
     expect(fx.calls()).toContain(`adb reverse tcp:${p} tcp:${p}`);
   });
 });
+
+describe.skipIf(isWin)('build — web asset verification', () => {
+  /** Minimal zip (no compression) so the check can be exercised without Gradle. */
+  function writeZip(path: string, names: string[]): void {
+    const locals: Buffer[] = [];
+    const central: Buffer[] = [];
+    let offset = 0;
+    for (const name of names) {
+      const n = Buffer.from(name, 'utf8');
+      const lh = Buffer.alloc(30);
+      lh.writeUInt32LE(0x04034b50, 0);
+      lh.writeUInt16LE(n.length, 26);
+      locals.push(lh, n);
+      const ch = Buffer.alloc(46);
+      ch.writeUInt32LE(0x02014b50, 0);
+      ch.writeUInt16LE(n.length, 28);
+      ch.writeUInt32LE(offset, 42);
+      central.push(ch, n);
+      offset += 30 + n.length;
+    }
+    const cd = Buffer.concat(central);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(names.length, 8);
+    eocd.writeUInt16LE(names.length, 10);
+    eocd.writeUInt32LE(cd.length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    writeFileSync(path, Buffer.concat([...locals, cd, eocd]));
+  }
+
+  const releaseApk = (fx: Fixture) =>
+    join(fx.root, 'app', 'build', 'outputs', 'apk', 'civ', 'release', 'app-release.apk');
+
+  function prepareRelease(fx: Fixture, names: string[]): void {
+    fx.addApk('release', 'app-release.apk', Date.now());
+    writeZip(releaseApk(fx), names);
+  }
+
+  it('fails when the web assets did not make it into the APK', () => {
+    const fx = makeFixture();
+    prepareRelease(fx, ['AndroidManifest.xml', 'classes.dex']);
+    const r = runCli(fx, ['build']);
+
+    expect(r.status).toBe(1);
+    expect(r.out).toContain('Web assets are missing');
+    // the failure this guards: dev works off Vite, release ships a blank panel
+    expect(r.out).toContain('blank panel');
+  });
+
+  it('passes and reports the count when they are bundled', () => {
+    const fx = makeFixture();
+    prepareRelease(fx, [
+      'AndroidManifest.xml',
+      'assets/web/index.html',
+      'assets/web/assets/index-abc.js',
+    ]);
+    const r = runCli(fx, ['build']);
+
+    expect(r.status).toBe(0);
+    expect(r.out).toContain('Web assets bundled (2 files)');
+    expect(r.out).toContain('Release APK:');
+  });
+
+  it('warns rather than failing when the APK cannot be read as a zip', () => {
+    const fx = makeFixture();
+    fx.addApk('release', 'app-release.apk', Date.now());
+    writeFileSync(releaseApk(fx), 'not a zip');
+    const r = runCli(fx, ['build']);
+
+    expect(r.status).toBe(0);
+    expect(r.out).toContain('could not read the APK');
+  });
+});

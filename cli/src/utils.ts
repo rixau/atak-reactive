@@ -462,3 +462,37 @@ export function newestApk(dir: string): string | null {
     .sort((a, b) => b.m - a.m);
   return apks.length ? apks[0].f : null;
 }
+
+/**
+ * List entry names inside an APK (a zip). Reads the central directory directly so
+ * the check works without `unzip` or the Android build-tools on PATH.
+ * Returns null if the file cannot be read as a zip.
+ */
+export function listApkEntries(apkPath: string): string[] | null {
+  try {
+    const buf = readFileSync(apkPath);
+    // locate End Of Central Directory (may carry a comment, so scan backwards)
+    let eocd = -1;
+    for (let i = buf.length - 22; i >= 0 && i > buf.length - 22 - 65535; i--) {
+      if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) return null;
+    let count = buf.readUInt16LE(eocd + 10);
+    let off = buf.readUInt32LE(eocd + 16);
+    // Zip64: counts/offsets saturate, and APKs routinely exceed them
+    if (count === 0xffff || off === 0xffffffff) return null;
+
+    const names: string[] = [];
+    for (let i = 0; i < count; i++) {
+      if (buf.readUInt32LE(off) !== 0x02014b50) return null;
+      const nameLen = buf.readUInt16LE(off + 28);
+      const extraLen = buf.readUInt16LE(off + 30);
+      const commentLen = buf.readUInt16LE(off + 32);
+      names.push(buf.toString('utf8', off + 46, off + 46 + nameLen));
+      off += 46 + nameLen + extraLen + commentLen;
+    }
+    return names;
+  } catch {
+    return null;
+  }
+}
