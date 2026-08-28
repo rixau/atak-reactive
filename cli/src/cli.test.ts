@@ -45,10 +45,6 @@ describe.skipIf(isWin)('dev — preflight runs before anything expensive', () =>
     expect(gradleCalls(fx)).toHaveLength(0);
   });
 
-  // adb counts every transport when it complains about ambiguity, so an
-  // unauthorized or offline sibling is just as fatal as a second usable device.
-  // Counting only `device` let preflight pass and `adb install` fail after a
-  // full Gradle build — the failure preflight exists to get ahead of.
   it('aborts when a second device is attached but unusable', () => {
     const fx = makeFixture();
     const r = runCli(fx, ['dev'], {
@@ -325,7 +321,7 @@ describe.skipIf(isWin)('init — existing AAR install (the upgrade path)', () =>
 
 describe.skipIf(isWin)('init --dry-run — reports without writing', () => {
   // Moving the always-on patches ahead of the early returns put them ahead of the
-  // dry-run guard too, so --dry-run wrote the resValues into build.gradle for real.
+  // dry-run guard too, so --dry-run wrote the resValues for real.
   it('does not touch build.gradle on a fresh project', () => {
     const fx = makeFixture({ withWeb: false });
     const gradlePath = join(fx.root, 'app', 'build.gradle');

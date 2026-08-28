@@ -451,10 +451,9 @@ export interface AdbDevice {
 }
 
 /**
- * Every transport adb lists, whatever its state — not just the usable ones.
- * adb's "more than one device/emulator" error counts unauthorized and offline
- * transports too, so a check that saw only `device` would report a clean single
- * device and then let `adb install` fail after a full Gradle build.
+ * Every transport adb lists, whatever its state. adb's "more than one
+ * device/emulator" error counts unauthorized and offline transports too, so a
+ * check that saw only `device` would pass and then fail at `adb install`.
  */
 export function parseAdbDeviceList(listOutput: string): AdbDevice[] {
   const devices: AdbDevice[] = [];

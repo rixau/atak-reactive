@@ -70,8 +70,8 @@ function buildAndInstall(root: string, flavor: string, port: number): void {
 
   log('Installing APK...');
   const apkDir = join(root, 'app', 'build', 'outputs', 'apk', flavor, 'debug');
-  // Newest by mtime — filenames embed a git sha, so stale APKs accumulate and
-  // readdir order would happily install an old one.
+  // Newest by mtime: filenames embed a git sha, so stale APKs accumulate and
+  // readdir order would install an old one.
   const apk = newestApk(apkDir);
   if (!apk) {
     logError(`No APK found in ${apkDir}`);

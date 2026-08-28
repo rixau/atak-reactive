@@ -87,19 +87,16 @@ function localPropertyResValue(resName: string, key: string, fallback: string): 
 /**
  * Patches that must run on EVERY init, including the early-return paths for an
  * existing AAR install. All are idempotent ("already present" guards). A project
- * scaffolded before these settings existed can only acquire them here — otherwise
- * init reports "Already on <version>" and silently changes nothing, which is
- * exactly what upgraders are told to run it for.
+ * scaffolded before these settings existed can only acquire them here; otherwise
+ * init reports "Already on <version>" and changes nothing.
  */
 function applyAlwaysOnPatches(
   root: string,
   buildGradle: string,
   opts: { dryRun?: boolean },
 ): string[] {
-  // Under --dry-run nothing here touches disk; each branch describes what it would
-  // do and the caller prints it inside its own preview block. These patches run
-  // ahead of every early return, so an unguarded write lands even on the paths that
-  // exist purely to report and exit.
+  // Runs ahead of every early return, so under --dry-run nothing here may touch
+  // disk. Each branch describes what it would do; the caller prints it.
   const pending: string[] = [];
   if (!existsSync(buildGradle)) return pending;
 
@@ -149,28 +146,26 @@ function applyAlwaysOnPatches(
     }
   }
 
-  // The dev server config is ours and carries behaviour, not preference.
   const webDir = join(root, 'web');
   if (existsSync(join(webDir, 'package.json'))) {
-  // ...but the dev server config is ours and carries behaviour, not preferences.
-  // An older one has `port: 5173` with no strictPort, so Vite silently walks to
-  // the next free port while the APK still probes the configured one. Refresh it,
-  // keeping a backup since the developer may have edited it.
-  const viteConfig = join(webDir, 'vite.config.ts');
-  const templateConfig = join(__dirname, 'templates', 'web', 'vite.config.ts');
-  if (existsSync(viteConfig) && existsSync(templateConfig)) {
-    const current = readFileSync(viteConfig, 'utf-8');
-    if (!current.includes('strictPort')) {
-      if (opts.dryRun) {
-        pending.push('Update web/vite.config.ts (adds strictPort + devServerPort support)');
-      } else {
-        writeFileSync(`${viteConfig}.bak`, current);
-        cpSync(templateConfig, viteConfig);
-        log('Updated web/vite.config.ts for strictPort + devServerPort');
-        log('  previous version saved as web/vite.config.ts.bak');
+    // An older vite.config.ts has `port: 5173` and no strictPort, so Vite walks to
+    // the next free port while the APK still probes the configured one. Keep a
+    // backup, since the developer may have edited it.
+    const viteConfig = join(webDir, 'vite.config.ts');
+    const templateConfig = join(__dirname, 'templates', 'web', 'vite.config.ts');
+    if (existsSync(viteConfig) && existsSync(templateConfig)) {
+      const current = readFileSync(viteConfig, 'utf-8');
+      if (!current.includes('strictPort')) {
+        if (opts.dryRun) {
+          pending.push('Update web/vite.config.ts (adds strictPort + devServerPort support)');
+        } else {
+          writeFileSync(`${viteConfig}.bak`, current);
+          cpSync(templateConfig, viteConfig);
+          log('Updated web/vite.config.ts for strictPort + devServerPort');
+          log('  previous version saved as web/vite.config.ts.bak');
+        }
       }
     }
-  }
   }
 
   return pending;
@@ -348,9 +343,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       log('  + Add assets.srcDirs for web build output to build.gradle');
     }
 
-    // Dev server host / port resValues, plus anything else applyAlwaysOnPatches
-    // would touch. It reports the "+" lines itself so the two cannot disagree —
-    // the old code checked only the host and claimed the port along with it.
+    // applyAlwaysOnPatches reports its own "+" lines, so the two cannot disagree.
     if (gradleRaw.includes('atak_reactive_dev_host')) {
       log('  ✓ Dev server host resValue already present');
     }

@@ -46,8 +46,7 @@ export function preflightDevice(): string {
     process.exit(1);
   }
 
-  // Something is attached but adb cannot drive it. Naming the state matters: an
-  // unauthorized device looks identical to a missing one from the error alone.
+  // Name the state: an unauthorized device otherwise reads as a missing one.
   if (serials.length === 0) {
     const listed = attached.map((d) => `${d.serial} (${d.state})`).join(', ');
     logError(
@@ -63,10 +62,7 @@ export function preflightDevice(): string {
   const wanted = process.env.ANDROID_SERIAL;
   let serial = serials[0];
 
-  // Ambiguity is counted over every transport, not just the usable ones — that is
-  // what adb itself does. Counting only `device` would pass preflight here, then
-  // fail at `adb install` after the whole Gradle build, which is the exact failure
-  // this function exists to get ahead of.
+  // Counted over every transport, matching adb. See parseAdbDeviceList.
   if (attached.length > 1) {
     if (wanted && serials.includes(wanted)) {
       serial = wanted;

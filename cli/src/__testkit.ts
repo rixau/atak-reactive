@@ -3,8 +3,8 @@
  *
  * Runs the real built CLI against a throwaway project, with `adb`, `gradlew` and
  * `npx` replaced by stubs on PATH that record every invocation. No device, no
- * emulator, no Android SDK — the commands' sequencing and arguments are the thing
- * under test, and those are exactly where the bugs have been.
+ * emulator, no Android SDK: the commands' sequencing and arguments are what is
+ * under test.
  */
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, utimesSync } from 'fs';
 import { join, dirname } from 'path';
@@ -154,8 +154,8 @@ export function runCli(fx: Fixture, args: string[], opts: FixtureOpts = {}): Run
       ADB_DEVICES: opts.devices ?? 'List of devices attached\nemulator-5554\tdevice',
       ADB_REVERSE_LIST: opts.reverseList ?? '',
       ATAK_REACTIVE_NO_UPDATE_CHECK: '1',
-      // process.env is spread above, so a developer with a real device plugged in
-      // and ANDROID_SERIAL exported would otherwise change what these tests assert.
+      // process.env is spread above; a developer's exported ANDROID_SERIAL would
+      // otherwise change what these tests assert.
       ANDROID_SERIAL: '',
       ...opts.env,
     },

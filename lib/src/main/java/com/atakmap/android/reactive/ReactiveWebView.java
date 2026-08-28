@@ -170,8 +170,7 @@ public class ReactiveWebView extends FrameLayout {
             loaded = true;
             loadContent();
         } else if (devErrorShowing) {
-            // onPause() stopped the poller and the error screen is still up. Without
-            // this, one tab-switch away and back disables reconnect for good.
+            // onPause() stopped the poller and the error screen is still up.
             startDevRetry();
         }
 
@@ -395,19 +394,16 @@ public class ReactiveWebView extends FrameLayout {
     // server (or restoring a dropped adb tunnel) does nothing until the panel is
     // closed and reopened. Poll while the error screen is showing.
     /**
-     * True while the "dev server not running" screen is what the WebView is showing.
-     * onPause() stops the poller, so onResume() needs to know whether to start it
-     * again — loadContent() won't, since `loaded` is already true by then.
+     * True while the "dev server not running" screen is up. onResume() needs this to
+     * decide whether to restart the poller; loadContent() won't, once `loaded` is set.
      */
     private boolean devErrorShowing;
 
     private volatile boolean devRetryRunning;
 
     /**
-     * Bumped by every start and stop. devRetryRunning doubles as "the poller is
-     * alive" and the poller clears it itself on success, so it cannot also answer
-     * "were we cancelled?" — the generation can. Only touched from the main thread
-     * (onResume/onPause/destroy and the posted load callbacks), so ++ is safe.
+     * Cancellation token. devRetryRunning cannot serve as one: the poller clears it
+     * itself on success. Bumped by every start and stop, main thread only.
      */
     private volatile int devRetryGeneration;
 
@@ -433,11 +429,10 @@ public class ReactiveWebView extends FrameLayout {
                     final WebView wv = webView;
                     if (wv != null) {
                         wv.post(() -> {
-                            // onPause() or destroy() can land between the probe above
-                            // and this dispatch; loading a destroyed WebView crashes.
+                            // onPause() or destroy() can land between the probe and
+                            // this dispatch; loading a destroyed WebView crashes.
                             if (destroyed || generation != devRetryGeneration) return;
-                            // Same URL the initial load used, so a route-based
-                            // multi-view plugin reconnects to the view it was on.
+                            // devUrlForAsset, not devUrl, so the hash route survives.
                             String url = devUrlForAsset();
                             Log.d(TAG, "Dev server came back — reloading " + url);
                             wv.loadUrl(url);
@@ -500,7 +495,6 @@ public class ReactiveWebView extends FrameLayout {
             "<div style='font-size:12px;margin-top:24px;opacity:0.7'>Run: npx @atak-reactive/cli dev</div>" +
             "</body></html>";
 
-    /** The port is resolved at build time, so show which one we actually looked for. */
     /**
      * Show the address that was actually tried. Host and port are both resolved at
      * build time, so when either is wrong the screen otherwise reads as "the server

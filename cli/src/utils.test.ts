@@ -417,8 +417,6 @@ describe('dev server port resolution', () => {
   });
 
   it('keeps unusable transports in the full list, with their state', () => {
-    // adb counts these when it refuses to pick a device, so preflight has to see
-    // them — filtering them out here is what let a doomed run reach adb install.
     const out = 'List of devices attached\nemulator-5554\tdevice\nfoo\toffline\nbar\tunauthorized';
     expect(parseAdbDeviceList(out)).toEqual([
       { serial: 'emulator-5554', state: 'device' },

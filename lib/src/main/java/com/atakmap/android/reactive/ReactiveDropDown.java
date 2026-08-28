@@ -293,7 +293,6 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
             "<div style='font-size:12px;margin-top:24px;opacity:0.7'>Run: npx @atak-reactive/cli dev</div>" +
             "</body></html>";
 
-    /** The port is resolved at build time, so show which one we actually looked for. */
     /**
      * Show the address that was actually tried. Host and port are both resolved at
      * build time, so when either is wrong the screen otherwise reads as "the server
@@ -344,10 +343,8 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private volatile boolean devRetryRunning;
 
     /**
-     * Bumped by every start and stop. devRetryRunning doubles as "the poller is
-     * alive" and the poller clears it itself on success, so it cannot also answer
-     * "were we cancelled?" — the generation can. Only touched from the main thread
-     * (onReceive/onDropDownClose/disposeImpl), so ++ is safe.
+     * Cancellation token. devRetryRunning cannot serve as one: the poller clears it
+     * itself on success. Bumped by every start and stop, main thread only.
      */
     private volatile int devRetryGeneration;
 
@@ -373,7 +370,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                     final WebView wv = webView;
                     if (wv != null) {
                         wv.post(() -> {
-                            // disposeImpl() can land between the probe above and this
+                            // disposeImpl() can land between the probe and this
                             // dispatch; loading a destroyed WebView crashes.
                             if (disposed || generation != devRetryGeneration) return;
                             Log.d(TAG, "Dev server came back — reloading " + devUrl);

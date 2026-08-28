@@ -50,8 +50,8 @@ export function build(flavor: string = 'civ'): void {
 
   // Step 3: Report APK location
   const releaseDir = join(root, 'app', 'build', 'outputs', 'apk', flavor, 'release');
-  // Newest by mtime — release filenames embed a git sha, so stale APKs linger and
-  // readdir order could hand you the path of an old build to distribute.
+  // Newest by mtime: release filenames embed a git sha, so stale APKs linger and
+  // readdir order could report an old build as the one to distribute.
   const apk = newestApk(releaseDir);
   if (!apk) {
     logError(`No APK found in ${releaseDir}`);
@@ -59,9 +59,8 @@ export function build(flavor: string = 'civ'): void {
   }
   const apkPath = join(releaseDir, apk);
 
-  // In dev the assets come from Vite, so a broken bundling step is invisible until
-  // release — where it ships a blank panel. This is the one release failure the
-  // library owns, so check it rather than reporting success blindly.
+  // In dev the assets come from Vite, so a broken bundling step stays invisible
+  // until release, where it ships a blank panel.
   const entries = listApkEntries(apkPath);
   if (entries === null) {
     log('Warning: could not read the APK to verify web assets.');
