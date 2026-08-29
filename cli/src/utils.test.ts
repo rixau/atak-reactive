@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtempSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import {
   parseDefaultFlavor,
   parseAtakVersion,
@@ -6,6 +9,13 @@ import {
   deriveIntentAction,
   isNewerVersion,
   fetchLatestVersion,
+  parsePortArg,
+  readLocalProperty,
+  resolveDevPort,
+  DEFAULT_DEV_PORT,
+  parseReversedPorts,
+  parseAdbDevices,
+  parseAdbDeviceList,
 } from './utils.js';
 
 describe('parseDefaultFlavor', () => {
@@ -363,5 +373,73 @@ describe('fetchLatestVersion', () => {
     expect(await fetchLatestVersion()).toBeNull();
     if (prev === undefined) delete process.env.ATAK_REACTIVE_NO_UPDATE_CHECK;
     else process.env.ATAK_REACTIVE_NO_UPDATE_CHECK = prev;
+  });
+});
+
+describe('dev server port resolution', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'atak-port-'));
+
+  it('parses --port', () => {
+    expect(parsePortArg(['dev', '--port', '5174'])).toBe(5174);
+    expect(parsePortArg(['dev'])).toBeUndefined();
+  });
+
+  it('rejects an invalid --port instead of silently defaulting', () => {
+    expect(() => parsePortArg(['dev', '--port', 'abc'])).toThrow();
+    expect(() => parsePortArg(['dev', '--port', '80'])).toThrow();
+    expect(() => parsePortArg(['dev', '--port'])).toThrow();
+  });
+
+  it('reads devServerPort from local.properties', () => {
+    writeFileSync(join(tmp, 'local.properties'), '# c\nsdk.dir=/x\ndevServerPort=5180\n');
+    expect(readLocalProperty(tmp, 'devServerPort')).toBe('5180');
+    expect(resolveDevPort(tmp)).toBe(5180);
+  });
+
+  it('lets --port win over local.properties', () => {
+    expect(resolveDevPort(tmp, 5199)).toBe(5199);
+  });
+
+  it('defaults to 5173 when unset', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'atak-port-empty-'));
+    expect(resolveDevPort(empty)).toBe(DEFAULT_DEV_PORT);
+  });
+
+  it('parses device ports out of adb reverse --list', () => {
+    expect(parseReversedPorts('host-19 tcp:5173 tcp:5173\nhost-19 tcp:5174 tcp:9999'))
+      .toEqual([5173, 5174]);
+    expect(parseReversedPorts('')).toEqual([]);
+  });
+
+  it('parses attached devices, ignoring offline/unauthorized', () => {
+    const out = 'List of devices attached\nemulator-5554\tdevice\nfoo\toffline\nbar\tunauthorized';
+    expect(parseAdbDevices(out)).toEqual(['emulator-5554']);
+  });
+
+  it('keeps unusable transports in the full list, with their state', () => {
+    const out = 'List of devices attached\nemulator-5554\tdevice\nfoo\toffline\nbar\tunauthorized';
+    expect(parseAdbDeviceList(out)).toEqual([
+      { serial: 'emulator-5554', state: 'device' },
+      { serial: 'foo', state: 'offline' },
+      { serial: 'bar', state: 'unauthorized' },
+    ]);
+  });
+
+  it('ignores daemon chatter and blank lines', () => {
+    const out =
+      '* daemon not running; starting now at tcp:5037 *\n' +
+      '* daemon started successfully *\n' +
+      'List of devices attached\n\nemulator-5554\tdevice\n\n';
+    expect(parseAdbDeviceList(out)).toEqual([{ serial: 'emulator-5554', state: 'device' }]);
+    expect(parseAdbDevices(out)).toEqual(['emulator-5554']);
+  });
+
+  it('handles adb devices -l extra columns', () => {
+    const out = 'List of devices attached\nemulator-5554     device product:sdk_gphone64 model:Pixel_7';
+    expect(parseAdbDeviceList(out)).toEqual([{ serial: 'emulator-5554', state: 'device' }]);
+  });
+
+  it('returns nothing for an empty list', () => {
+    expect(parseAdbDeviceList('List of devices attached\n')).toEqual([]);
   });
 });

@@ -60,6 +60,117 @@ function ensureGitignore(root: string): void {
   log(added.length ? `.gitignore updated (${added.join(', ')})` : '.gitignore already up to date');
 }
 
+
+/**
+ * Gradle loads gradle.properties into project properties, never local.properties —
+ * so `project.properties['devServerPort']` is always null and the resValue silently
+ * falls back to its default. Read the file explicitly.
+ */
+function localPropertyResValue(resName: string, key: string, fallback: string): string {
+  return (
+    `\n            resValue "string", "${resName}", {` +
+    `\n                def v = project.findProperty('${key}')` +
+    `\n                if (v == null) {` +
+    `\n                    def f = rootProject.file('local.properties')` +
+    `\n                    if (f.exists()) {` +
+    `\n                        def props = new Properties()` +
+    `\n                        f.withInputStream { props.load(it) }` +
+    `\n                        v = props.getProperty('${key}')` +
+    `\n                    }` +
+    `\n                }` +
+    `\n                return v ?: '${fallback}'` +
+    `\n            }()`
+  );
+}
+
+
+/**
+ * Patches that must run on EVERY init, including the early-return paths for an
+ * existing AAR install. All are idempotent ("already present" guards). A project
+ * scaffolded before these settings existed can only acquire them here; otherwise
+ * init reports "Already on <version>" and changes nothing.
+ */
+function applyAlwaysOnPatches(
+  root: string,
+  buildGradle: string,
+  opts: { dryRun?: boolean },
+): string[] {
+  // Runs ahead of every early return, so under --dry-run nothing here may touch
+  // disk. Each branch describes what it would do; the caller prints it.
+  const pending: string[] = [];
+  if (!existsSync(buildGradle)) return pending;
+
+  // 7. Patch build.gradle — dev server host for wireless debugging
+  const gradleForDevHost = readFileSync(buildGradle, 'utf-8');
+  if (gradleForDevHost.includes('atak_reactive_dev_host')) {
+    if (!opts.dryRun) log('Dev server host resValue already present');
+  } else {
+    const debugBlockMatch = /buildTypes\s*\{[\s\S]*?debug\s*\{/.exec(gradleForDevHost);
+    if (debugBlockMatch) {
+      if (opts.dryRun) {
+        pending.push('Add dev server host resValue to debug build type');
+      } else {
+        const insertAfter = debugBlockMatch.index + debugBlockMatch[0].length;
+        const devHostLines =
+          "\n            // atak-reactive: dev server host (set devServerHost in local.properties for wireless debugging)" +
+          localPropertyResValue('atak_reactive_dev_host', 'devServerHost', 'localhost');
+        const patched = gradleForDevHost.slice(0, insertAfter) + devHostLines + gradleForDevHost.slice(insertAfter);
+        writeFileSync(buildGradle, patched);
+        log('Added dev server host resValue to debug build type');
+      }
+    } else {
+      log('Warning: Could not find buildTypes.debug block — add manually if needed for wireless debugging');
+    }
+  }
+
+  // 7b. Patch build.gradle — dev server port, so each plugin can hold its own
+  const gradleForDevPort = readFileSync(buildGradle, 'utf-8');
+  if (gradleForDevPort.includes('atak_reactive_dev_port')) {
+    if (!opts.dryRun) log('Dev server port resValue already present');
+  } else {
+    const debugPortMatch = /buildTypes\s*\{[\s\S]*?debug\s*\{/.exec(gradleForDevPort);
+    if (debugPortMatch) {
+      if (opts.dryRun) {
+        pending.push('Add dev server port resValue to debug build type');
+      } else {
+        const insertAfter = debugPortMatch.index + debugPortMatch[0].length;
+        const devPortLines =
+          "\n            // atak-reactive: dev server port (set devServerPort in local.properties to run two plugins at once)" +
+          localPropertyResValue('atak_reactive_dev_port', 'devServerPort', '5173');
+        const patched = gradleForDevPort.slice(0, insertAfter) + devPortLines + gradleForDevPort.slice(insertAfter);
+        writeFileSync(buildGradle, patched);
+        log('Added dev server port resValue to debug build type');
+      }
+    } else {
+      log('Warning: Could not find buildTypes.debug block — add the dev server port resValue manually');
+    }
+  }
+
+  const webDir = join(root, 'web');
+  if (existsSync(join(webDir, 'package.json'))) {
+    // An older vite.config.ts has `port: 5173` and no strictPort, so Vite walks to
+    // the next free port while the APK still probes the configured one. Keep a
+    // backup, since the developer may have edited it.
+    const viteConfig = join(webDir, 'vite.config.ts');
+    const templateConfig = join(__dirname, 'templates', 'web', 'vite.config.ts');
+    if (existsSync(viteConfig) && existsSync(templateConfig)) {
+      const current = readFileSync(viteConfig, 'utf-8');
+      if (!current.includes('strictPort')) {
+        if (opts.dryRun) {
+          pending.push('Update web/vite.config.ts (adds strictPort + devServerPort support)');
+        } else {
+          writeFileSync(`${viteConfig}.bak`, current);
+          cpSync(templateConfig, viteConfig);
+          log('Updated web/vite.config.ts for strictPort + devServerPort');
+          log('  previous version saved as web/vite.config.ts.bak');
+        }
+      }
+    }
+  }
+
+  return pending;
+}
+
 export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void {
   if (opts.dryRun) {
     console.log('\n  atak-reactive init (dry run)\n');
@@ -110,12 +221,20 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
   if (!opts.dryRun) {
     ensureGitignore(root);
   }
+  const pendingPatches = applyAlwaysOnPatches(root, buildGradle, opts);
 
   // Already matches the version this CLI provides.
   // NOTE: this means "matches the running CLI", not "matches npm latest" — a stale
   // npx cache can make an old version look current. index.ts warns when that happens.
   if (installType === 'aar' && installedVersion === CLI_VERSION) {
     log(`Already on ${CLI_VERSION} (the version this CLI installs).`);
+    if (opts.dryRun && pendingPatches.length) {
+      log('');
+      log('Would apply:');
+      pendingPatches.forEach((p) => log(`  + ${p}`));
+      log('');
+      log('Run without --dry-run to apply.');
+    }
     return;
   }
 
@@ -129,6 +248,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       log('Would update:');
       log(`  implementation dependency → ${CLI_VERSION}`);
       log(`  @atak-reactive/sdk → ^${CLI_VERSION} in web/package.json`);
+      pendingPatches.forEach((p) => log(`  + ${p}`));
       log('');
       log('Run without --dry-run to apply.');
       return;
@@ -164,6 +284,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       log('  1. Remove com/atakmap/android/reactive/ (source files)');
       log(`  2. Add implementation "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}"`);
       log(`  3. Update @atak-reactive/sdk → ^${CLI_VERSION} in web/package.json`);
+      pendingPatches.forEach((p, i) => log(`  ${i + 4}. ${p}`));
       log('');
       log('Run without --dry-run to apply.');
       return;
@@ -223,12 +344,14 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       log('  + Add assets.srcDirs for web build output to build.gradle');
     }
 
-    // Dev server host
+    // applyAlwaysOnPatches reports its own "+" lines, so the two cannot disagree.
     if (gradleRaw.includes('atak_reactive_dev_host')) {
       log('  ✓ Dev server host resValue already present');
-    } else {
-      log('  + Add dev server host resValue to debug build type');
     }
+    if (gradleRaw.includes('atak_reactive_dev_port')) {
+      log('  ✓ Dev server port resValue already present');
+    }
+    pendingPatches.forEach((p) => log(`  + ${p}`));
 
     // Web build task
     if (gradleRaw.includes('buildWebAssets')) {
@@ -358,25 +481,6 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     } else {
       log('Warning: Could not find sourceSets.main block — add manually:');
       log(`  ${assetsSrcDir}`);
-    }
-  }
-
-  // 7. Patch build.gradle — dev server host for wireless debugging
-  const gradleForDevHost = readFileSync(buildGradle, 'utf-8');
-  if (gradleForDevHost.includes('atak_reactive_dev_host')) {
-    log('Dev server host resValue already present');
-  } else {
-    const debugBlockMatch = /buildTypes\s*\{[\s\S]*?debug\s*\{/.exec(gradleForDevHost);
-    if (debugBlockMatch) {
-      const insertAfter = debugBlockMatch.index + debugBlockMatch[0].length;
-      const devHostLines =
-        "\n            // atak-reactive: dev server host (set devServerHost in local.properties for wireless debugging)" +
-        "\n            resValue \"string\", \"atak_reactive_dev_host\", project.properties['devServerHost'] ?: 'localhost'";
-      const patched = gradleForDevHost.slice(0, insertAfter) + devHostLines + gradleForDevHost.slice(insertAfter);
-      writeFileSync(buildGradle, patched);
-      log('Added dev server host resValue to debug build type');
-    } else {
-      log('Warning: Could not find buildTypes.debug block — add manually if needed for wireless debugging');
     }
   }
 
