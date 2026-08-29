@@ -3,8 +3,10 @@ name: Test
 on:
   push:
     branches: [main]
+  # Every pull request, not just those targeting main. With a `branches: [main]`
+  # filter a stacked PR — one based on another review branch — reports no checks
+  # at all, which reads identically to "checks passed" in the UI.
   pull_request:
-    branches: [main]
 
 jobs:
   sdk-tests:
