@@ -64,7 +64,7 @@ describe('ChatStore', () => {
       message: 'Hello!',
     }));
 
-    const lastCall = callback.mock.calls[callback.mock.calls.length - 1][0];
+    const lastCall = callback.mock.calls[callback.mock.calls.length - 1]![0];
     expect(lastCall).toHaveLength(1);
     expect(lastCall[0].messageId).toBe('new-1');
   });
@@ -80,7 +80,7 @@ describe('ChatStore', () => {
     emitFromNative('chatMessage', msg);
     emitFromNative('chatMessage', msg);
 
-    const lastCall = callback.mock.calls[callback.mock.calls.length - 1][0];
+    const lastCall = callback.mock.calls[callback.mock.calls.length - 1]![0];
     expect(lastCall).toHaveLength(1);
   });
 

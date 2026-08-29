@@ -3,8 +3,10 @@ name: Test
 on:
   push:
     branches: [main]
+  # Every pull request, not just those targeting main. With a `branches: [main]`
+  # filter a stacked PR — one based on another review branch — reports no checks
+  # at all, which reads identically to "checks passed" in the UI.
   pull_request:
-    branches: [main]
 
 jobs:
   sdk-tests:
@@ -14,10 +16,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: sdk/package-lock.json
       - name: Install and test SDK
         working-directory: sdk
         run: |
-          npm install
+          npm ci
+          npm run typecheck
           npm run build
           npm test
 
@@ -28,27 +33,40 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install, build, and test CLI
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      # `npm test` builds first (the suite runs the real dist/index.cjs), so a
+      # separate build step would only build it twice.
+      - name: Install, typecheck, and test CLI
         working-directory: cli
         run: |
-          npm install
-          npm run build
+          npm ci
+          npm run typecheck
           npm test
 
   lib-compile:
     runs-on: ubuntu-latest
+    # Every version here is published as an AAR by publish.yml. Compiling against
+    # only one of them let a break specific to an older ATAK SDK reach the release
+    # job, after npm had already published. Keep this list and the publish matrix
+    # in step.
+    strategy:
+      fail-fast: false
+      matrix:
+        atak-version: ['5.4.0', '5.5.0', '5.5.1', '5.6.0']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Download ATAK SDK (5.6.0)
-        run: ./scripts/download-sdk.sh 5.6.0
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Download ATAK SDK (${{ matrix.atak-version }})
+        run: ./scripts/download-sdk.sh ${{ matrix.atak-version }}
         env:
           GH_TOKEN: ${{ secrets.CI_SDK_TOKEN }}
       - name: Compile bridge
         run: |
           cd lib
           ./gradlew :bridge:assembleRelease \
-            -PatakSdkPath=sdks/5.6.0/main.jar
+            -PatakSdkPath=sdks/${{ matrix.atak-version }}/main.jar

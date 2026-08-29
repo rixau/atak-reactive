@@ -143,7 +143,7 @@ describe('CoT messaging', () => {
 
   describe('sending', () => {
     it('sendCot calls bridge with correct dispatch target', async () => {
-      const sendFn = vi.fn(() => 'true');
+      const sendFn = vi.fn((_cotJson: string, _dispatch: string) => 'true');
       window._atak = createMockBridge({ sendCot: sendFn });
 
       const { sendCot } = await loadModules();

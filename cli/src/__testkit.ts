@@ -36,9 +36,15 @@ export interface Fixture {
 }
 
 export interface FixtureOpts {
-  /** Output of `adb devices`. Default: one emulator. */
+  /**
+   * Output of `adb devices`. Default: one emulator.
+   * Read by `runCli`, not `makeFixture` — pass it to the call, not the fixture.
+   */
   devices?: string;
-  /** Output of `adb reverse --list`. Default: empty. */
+  /**
+   * Output of `adb reverse --list`. Default: empty.
+   * Read by `runCli`, not `makeFixture` — pass it to the call, not the fixture.
+   */
   reverseList?: string;
   /** Extra lines appended to app/build.gradle (e.g. a buildWebAssets task). */
   gradleExtra?: string;
@@ -61,8 +67,6 @@ export interface FixtureOpts {
 
 export function makeFixture(opts: FixtureOpts = {}): Fixture {
   const {
-    devices = 'List of devices attached\nemulator-5554\tdevice',
-    reverseList = '',
     gradleExtra = '',
     localProperties = 'sdk.dir=/x\n',
     withNodeModules = true,

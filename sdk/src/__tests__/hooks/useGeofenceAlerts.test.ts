@@ -24,7 +24,7 @@ describe('useGeofenceAlerts', () => {
       emitFromNative('geofenceAlert', makeGeofenceAlert({ entered: true }));
     });
     expect(result.current).toHaveLength(1);
-    expect(result.current[0].entered).toBe(true);
+    expect(result.current[0]!.entered).toBe(true);
 
     act(() => {
       emitFromNative('geofenceAlert', makeGeofenceAlert({ entered: false }));
@@ -43,7 +43,7 @@ describe('useGeofenceAlerts', () => {
     });
 
     expect(result.current).toHaveLength(1);
-    expect(result.current[0].fenceUid).toBe('fence-A');
+    expect(result.current[0]!.fenceUid).toBe('fence-A');
   });
 
   it('cleans up on unmount', async () => {

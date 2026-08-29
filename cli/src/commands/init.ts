@@ -4,7 +4,6 @@ import {
   CLI_VERSION,
   SUPPORTED_ATAK_VERSIONS,
   findProjectRoot,
-  fileContains,
   appendIfMissing,
   detectAtakVersion,
   detectInstallType,
