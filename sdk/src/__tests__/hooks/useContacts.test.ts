@@ -25,7 +25,7 @@ describe('useContacts', () => {
     });
 
     expect(result.current).toHaveLength(1);
-    expect(result.current[0].uid).toBe('u1');
+    expect(result.current[0]!.uid).toBe('u1');
   });
 
   it('applies team filter', async () => {
@@ -41,7 +41,7 @@ describe('useContacts', () => {
     });
 
     expect(result.current).toHaveLength(1);
-    expect(result.current[0].uid).toBe('c1');
+    expect(result.current[0]!.uid).toBe('c1');
   });
 
   it('stops stream on unmount', async () => {

@@ -61,7 +61,7 @@ describe('ContactStore', () => {
     emitFromNative('contactsChanged', [
       makeContact({ uid: 'c3' }),
     ]);
-    const lastCall = callback.mock.calls[callback.mock.calls.length - 1][0];
+    const lastCall = callback.mock.calls[callback.mock.calls.length - 1]![0];
     expect(lastCall).toHaveLength(1);
     expect(lastCall[0].uid).toBe('c3');
   });
@@ -78,7 +78,7 @@ describe('ContactStore', () => {
       makeContact({ uid: 'r1', team: 'Red' }),
     ]);
 
-    const lastCall = callback.mock.calls[callback.mock.calls.length - 1][0];
+    const lastCall = callback.mock.calls[callback.mock.calls.length - 1]![0];
     expect(lastCall).toHaveLength(1);
     expect(lastCall[0].uid).toBe('c1');
   });
@@ -96,7 +96,7 @@ describe('ContactStore', () => {
       makeContact({ uid: 'c3', status: 'dead' }),
     ]);
 
-    const lastCall = callback.mock.calls[callback.mock.calls.length - 1][0];
+    const lastCall = callback.mock.calls[callback.mock.calls.length - 1]![0];
     expect(lastCall).toHaveLength(1);
     expect(lastCall[0].uid).toBe('c1');
   });
@@ -113,7 +113,7 @@ describe('ContactStore', () => {
       makeContact({ uid: 'g1', type: 'group' }),
     ]);
 
-    const lastCall = callback.mock.calls[callback.mock.calls.length - 1][0];
+    const lastCall = callback.mock.calls[callback.mock.calls.length - 1]![0];
     expect(lastCall).toHaveLength(1);
     expect(lastCall[0].uid).toBe('i1');
   });
@@ -131,7 +131,7 @@ describe('ContactStore', () => {
       makeContact({ uid: 'c3', status: 'dead' }),
     ]);
 
-    const lastCall = callback.mock.calls[callback.mock.calls.length - 1][0];
+    const lastCall = callback.mock.calls[callback.mock.calls.length - 1]![0];
     expect(lastCall).toHaveLength(2);
   });
 });

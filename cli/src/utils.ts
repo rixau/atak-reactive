@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync, mkdirSync, rmSync, statSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync, rmSync, statSync } from 'fs';
 import { join, dirname, relative } from 'path';
 import { execSync, type SpawnSyncReturns } from 'child_process';
 

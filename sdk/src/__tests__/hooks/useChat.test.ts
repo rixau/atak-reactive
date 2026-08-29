@@ -19,7 +19,7 @@ describe('useChat', () => {
     const { result } = renderHook(() => useChat('conv-1'));
 
     expect(result.current).toHaveLength(1);
-    expect(result.current[0].messageId).toBe('h1');
+    expect(result.current[0]!.messageId).toBe('h1');
   });
 
   it('appends new messages from events', async () => {
