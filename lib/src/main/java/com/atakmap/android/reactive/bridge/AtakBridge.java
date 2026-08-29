@@ -13,12 +13,11 @@ import com.atakmap.coremap.maps.coords.GeoPoint;
 
 import com.atakmap.android.dropdown.DropDownReceiver;
 import com.atakmap.android.navigation.views.NavView;
-import com.atakmap.android.ipc.AtakBroadcast;
-import android.content.Intent;
 
 import com.atakmap.coremap.conversions.CoordinateFormat;
 import com.atakmap.coremap.conversions.CoordinateFormatUtilities;
 
+import com.atakmap.android.reactive.BuildConfig;
 import com.atakmap.android.reactive.ReactiveDropDown;
 
 import org.json.JSONArray;
@@ -62,6 +61,28 @@ public class AtakBridge {
         this.chatBridge = new ChatBridge(mapView, emitter);
         this.geofenceBridge = new GeofenceBridge(mapView, emitter);
         this.navigationRelay.start();
+
+        // Name the loaded bridge and where its class came from. An APK can contain
+        // two copies of these classes (an AAR plus a source build); in debug the
+        // classloader silently picks one and every artifact on disk still looks
+        // correct. This line is the cheapest way to see which copy actually won.
+        Log.i(TAG, "atak-reactive bridge " + BuildConfig.BRIDGE_VERSION
+                + " (built against ATAK " + BuildConfig.ATAK_VERSION + ") loaded from "
+                + describeClassSource());
+    }
+
+    /** Path of the artifact this class was actually loaded from, or a reason it is unknown. */
+    private static String describeClassSource() {
+        try {
+            java.security.CodeSource cs =
+                    AtakBridge.class.getProtectionDomain().getCodeSource();
+            if (cs != null && cs.getLocation() != null) {
+                return cs.getLocation().toString();
+            }
+            return "unknown location";
+        } catch (Throwable t) {
+            return "unavailable (" + t.getClass().getSimpleName() + ")";
+        }
     }
 
     @JavascriptInterface
@@ -217,10 +238,12 @@ public class AtakBridge {
     public void setNavVisible(boolean visible) {
         mapView.post(() -> {
             try {
+                // toggleButtons(boolean) sets the state directly. The previous
+                // read-then-broadcast-a-toggle could invert the result if anything
+                // changed visibility between the read and the broadcast landing.
                 NavView nav = NavView.getInstance();
-                if (nav != null && nav.buttonsVisible() != visible) {
-                    AtakBroadcast.getInstance().sendBroadcast(
-                            new Intent(NavView.TOGGLE_BUTTONS));
+                if (nav != null) {
+                    nav.toggleButtons(visible);
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error setting nav visibility", e);
@@ -776,9 +799,26 @@ public class AtakBridge {
         geofenceBridge.dismissGeofenceAlert(fenceUid, itemUid);
     }
 
+    /**
+     * The version of this bridge, injected from version.txt at build time.
+     *
+     * The SDK compares this against its own build-time version and warns on a
+     * mismatch. It was hardcoded to "0.0.0", so every correctly matched install
+     * reported a mismatch and no real mismatch could be detected.
+     */
     @JavascriptInterface
     public String getBridgeVersion() {
-        return "0.0.0";
+        return BuildConfig.BRIDGE_VERSION;
+    }
+
+    /**
+     * The ATAK version this bridge was compiled against. The AAR is published
+     * per-ATAK-version, so a bridge-5.4.0 artifact in a 5.6.0 project is a real
+     * failure mode that the version alone cannot describe.
+     */
+    @JavascriptInterface
+    public String getBridgeAtakVersion() {
+        return BuildConfig.ATAK_VERSION;
     }
 
     public void dispose() {

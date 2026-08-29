@@ -1,5 +1,7 @@
 export interface NativeBridge {
   getBridgeVersion(): string;
+  /** ATAK version the bridge was compiled against. Absent on bridges at or below 0.2.0. */
+  getBridgeAtakVersion?(): string;
   getSelfLocation(): string;
   getMapCenter(): string;
   addMarker(optionsJson: string): string;

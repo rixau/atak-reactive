@@ -3,6 +3,13 @@ plugins {
     id 'com.vanniktech.maven.publish'
 }
 
+// One source of truth for both the published coordinates and the version the
+// bridge reports at runtime. They described the same release but were derived
+// separately, and only the coordinates were ever real — getBridgeVersion()
+// returned a hardcoded "0.0.0".
+def bridgeVersion = file("${rootDir}/../version.txt").text.trim()
+def atakVersion = project.findProperty('atakVersion') ?: '5.6.0'
+
 android {
     namespace 'com.atakmap.android.reactive'
     compileSdk 36
@@ -11,6 +18,17 @@ android {
         minSdkVersion 21
         targetSdkVersion 34
         consumerProguardFiles "${rootDir}/consumer-rules.pro"
+
+        // Read by AtakBridge.getBridgeVersion() and logged at construction. The
+        // ATAK version is carried too: the AAR is published per-ATAK-version, so
+        // "0.2.0" alone cannot distinguish a bridge-5.4.0 artifact dropped into a
+        // 5.6.0 project — a mismatch the SDK's version check could not see either.
+        buildConfigField "String", "BRIDGE_VERSION", "\"${bridgeVersion}\""
+        buildConfigField "String", "ATAK_VERSION", "\"${atakVersion}\""
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     compileOptions {
@@ -31,9 +49,5 @@ dependencies {
 }
 
 mavenPublishing {
-    coordinates(
-        "dev.atakreactive",
-        "bridge-${project.findProperty('atakVersion') ?: '5.6.0'}",
-        file("${rootDir}/../version.txt").text.trim()
-    )
+    coordinates("dev.atakreactive", "bridge-${atakVersion}", bridgeVersion)
 }
