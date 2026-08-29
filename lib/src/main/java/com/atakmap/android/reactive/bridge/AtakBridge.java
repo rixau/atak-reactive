@@ -17,7 +17,6 @@ import com.atakmap.android.navigation.views.NavView;
 import com.atakmap.coremap.conversions.CoordinateFormat;
 import com.atakmap.coremap.conversions.CoordinateFormatUtilities;
 
-import com.atakmap.android.reactive.BuildConfig;
 import com.atakmap.android.reactive.ReactiveDropDown;
 
 import org.json.JSONArray;
@@ -66,8 +65,8 @@ public class AtakBridge {
         // two copies of these classes (an AAR plus a source build); in debug the
         // classloader silently picks one and every artifact on disk still looks
         // correct. This line is the cheapest way to see which copy actually won.
-        Log.i(TAG, "atak-reactive bridge " + BuildConfig.BRIDGE_VERSION
-                + " (built against ATAK " + BuildConfig.ATAK_VERSION + ") loaded from "
+        Log.i(TAG, "atak-reactive bridge " + BridgeInfo.BRIDGE_VERSION
+                + " (built against ATAK " + BridgeInfo.ATAK_VERSION + ") loaded from "
                 + describeClassSource());
     }
 
@@ -800,7 +799,8 @@ public class AtakBridge {
     }
 
     /**
-     * The version of this bridge, injected from version.txt at build time.
+     * The version of this bridge, from version.txt via the :bridge BuildConfig.
+     * Resolves to "unknown" in source-include builds — see BridgeInfo.
      *
      * The SDK compares this against its own build-time version and warns on a
      * mismatch. It was hardcoded to "0.0.0", so every correctly matched install
@@ -808,7 +808,7 @@ public class AtakBridge {
      */
     @JavascriptInterface
     public String getBridgeVersion() {
-        return BuildConfig.BRIDGE_VERSION;
+        return BridgeInfo.BRIDGE_VERSION;
     }
 
     /**
@@ -818,7 +818,7 @@ public class AtakBridge {
      */
     @JavascriptInterface
     public String getBridgeAtakVersion() {
-        return BuildConfig.ATAK_VERSION;
+        return BridgeInfo.ATAK_VERSION;
     }
 
     public void dispose() {

@@ -23,7 +23,11 @@ public class MapItemSerializer {
         JSONObject json = new JSONObject();
         json.put("uid", item.getUID());
         json.put("type", item.getType());
-        json.put("title", item.getTitle());
+        // org.json's put(String, Object) REMOVES the key on null, and the SDK
+        // declares title as a non-optional string — so an untitled item (freshly
+        // drawn shapes and routes usually are) would surface as undefined and
+        // break any consumer that calls string methods on it.
+        json.put("title", item.getTitle() != null ? item.getTitle() : "");
         json.put("visible", item.getVisible());
 
         MapGroup group = item.getGroup();

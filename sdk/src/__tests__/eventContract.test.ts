@@ -20,13 +20,19 @@ const libSrc = join(here, '..', '..', '..', 'lib', 'src');
 const eventsFile = join(here, '..', 'types', 'events.ts');
 
 function javaSources(dir: string): string[] {
-  const out: string[] = [];
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, e.name);
-    if (e.isDirectory()) out.push(...javaSources(p));
-    else if (e.name.endsWith('.java')) out.push(p);
-  }
-  return out;
+  return readdirSync(dir, { recursive: true })
+    .map(String)
+    .filter((f) => f.endsWith('.java'))
+    .map((f) => join(dir, f));
+}
+
+/**
+ * Comments and log strings must not count as emitters: a deleted listener whose
+ * explanatory comment still says emit("navVisible") would otherwise keep this
+ * test green — the exact regression class it exists to catch.
+ */
+function stripJavaComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }
 
 /** Names in AtakEventMap, read from the type declaration itself. */
@@ -41,7 +47,7 @@ function declaredEvents(): string[] {
 function emittedEvents(): Set<string> {
   const names = new Set<string>();
   for (const f of javaSources(libSrc)) {
-    const src = readFileSync(f, 'utf-8');
+    const src = stripJavaComments(readFileSync(f, 'utf-8'));
     for (const m of src.matchAll(/\bemit\(\s*"([A-Za-z]\w*)"/g)) names.add(m[1]!);
   }
   return names;
@@ -50,10 +56,12 @@ function emittedEvents(): Set<string> {
 // The SDK publishes standalone; lib/ only exists in the monorepo checkout.
 const runnable = existsSync(libSrc);
 
+// Computed once — both assertions read the same walk of lib/ and parse of events.ts.
+const emitted = runnable ? emittedEvents() : new Set<string>();
+const declared = runnable ? declaredEvents() : [];
+
 describe.skipIf(!runnable)('AtakEventMap ↔ Java emitters', () => {
   it('every declared event is emitted somewhere in lib/', () => {
-    const emitted = emittedEvents();
-    const declared = declaredEvents();
     expect(declared.length).toBeGreaterThan(0);
 
     const orphans = declared.filter((e) => !emitted.has(e));
@@ -65,8 +73,8 @@ describe.skipIf(!runnable)('AtakEventMap ↔ Java emitters', () => {
   });
 
   it('every event the bridge emits is declared in AtakEventMap', () => {
-    const declared = new Set(declaredEvents());
-    const undeclared = [...emittedEvents()].filter((e) => !declared.has(e));
+    const declaredSet = new Set(declared);
+    const undeclared = [...emitted].filter((e) => !declaredSet.has(e));
     expect(
       undeclared,
       `Emitted by the bridge but absent from AtakEventMap, so untyped for consumers: ` +

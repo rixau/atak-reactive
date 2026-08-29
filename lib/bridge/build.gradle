@@ -8,7 +8,26 @@ plugins {
 // separately, and only the coordinates were ever real — getBridgeVersion()
 // returned a hardcoded "0.0.0".
 def bridgeVersion = file("${rootDir}/../version.txt").text.trim()
-def atakVersion = project.findProperty('atakVersion') ?: '5.6.0'
+
+// The ATAK version names both the Maven coordinate and what the artifact claims
+// it was built against, so it must agree with the jar actually on the compile
+// path. It is derived from the sdks/<version>/ path when possible; an explicit
+// -PatakVersion that contradicts the path fails the build rather than baking an
+// authoritative-looking lie into the AAR.
+def atakVersion = project.findProperty('atakVersion')
+def sdkPathProp = project.findProperty('atakSdkPath')
+def versionFromPath = null
+if (sdkPathProp) {
+    def m = (sdkPathProp =~ /sdks\/([0-9]+(?:\.[0-9]+)+)\//)
+    if (m.find()) versionFromPath = m.group(1)
+}
+if (atakVersion && versionFromPath && atakVersion != versionFromPath) {
+    throw new GradleException(
+        "atakVersion=${atakVersion} contradicts atakSdkPath=${sdkPathProp} " +
+        "(which is ATAK ${versionFromPath}). The artifact would claim to be " +
+        "built against a version it was not. Fix one of the two properties.")
+}
+atakVersion = atakVersion ?: versionFromPath ?: '5.6.0'
 
 android {
     namespace 'com.atakmap.android.reactive'

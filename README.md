@@ -119,7 +119,7 @@ Substitute your own signing config before distributing through TAK.gov or an org
 | `useDropdownVisible()` | `boolean` | Whether the dropdown panel is currently visible. Use to pause work when backgrounded. |
 | `useDropdownSize()` | `{ width, height }` | Current dropdown dimensions as screen fractions. Updates on resize. |
 | `useNavVisible()` | `[boolean, setter]` | ATAK nav button visibility + setter. Reactive to changes from any source. |
-| `useRadialMenu()` | `MapItemData \| null` | The item whose radial menu is currently open, or `null`. Follows the user's focus. Observes only — never suppresses ATAK's menu. |
+| `useRadialMenu()` | `MapItemData \| null` | The item whose radial menu last opened, or `null` after it closes. Observes only — never suppresses ATAK's menu. Map-point menus (long-press on empty map) are invisible to ATAK's listener, so treat this as "last item menu", not proof one is open. |
 | `useNavigationState()` | `NavigationState` | Route navigation state: `active`, `routeUid`, `currentWaypointIndex`, `gpsLost`. Updates reactively as navigation progresses. |
 | `useContacts(filter?)` | `ContactData[]` | Live contact list. Filter by `team`, `role`, `status`, `type`. Updates on contact online/offline/change. |
 | `useContact(uid)` | `ContactData \| null` | Single contact by UID with live updates. Stable reference when unchanged. |

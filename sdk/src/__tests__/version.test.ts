@@ -25,14 +25,31 @@ afterEach(() => {
 
 describe('bridge/SDK version check', () => {
   it('stays silent when the bridge version matches the SDK', async () => {
-    const { SDK_VERSION } = await import('../index');
+    // SDK_VERSION is a build-time constant, identical in every module registry,
+    // so one import serves both the mock and the assertions.
+    const { isNative, getMapCenter, SDK_VERSION } = await load();
     window._atak = createMockBridge({ getBridgeVersion: () => SDK_VERSION });
 
-    const { isNative, getMapCenter } = await load();
     expect(isNative()).toBe(true);
     getMapCenter();
 
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('still checks the real bridge when the first call raced its injection', async () => {
+    // window._atak lands via addJavascriptInterface, which can lose a race with
+    // the first SDK call. A check that latched on the mock's answer would never
+    // examine the real bridge at all.
+    delete window._atak;
+
+    const { getMapCenter } = await load();
+    getMapCenter(); // answered by the mock — must not latch
+
+    window._atak = createMockBridge({ getBridgeVersion: () => '9.9.9' });
+    getMapCenter();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]![0])).toContain('9.9.9');
   });
 
   it('warns once, naming both versions, when they differ', async () => {

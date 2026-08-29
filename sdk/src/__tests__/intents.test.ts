@@ -79,6 +79,61 @@ describe('intent broadcast', () => {
     expect(callback.mock.calls[0]![0].extras.key).toBe('value');
   });
 
+  // useIntentCallback is the documented path for reacting to radial menu
+  // buttons (README: "Reacting to radial menu buttons"), and until here its
+  // filtering and cleanup had no coverage — the only unmount/filter tests for a
+  // callback-style hook were deleted along with useMenuAction.
+
+  it('useIntentCallback ignores non-matching actions', async () => {
+    window._atak = createMockBridge();
+
+    const { useIntentCallback } = await loadModules();
+    const callback = vi.fn();
+    renderHook(() => useIntentCallback('com.example.ACTION', callback));
+
+    act(() => {
+      emitFromNative('intentReceived', {
+        action: 'com.example.OTHER_ACTION',
+        extras: {},
+      });
+    });
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('useIntentCallback stops firing after unmount', async () => {
+    window._atak = createMockBridge();
+
+    const { useIntentCallback } = await loadModules();
+    const callback = vi.fn();
+    const { unmount } = renderHook(() =>
+      useIntentCallback('com.example.ACTION', callback),
+    );
+    unmount();
+
+    act(() => {
+      emitFromNative('intentReceived', {
+        action: 'com.example.ACTION',
+        extras: {},
+      });
+    });
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('useIntentCallback unregisters the action on unmount', async () => {
+    const unregisterFn = vi.fn();
+    window._atak = createMockBridge({ unregisterAction: unregisterFn });
+
+    const { useIntentCallback } = await loadModules();
+    const { unmount } = renderHook(() =>
+      useIntentCallback('com.example.ACTION', vi.fn()),
+    );
+    unmount();
+
+    expect(unregisterFn).toHaveBeenCalledWith('com.example.ACTION');
+  });
+
   it('sendBroadcast calls bridge with action and extras', async () => {
     const sendFn = vi.fn();
     window._atak = createMockBridge({ sendBroadcast: sendFn });
