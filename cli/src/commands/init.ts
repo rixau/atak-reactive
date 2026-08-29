@@ -248,7 +248,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       log('Would update:');
       log(`  implementation dependency → ${CLI_VERSION}`);
       log(`  @atak-reactive/sdk → ^${CLI_VERSION} in web/package.json`);
-      pendingPatches.forEach((p) => log(`  ${p}`));
+      pendingPatches.forEach((p) => log(`  + ${p}`));
       log('');
       log('Run without --dry-run to apply.');
       return;
@@ -284,6 +284,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       log('  1. Remove com/atakmap/android/reactive/ (source files)');
       log(`  2. Add implementation "dev.atakreactive:bridge-${effectiveAtakVersion}:${CLI_VERSION}"`);
       log(`  3. Update @atak-reactive/sdk → ^${CLI_VERSION} in web/package.json`);
+      pendingPatches.forEach((p, i) => log(`  ${i + 4}. ${p}`));
       log('');
       log('Run without --dry-run to apply.');
       return;

@@ -14,7 +14,12 @@ export function holdPort(port: number): Promise<Server | null> {
   // Fall back to 0.0.0.0 on hosts without IPv6.
   const bind = (host?: string) =>
     new Promise<Server | null>((resolve) => {
-      const server = createServer();
+      // Hang up immediately on anything that connects. With no connection handler
+      // an accepted socket is never ended, and close() waits for every one of them:
+      // `dev` holds this port across the whole Gradle build, so a browser tab left
+      // on the dev URL or a retrying HMR client would still be attached at release
+      // and the run would hang there, with Vite never spawned.
+      const server = createServer((socket) => socket.destroy());
       server.once('error', () => resolve(null));
       server.once('listening', () => resolve(server));
       if (host) server.listen(port, host);

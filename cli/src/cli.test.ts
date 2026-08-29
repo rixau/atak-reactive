@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createServer } from 'net';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { makeFixture, runCli, BUILT_CLI_VERSION, type Fixture } from './__testkit.js';
 
@@ -360,6 +360,38 @@ describe.skipIf(isWin)('init --dry-run — reports without writing', () => {
     expect(readFileSync(cfg, 'utf-8')).not.toContain('strictPort');
     expect(existsSync(`${cfg}.bak`)).toBe(false);
     expect(r.out).toContain('Update web/vite.config.ts');
+  });
+
+  it('reports the always-on patches on the source-migration path', () => {
+    // This path early-returned without printing pendingPatches, so the dry run
+    // listed only the three migration steps and hid the resValue insertions and
+    // vite.config refresh that a real run performs.
+    const fx = makeFixture();
+    mkdirSync(join(fx.root, 'app', 'src', 'main', 'java', 'com', 'atakmap', 'android', 'reactive'), {
+      recursive: true,
+    });
+    const cfg = join(fx.root, 'web', 'vite.config.ts');
+    writeFileSync(cfg, "export default { server: { port: 5173 } };\n");
+    const gradlePath = join(fx.root, 'app', 'build.gradle');
+    const before = readFileSync(gradlePath, 'utf-8');
+
+    const r = runCli(fx, ['init', '--dry-run']);
+
+    expect(r.out).toContain('Would migrate:');
+    expect(r.out).toContain('Add dev server host resValue');
+    expect(r.out).toContain('Add dev server port resValue');
+    expect(r.out).toContain('Update web/vite.config.ts');
+    // still a dry run
+    expect(readFileSync(gradlePath, 'utf-8')).toBe(before);
+    expect(readFileSync(cfg, 'utf-8')).not.toContain('strictPort');
+    expect(existsSync(`${cfg}.bak`)).toBe(false);
+  });
+
+  it('marks the always-on patches as additions on the AAR-update path', () => {
+    const fx = makeFixture({ aarVersion: '0.0.1' });
+    const r = runCli(fx, ['init', '--dry-run']);
+    expect(r.out).toContain('Would update:');
+    expect(r.out).toContain('+ Add dev server port resValue');
   });
 
   it('is a no-op the second time too — the first run must not have changed the report', () => {
