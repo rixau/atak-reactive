@@ -191,10 +191,50 @@ Substitute your own signing config before distributing through TAK.gov or an org
 | `dismissGeofenceAlert(fenceUid, itemUid)` | Dismiss a geofence alert. |
 | `on(event, fn)` / `off(event, fn)` | Low-level event subscribe/unsubscribe. |
 
-**Radial menu buttons.** There is no hook for "any radial menu button was clicked".
-ATAK dispatches each radial button as its own broadcast action, so observe the buttons
-your plugin defines with `registerAction()` / `useIntentCallback(action, cb)`. Use
-`useRadialMenu()` to know *which item* the user opened the menu on.
+### Reacting to radial menu buttons
+
+There is no `useMenuAction` hook, because ATAK cannot tell you *which* radial button was
+clicked. A click is observable — the buttons are enumerable widgets and their click
+handlers can be wrapped — but the action a button maps to lives in a private field of a
+package-private class, with a setter and no getter. Any hook that filtered by action id
+would have to reflect into ATAK internals to know what it was filtering on.
+
+You don't need it. Radial buttons dispatch through `AtakBroadcast`, and the action string
+is one *you* choose when you add the button, so you already know it. Declare the button in
+your plugin's menu XML:
+
+```xml
+<!-- assets/menus/my_menu.xml -->
+<menu>
+  <button ... >
+    <broadcast action="com.myplugin.FLAG_ITEM">
+      <extra key="uid" value="{uid}"/>
+    </broadcast>
+  </button>
+</menu>
+```
+
+ATAK phrase-expands each extra's value against the clicked item's metadata, so `{uid}`
+arrives as that item's UID. Then react to it like any other broadcast:
+
+```tsx
+import { useState } from 'react';
+import { useIntentCallback, useMapItem } from '@atak-reactive/sdk';
+
+function FlaggedItem() {
+  const [uid, setUid] = useState('');
+  useIntentCallback('com.myplugin.FLAG_ITEM', (intent) => {
+    // extras values are unknown — they arrive as strings from the Intent bundle
+    setUid(String(intent.extras.uid ?? ''));
+  });
+
+  const item = useMapItem(uid);
+  return item ? <div>Flagged: {item.title}</div> : null;
+}
+```
+
+Use `useRadialMenu()` when you only need to know *which item* the user opened the menu on,
+without adding a button of your own.
 
 ## Events
 
