@@ -69,4 +69,23 @@ jobs:
         run: |
           cd lib
           ./gradlew :bridge:assembleRelease \
-            -PatakSdkPath=sdks/${{ matrix.atak-version }}/main.jar
+            -PatakSdkPath=sdks/${{ matrix.atak-version }}/main.jar \
+            -PatakVersion=${{ matrix.atak-version }}
+
+      # getBridgeVersion() was a hardcoded "0.0.0" for every release up to 0.2.0,
+      # so the SDK's mismatch check was noise and a real mismatch was invisible.
+      # No JS test can catch a regression here — under vitest SDK_VERSION falls
+      # back to "0.0.0" too, which is precisely the value the bug returned. This
+      # is the only place the injection is actually observable.
+      - name: Bridge reports the version in version.txt
+        run: |
+          EXPECTED=$(tr -d '[:space:]' < version.txt)
+          GENERATED=$(find lib/bridge/build -name BuildConfig.java | head -1)
+          echo "checking $GENERATED"
+          grep -q "BRIDGE_VERSION = \"${EXPECTED}\"" "$GENERATED" \
+            || { echo "::error::bridge reports the wrong version — expected ${EXPECTED}"; \
+                 grep -E 'BRIDGE_VERSION|ATAK_VERSION' "$GENERATED"; exit 1; }
+          grep -q "ATAK_VERSION = \"${{ matrix.atak-version }}\"" "$GENERATED" \
+            || { echo "::error::bridge reports the wrong ATAK version"; \
+                 grep -E 'BRIDGE_VERSION|ATAK_VERSION' "$GENERATED"; exit 1; }
+          echo "OK: $(grep -E 'BRIDGE_VERSION|ATAK_VERSION' "$GENERATED" | tr -s ' ')"

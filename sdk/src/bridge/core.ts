@@ -16,11 +16,19 @@ function getBridge(): NativeBridge {
   const bridge = window._atak ?? mockBridge;
 
   if (!versionChecked) {
-    versionChecked = true;
     const bridgeVersion = bridge.getBridgeVersion?.() ?? 'unknown';
+    // The mock answers until the native bridge injects window._atak, which can
+    // land after the first SDK call. Latching on a mock answer would mean the
+    // real bridge's version is never checked for the whole session.
+    if (bridgeVersion !== 'mock') versionChecked = true;
     if (bridgeVersion !== SDK_VERSION && bridgeVersion !== 'unknown' && bridgeVersion !== 'mock') {
+      // The ATAK build is named when the bridge can report it: the AAR is
+      // published per-ATAK-version, so the wrong artifact for the project is a
+      // failure the version number alone does not describe.
+      const atak = bridge.getBridgeAtakVersion?.();
       console.warn(
-        `[atak-reactive] Version mismatch: SDK ${SDK_VERSION}, bridge ${bridgeVersion}. ` +
+        `[atak-reactive] Version mismatch: SDK ${SDK_VERSION}, bridge ${bridgeVersion}` +
+        `${atak ? ` (built against ATAK ${atak})` : ''}. ` +
         `Run 'npx @atak-reactive/cli init' to sync.`,
       );
     }

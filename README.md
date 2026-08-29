@@ -119,8 +119,7 @@ Substitute your own signing config before distributing through TAK.gov or an org
 | `useDropdownVisible()` | `boolean` | Whether the dropdown panel is currently visible. Use to pause work when backgrounded. |
 | `useDropdownSize()` | `{ width, height }` | Current dropdown dimensions as screen fractions. Updates on resize. |
 | `useNavVisible()` | `[boolean, setter]` | ATAK nav button visibility + setter. Reactive to changes from any source. |
-| `useMenuAction(actionId, cb)` | `void` | Callback when a radial menu button is clicked. Filters by action ID. |
-| `useMenuAction(cb)` | `void` | Callback for any radial menu button click. No filter. |
+| `useRadialMenu()` | `MapItemData \| null` | The item whose radial menu last opened, or `null` after it closes. Observes only — never suppresses ATAK's menu. Map-point menus (long-press on empty map) are invisible to ATAK's listener, so treat this as "last item menu", not proof one is open. |
 | `useNavigationState()` | `NavigationState` | Route navigation state: `active`, `routeUid`, `currentWaypointIndex`, `gpsLost`. Updates reactively as navigation progresses. |
 | `useContacts(filter?)` | `ContactData[]` | Live contact list. Filter by `team`, `role`, `status`, `type`. Updates on contact online/offline/change. |
 | `useContact(uid)` | `ContactData \| null` | Single contact by UID with live updates. Stable reference when unchanged. |
@@ -192,6 +191,51 @@ Substitute your own signing config before distributing through TAK.gov or an org
 | `dismissGeofenceAlert(fenceUid, itemUid)` | Dismiss a geofence alert. |
 | `on(event, fn)` / `off(event, fn)` | Low-level event subscribe/unsubscribe. |
 
+### Reacting to radial menu buttons
+
+There is no `useMenuAction` hook, because ATAK cannot tell you *which* radial button was
+clicked. A click is observable — the buttons are enumerable widgets and their click
+handlers can be wrapped — but the action a button maps to lives in a private field of a
+package-private class, with a setter and no getter. Any hook that filtered by action id
+would have to reflect into ATAK internals to know what it was filtering on.
+
+You don't need it. Radial buttons dispatch through `AtakBroadcast`, and the action string
+is one *you* choose when you add the button, so you already know it. Declare the button in
+your plugin's menu XML:
+
+```xml
+<!-- assets/menus/my_menu.xml -->
+<menu>
+  <button ... >
+    <broadcast action="com.myplugin.FLAG_ITEM">
+      <extra key="uid" value="{uid}"/>
+    </broadcast>
+  </button>
+</menu>
+```
+
+ATAK phrase-expands each extra's value against the clicked item's metadata, so `{uid}`
+arrives as that item's UID. Then react to it like any other broadcast:
+
+```tsx
+import { useState } from 'react';
+import { useIntentCallback, useMapItem } from '@atak-reactive/sdk';
+
+function FlaggedItem() {
+  const [uid, setUid] = useState('');
+  useIntentCallback('com.myplugin.FLAG_ITEM', (intent) => {
+    // extras values are unknown — they arrive as strings from the Intent bundle
+    setUid(String(intent.extras.uid ?? ''));
+  });
+
+  const item = useMapItem(uid);
+  return item ? <div>Flagged: {item.title}</div> : null;
+}
+```
+
+Use `useRadialMenu()` when you only need to know *which item* the user opened the menu on,
+without adding a button of your own.
+
 ## Events
 
 | Event | Payload | Description |
@@ -208,7 +252,7 @@ Substitute your own signing config before distributing through TAK.gov or an org
 | `dropDownSizeChanged` | `{ width, height }` | Dropdown panel resized |
 | `navVisible` | `boolean` | ATAK nav buttons shown/hidden |
 | `preferenceChanged` | `{ key, value }` | Any ATAK preference changed |
-| `menuAction` | `{ actionId, itemUid, itemType, title }` | Radial menu button clicked |
+| `radialMenuChanged` | `{ open, item }` | Radial menu opened or closed on an item |
 | `navigationStateChanged` | `{ active, routeUid, currentWaypointIndex, gpsLost }` | Route navigation state changed |
 | `contactsChanged` | `ContactData[]` | Contact list updated (online/offline/changed) |
 | `chatMessage` | `ChatMessageData` | New chat message received |
