@@ -7,6 +7,10 @@ import com.atakmap.android.maps.MapEventDispatcher;
 import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.PointMapItem;
+import com.atakmap.android.menu.MapMenuEventListener;
+import com.atakmap.android.menu.MapMenuReceiver;
+import com.atakmap.android.navigation.views.NavView;
+import com.atakmap.android.navigation.views.buttons.NavButtonsVisibilityListener;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
@@ -28,6 +32,8 @@ public class BridgeEventEmitter {
     private MapEventDispatcher.MapEventDispatchListener mapLongPressListener;
     private MapEventDispatcher.MapEventDispatchListener itemClickListener;
     private PointMapItem.OnPointChangedListener selfLocationListener;
+    private NavButtonsVisibilityListener navVisibilityListener;
+    private MapMenuEventListener radialMenuListener;
 
     private boolean listening = false;
 
@@ -128,6 +134,46 @@ public class BridgeEventEmitter {
             self.addOnPointChangedListener(selfLocationListener);
         }
 
+        // Nav button visibility. The SDK has always declared a `navVisible` event and
+        // shipped a useNavVisible() hook documented as reactive, but nothing ever
+        // emitted it — so the hook's value was frozen at whatever it read on mount.
+        NavView navView = NavView.getInstance();
+        if (navView != null) {
+            navVisibilityListener = visible -> {
+                if (!subscriptions.contains("navVisible")) return;
+                emit("navVisible", String.valueOf(visible));
+            };
+            navView.addButtonVisibilityListener(navVisibilityListener);
+        } else {
+            Log.d(TAG, "NavView unavailable — navVisible events will not be emitted");
+        }
+
+        // Radial menu open/close. ATAK exposes no generic "any radial button was
+        // clicked" hook — buttons dispatch their own broadcast actions, which a
+        // plugin observes with registerAction() when it knows the action string.
+        // What is observable is which item's menu is open, which is what this
+        // reports.
+        MapMenuReceiver menuReceiver = MapMenuReceiver.getInstance();
+        if (menuReceiver != null) {
+            radialMenuListener = new MapMenuEventListener() {
+                @Override
+                public boolean onShowMenu(MapItem item) {
+                    emitRadialMenu(true, item);
+                    // Observe, never intercept: a true return suppresses ATAK's own
+                    // radial menu, and a plugin panel has no business doing that.
+                    return false;
+                }
+
+                @Override
+                public void onHideMenu(MapItem item) {
+                    emitRadialMenu(false, item);
+                }
+            };
+            menuReceiver.addEventListener(radialMenuListener);
+        } else {
+            Log.d(TAG, "MapMenuReceiver unavailable — radialMenuChanged will not be emitted");
+        }
+
         Log.d(TAG, "Started listening for map events");
     }
 
@@ -156,7 +202,38 @@ public class BridgeEventEmitter {
             }
         }
 
+        if (radialMenuListener != null) {
+            MapMenuReceiver menuReceiver = MapMenuReceiver.getInstance();
+            if (menuReceiver != null) {
+                menuReceiver.removeEventListener(radialMenuListener);
+            }
+            radialMenuListener = null;
+        }
+
+        if (navVisibilityListener != null) {
+            NavView navView = NavView.getInstance();
+            if (navView != null) {
+                navView.removeButtonVisibilityListener(navVisibilityListener);
+            }
+            navVisibilityListener = null;
+        }
+
         Log.d(TAG, "Stopped listening for map events");
+    }
+
+    /** Radial menu opened or closed, with the item it belongs to. */
+    private void emitRadialMenu(boolean open, MapItem item) {
+        if (!subscriptions.contains("radialMenuChanged")) return;
+        try {
+            JSONObject json = new JSONObject();
+            json.put("open", open);
+            json.put("item", item != null
+                    ? MapItemSerializer.serialize(item)
+                    : JSONObject.NULL);
+            emit("radialMenuChanged", json.toString());
+        } catch (JSONException e) {
+            Log.e(TAG, "Error emitting radialMenuChanged", e);
+        }
     }
 
     public void emitMapItemsChanged(JSONArray added, JSONArray removed,

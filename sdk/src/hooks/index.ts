@@ -14,7 +14,7 @@ export {
   useNavVisible,
 } from './useDropdown';
 export { usePreference } from './usePreference';
-export { useMenuAction } from './useMenuAction';
+export { useRadialMenu } from './useRadialMenu';
 export { useNavigationState } from './useNavigationState';
 export { useContacts } from './useContacts';
 export { useContact } from './useContact';

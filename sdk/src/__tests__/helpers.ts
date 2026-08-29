@@ -1,7 +1,7 @@
 import type {
   MapItemData,
   CotEventData,
-  MenuActionEvent,
+  RadialMenuEvent,
   NavigationState,
   ContactData,
   ChatMessageData,
@@ -52,15 +52,12 @@ export function makeCotEvent(overrides?: Partial<CotEventData>): CotEventData {
   };
 }
 
-export function makeMenuAction(
-  overrides?: Partial<MenuActionEvent>,
-): MenuActionEvent {
-  counter++;
+export function makeRadialMenuEvent(
+  overrides?: Partial<RadialMenuEvent>,
+): RadialMenuEvent {
   return {
-    actionId: `action-${counter}`,
-    itemUid: `item-${counter}`,
-    itemType: 'a-f-G',
-    title: `Item ${counter}`,
+    open: true,
+    item: makeMapItem(),
     ...overrides,
   };
 }
