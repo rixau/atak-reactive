@@ -320,7 +320,7 @@ def getCommandFlavor() {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: '*.jar')
-    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.webkit:webkit:1.17.0'
     // Real plugins use the published AAR instead of java.srcDirs:
     // implementation "dev.atakreactive:bridge-${ATAK_VERSION}:x.y.z"
 }

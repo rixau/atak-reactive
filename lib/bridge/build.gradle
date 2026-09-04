@@ -64,7 +64,7 @@ android {
 
 dependencies {
     compileOnly files(project.findProperty("atakSdkPath") ? "${rootDir}/${project.findProperty('atakSdkPath')}" : "${rootDir}/sdks/5.6.0/main.jar")
-    compileOnly 'androidx.webkit:webkit:1.12.1'
+    compileOnly 'androidx.webkit:webkit:1.17.0'
 }
 
 mavenPublishing {

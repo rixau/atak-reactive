@@ -1,5 +1,5 @@
 // Root build — plugin declarations only (applied in :bridge subproject)
 plugins {
     id 'com.android.library' version '8.13.0' apply false
-    id 'com.vanniktech.maven.publish' version '0.36.0' apply false
+    id 'com.vanniktech.maven.publish' version '0.37.0' apply false
 }
