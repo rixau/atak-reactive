@@ -1,0 +1,50 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      actions:
+        patterns: ['*']
+
+  # sdk and cli are published to npm, so their runtime deps ship to consumers.
+  # example/web is only the demo app.
+  - package-ecosystem: npm
+    directories:
+      - /sdk
+      - /cli
+      - /example/web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      production-minor-patch:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  - package-ecosystem: gradle
+    directories:
+      - /lib
+      - /example
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      gradle-minor-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
