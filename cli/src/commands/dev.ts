@@ -78,7 +78,7 @@ function buildAndInstall(root: string, flavor: string, port: number): void {
     process.exit(1);
   }
   try {
-    execSync(`adb install -r "${join(apkDir, apk)}"`, { stdio: 'inherit' });
+    execSync(`adb install -r -d "${join(apkDir, apk)}"`, { stdio: 'inherit' });
     log(`APK installed (${apk}).`);
   } catch {
     logError('APK install failed.');
