@@ -20,6 +20,17 @@ if [ -f "${DEST}/main.jar" ]; then
     exit 0
 fi
 
+# The release lives in a private repo, so an unauthenticated gh reports it as
+# "release not found" — which reads as a missing asset, not a missing token.
+# Say what is actually wrong. This is what an outside contributor sees if they
+# run the script locally, and what CI showed for every fork PR before forks were
+# gated out of lib-compile.
+if [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ] && ! gh auth status >/dev/null 2>&1; then
+    echo "error: not authenticated to GitHub — ${REPO} is private." >&2
+    echo "  Set GH_TOKEN (CI: secrets.CI_SDK_TOKEN) or run: gh auth login" >&2
+    exit 1
+fi
+
 echo "Downloading main.jar for ATAK ${ATAK_VERSION}..."
 gh release download "${TAG}" \
     --repo "${REPO}" \
