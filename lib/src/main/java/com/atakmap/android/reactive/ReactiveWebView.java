@@ -2,7 +2,9 @@ package com.atakmap.android.reactive;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.os.Build;
 import android.webkit.ConsoleMessage;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -12,6 +14,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
+import androidx.annotation.RequiresApi;
 import androidx.webkit.WebViewAssetLoader;
 
 import com.atakmap.android.maps.MapView;
@@ -91,47 +94,98 @@ public class ReactiveWebView extends FrameLayout {
 
         setBackgroundColor(0xFF1a1a2e);
 
-        mapView.post(() -> {
-            if (destroyed) return;
+        mapView.post(this::createWebView);
+    }
 
-            Context appContext = mapView.getContext();
+    /**
+     * Build the WebView and everything hanging off it. Runs once from the
+     * constructor and again after a renderer death, which leaves the old view
+     * unusable.
+     */
+    private void createWebView() {
+        if (destroyed) return;
 
-            webView = new WebView(appContext);
-            webView.setLayoutParams(new FrameLayout.LayoutParams(
-                    LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        Context appContext = mapView.getContext();
 
-            assetLoader = new WebViewAssetLoader.Builder()
-                    .addPathHandler("/assets/",
-                            new WebViewAssetLoader.AssetsPathHandler(pluginContext))
-                    .build();
+        webView = new WebView(appContext);
+        webView.setLayoutParams(new FrameLayout.LayoutParams(
+                LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
-            webView.setBackgroundColor(0xFF1a1a2e);
+        assetLoader = new WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/",
+                        new WebViewAssetLoader.AssetsPathHandler(getContext()))
+                .build();
 
-            configureSettings();
+        webView.setBackgroundColor(0xFF1a1a2e);
 
-            eventEmitter = new BridgeEventEmitter(webView);
-            bridge = new AtakBridge(mapView, eventEmitter);
-            // No setDropDown() — dropdown sizing hooks will no-op/return defaults
-            webView.addJavascriptInterface(bridge, "_atak");
+        configureSettings();
 
-            for (Object extra : pendingBridges) {
-                String name = bridgeName(extra);
-                webView.addJavascriptInterface(extra, name);
-                Log.d(TAG, "Registered bridge: " + name);
-            }
+        eventEmitter = new BridgeEventEmitter(webView);
+        bridge = new AtakBridge(mapView, eventEmitter);
+        // No setDropDown() — dropdown sizing hooks will no-op/return defaults
+        webView.addJavascriptInterface(bridge, "_atak");
 
-            webView.setWebViewClient(new EmbeddedWebViewClient());
-            webView.setWebChromeClient(new EmbeddedWebChromeClient());
-            webView.loadUrl("about:blank");
+        for (Object extra : pendingBridges) {
+            String name = bridgeName(extra);
+            webView.addJavascriptInterface(extra, name);
+            Log.d(TAG, "Registered bridge: " + name);
+        }
 
-            addView(webView);
+        webView.setWebViewClient(new EmbeddedWebViewClient());
+        webView.setWebChromeClient(new EmbeddedWebChromeClient());
+        webView.loadUrl("about:blank");
 
-            // Replay an onResume() that arrived before this runnable executed.
-            if (pendingResume) {
-                pendingResume = false;
-                onResume();
-            }
-        });
+        addView(webView);
+
+        // Replay an onResume() that arrived before this runnable executed.
+        if (pendingResume) {
+            pendingResume = false;
+            onResume();
+        }
+    }
+
+    /**
+     * The renderer process behind the WebView is gone. The framework is explicit
+     * that the view cannot be used again and must be destroyed, so tear it down
+     * and build a fresh one; if this view is on screen, reload straight away.
+     *
+     * Every WebView on the same renderer is asked; the host process is killed
+     * unless all of them report the death handled. ATAK itself holds several
+     * WebViews with the default client, so on builds where those still answer
+     * false this cannot keep ATAK up by itself — it keeps atak-reactive from
+     * being the reason.
+     */
+    private void onRendererGone(boolean crashed) {
+        Log.e(TAG, "WebView renderer " + (crashed ? "crashed" : "was killed by the system")
+                + " — rebuilding the WebView");
+        if (destroyed) return;
+
+        stopDevRetry();
+        WebView dead = webView;
+        BridgeEventEmitter oldEmitter = eventEmitter;
+        AtakBridge oldBridge = bridge;
+        webView = null;
+        eventEmitter = null;
+        bridge = null;
+        loaded = false;
+        devErrorShowing = false;
+
+        stopPreferenceListener();
+        if (oldEmitter != null) {
+            oldEmitter.stopListening();
+        }
+        if (oldBridge != null) {
+            oldBridge.dispose();
+        }
+        if (dead != null) {
+            removeView(dead);
+            dead.destroy();
+        }
+
+        createWebView();
+        if (isShown()) {
+            onResume();
+        }
     }
 
     /**
@@ -548,6 +602,17 @@ public class ReactiveWebView extends FrameLayout {
                 devErrorShowing = false;
             }
             super.onPageFinished(view, url);
+        }
+
+        /**
+         * Returning true is what stops WebView from killing ATAK. Below API 26
+         * the callback does not exist and the host dies regardless.
+         */
+        @RequiresApi(Build.VERSION_CODES.O)
+        @Override
+        public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            onRendererGone(detail.didCrash());
+            return true;
         }
     }
 

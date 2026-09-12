@@ -3,7 +3,9 @@ package com.atakmap.android.reactive;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.os.Build;
 import android.webkit.ConsoleMessage;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -14,6 +16,7 @@ import android.webkit.WebViewClient;
 import android.widget.LinearLayout;
 import android.widget.LinearLayout.LayoutParams;
 
+import androidx.annotation.RequiresApi;
 import androidx.webkit.WebViewAssetLoader;
 
 import com.atakmap.android.dropdown.DropDown.OnStateListener;
@@ -57,6 +60,8 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private final int devPort;
     private final LinearLayout container;
     private final boolean devMode;
+    private final Context pluginContext;
+    private final Object[] additionalBridges;
 
     /** Set by disposeImpl(); the WebView is destroyed and must not be loaded again. */
     private volatile boolean disposed = false;
@@ -180,56 +185,109 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         this.devHost = resolveDevHost(pluginContext);
         this.devPort = resolveDevPort(pluginContext);
         this.devUrl = "http://" + devHost + ":" + devPort;
+        this.pluginContext = pluginContext;
+        this.additionalBridges = additionalBridges;
 
         container = new LinearLayout(pluginContext);
         container.setLayoutParams(new LayoutParams(
                 LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         container.setBackgroundColor(0xFF1a1a2e);
 
-        mapView.post(() -> {
-            Context appContext = mapView.getContext();
+        mapView.post(this::createWebView);
+    }
 
-            webView = new WebView(appContext);
-            webView.setLayoutParams(new LayoutParams(
-                    LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+    /**
+     * Build the WebView and everything hanging off it. Runs once from the
+     * constructor and again after a renderer death, which leaves the old view
+     * unusable.
+     */
+    private void createWebView() {
+        MapView mapView = getMapView();
+        Context appContext = mapView.getContext();
 
-            // Use plugin context for assets (web files are in the plugin APK, not ATAK's)
-            assetLoader = new WebViewAssetLoader.Builder()
-                    .addPathHandler("/assets/",
-                            new WebViewAssetLoader.AssetsPathHandler(pluginContext))
-                    .build();
+        webView = new WebView(appContext);
+        webView.setLayoutParams(new LayoutParams(
+                LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
-            // Dark background from the start — no white flash
-            webView.setBackgroundColor(0xFF1a1a2e);
+        // Use plugin context for assets (web files are in the plugin APK, not ATAK's)
+        assetLoader = new WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/",
+                        new WebViewAssetLoader.AssetsPathHandler(pluginContext))
+                .build();
 
-            configureSettings();
-            onConfigureWebView(webView, webView.getSettings());
+        // Dark background from the start — no white flash
+        webView.setBackgroundColor(0xFF1a1a2e);
 
-            eventEmitter = new BridgeEventEmitter(webView);
-            bridge = new AtakBridge(mapView, eventEmitter);
-            bridge.setDropDown(ReactiveDropDown.this);
-            webView.addJavascriptInterface(bridge, "_atak");
+        configureSettings();
+        onConfigureWebView(webView, webView.getSettings());
 
-            // Register bridges passed via constructor varargs (legacy)
-            for (Object extra : additionalBridges) {
-                String name = bridgeName(extra);
-                webView.addJavascriptInterface(extra, name);
-                Log.d(TAG, "Registered bridge: " + name);
-            }
+        eventEmitter = new BridgeEventEmitter(webView);
+        bridge = new AtakBridge(mapView, eventEmitter);
+        bridge.setDropDown(this);
+        webView.addJavascriptInterface(bridge, "_atak");
 
-            // Register bridges added via addBridge()
-            for (Object extra : pendingBridges) {
-                String name = bridgeName(extra);
-                webView.addJavascriptInterface(extra, name);
-                Log.d(TAG, "Registered bridge: " + name);
-            }
+        // Register bridges passed via constructor varargs (legacy)
+        for (Object extra : additionalBridges) {
+            String name = bridgeName(extra);
+            webView.addJavascriptInterface(extra, name);
+            Log.d(TAG, "Registered bridge: " + name);
+        }
 
-            webView.setWebViewClient(new ReactiveWebViewClient());
-            webView.setWebChromeClient(new ReactiveWebChromeClient());
-            webView.loadUrl("about:blank");
+        // Register bridges added via addBridge()
+        for (Object extra : pendingBridges) {
+            String name = bridgeName(extra);
+            webView.addJavascriptInterface(extra, name);
+            Log.d(TAG, "Registered bridge: " + name);
+        }
 
-            container.addView(webView);
-        });
+        webView.setWebViewClient(new ReactiveWebViewClient());
+        webView.setWebChromeClient(new ReactiveWebChromeClient());
+        webView.loadUrl("about:blank");
+
+        container.addView(webView);
+    }
+
+    /**
+     * The renderer process behind the WebView is gone. The framework is explicit
+     * that the view cannot be used again and must be destroyed, so tear it down,
+     * close the panel if it is open, and build a fresh one for the next open.
+     *
+     * Every WebView on the same renderer is asked; the host process is killed
+     * unless all of them report the death handled. ATAK itself holds several
+     * WebViews with the default client, so on builds where those still answer
+     * false this cannot keep ATAK up by itself — it keeps atak-reactive from
+     * being the reason.
+     */
+    private void onRendererGone(boolean crashed) {
+        Log.e(TAG, "WebView renderer " + (crashed ? "crashed" : "was killed by the system")
+                + " — closing the panel and rebuilding the WebView");
+        if (disposed) return;
+
+        stopDevRetry();
+        WebView dead = webView;
+        BridgeEventEmitter oldEmitter = eventEmitter;
+        AtakBridge oldBridge = bridge;
+        webView = null;
+        eventEmitter = null;
+        bridge = null;
+
+        stopPreferenceListener();
+        if (oldEmitter != null) {
+            onStopListening(oldEmitter);
+            oldEmitter.stopListening();
+        }
+        if (oldBridge != null) {
+            oldBridge.dispose();
+        }
+        if (dead != null) {
+            container.removeView(dead);
+            dead.destroy();
+        }
+
+        if (!isClosed()) {
+            closeDropDown();
+        }
+        createWebView();
     }
 
     /**
@@ -553,6 +611,17 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                 devFallbackTriggered = false;
             }
             super.onPageFinished(view, url);
+        }
+
+        /**
+         * Returning true is what stops WebView from killing ATAK. Below API 26
+         * the callback does not exist and the host dies regardless.
+         */
+        @RequiresApi(Build.VERSION_CODES.O)
+        @Override
+        public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            onRendererGone(detail.didCrash());
+            return true;
         }
     }
 
