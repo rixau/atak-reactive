@@ -5,6 +5,7 @@ import { MarkersPage } from './pages/Markers';
 import { SettingsPage } from './pages/Settings';
 import { IntegrationTestPage } from './pages/IntegrationTest';
 import { EmbeddedPage } from './pages/Embedded';
+import { PerfPage } from './pages/Perf';
 import { useLocation } from 'react-router-dom';
 
 export function App() {
@@ -37,6 +38,7 @@ export function App() {
           <Route path="/markers" element={<MarkersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/test" element={<IntegrationTestPage />} />
+          <Route path="/perf" element={<PerfPage />} />
         </Routes>
       </div>
 
@@ -45,6 +47,7 @@ export function App() {
         <Tab to="/markers" label="Map Items" />
         <Tab to="/settings" label="Settings" />
         <Tab to="/test" label="Test" />
+        <Tab to="/perf" label="Perf" />
       </nav>
     </div>
   );
