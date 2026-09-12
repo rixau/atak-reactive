@@ -54,12 +54,6 @@ function metric(key: string, value: number | string | null) {
   mark(`METRIC:${key}=${value ?? 'n/a'}`);
 }
 
-/** Chromium exposes this non-standard field in WebView; absent in the mock. */
-function jsHeapKb(): number | null {
-  const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
-  return mem ? Math.round(mem.usedJSHeapSize / 1024) : null;
-}
-
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 async function waitFor(pred: () => boolean, timeoutMs: number): Promise<boolean> {
@@ -100,7 +94,6 @@ export function PerfPage() {
   const enter = (p: Phase) => {
     setPhase(p);
     mark(`PHASE:${p}`);
-    metric(`${p}.jsHeapKb`, jsHeapKb());
     note(`→ ${p}`);
   };
 
@@ -166,7 +159,7 @@ export function PerfPage() {
     const phaseMs = cfg.phaseSecs * 1000;
     const uids: string[] = [];
 
-    mark(`CONFIG:${JSON.stringify({ ...cfg, native: isNative(), sdkHeapProbe: jsHeapKb() !== null })}`);
+    mark(`CONFIG:${JSON.stringify({ ...cfg, native: isNative() })}`);
     if (!isNative()) {
       // The mock never pushes mapItemsChanged, so the consistency waits below
       // would each sit out their 30s timeout. Numbers from a browser are not

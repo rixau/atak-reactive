@@ -294,8 +294,8 @@ METRICS=$(adb logcat -d 2>/dev/null | grep -a -o 'PERF_TEST:METRIC:[^ ]*' | sed 
             printf "- churn with hook vs without: **%+.0f MB**, **%+.1f%% ATAK CPU** — the bridge + React share of a busy map\n", mb("churn") - mb("churn-unsubscribed"), cpu("churn") - cpu("churn-unsubscribed")
         if (cnt["cleaned"] && cnt["idle"])
             printf "- after cleanup vs idle: **%+.0f MB** (growth here suggests a leak)\n", mb("cleaned") - mb("idle")
-        if (cnt["closed-after"] && cnt["closed"])
-            printf "- closed-after vs closed: **%+.0f MB** (should be ~0 once the renderer is released)\n", mb("closed-after") - mb("closed")
+        if (cnt["closed-after"] && cnt["idle"])
+            printf "- closed-after vs idle: **%+.0f MB** retained after close (the page stays loaded; growth here that repeats run over run is a leak)\n", mb("closed-after") - mb("idle")
     }' "$CSV"
     echo ""
     echo "## In-page metrics"

@@ -18,6 +18,9 @@ public class ReactiveExampleComponent extends DropDownMapComponent {
 
     private ReactiveDropDown reactiveDropDown;
     private MixedExampleReceiver mixedReceiver;
+    private NativeChurnReceiver churnReceiver;
+    private NativeListReceiver nativeListReceiver;
+    private BenchReceiver benchReceiver;
 
     @Override
     public void onCreate(final Context context, Intent intent,
@@ -35,11 +38,31 @@ public class ReactiveExampleComponent extends DropDownMapComponent {
         mixedFilter.addAction(SHOW_MIXED, "Mixed native + React example");
         registerDropDownReceiver(mixedReceiver, mixedFilter);
 
+        // Benchmark-only: lets scripts put a marker load on the map that does
+        // not depend on any panel being open. See NativeChurnReceiver.
+        churnReceiver = new NativeChurnReceiver(view);
+        churnReceiver.register(view.getContext().getApplicationContext());
+
+        // Benchmark-only: the native counterpart of the Map Items page, and an
+        // adb-reachable way to open either panel. See BenchReceiver.
+        nativeListReceiver = new NativeListReceiver(view, context);
+        DocumentedIntentFilter nativeFilter = new DocumentedIntentFilter();
+        nativeFilter.addAction(NativeListReceiver.SHOW, "Benchmark: plain native list");
+        registerDropDownReceiver(nativeListReceiver, nativeFilter);
+        benchReceiver = new BenchReceiver();
+        benchReceiver.register(view.getContext().getApplicationContext());
+
         Log.d(TAG, "Reactive example component initialized");
     }
 
     @Override
     protected void onDestroyImpl(Context context, MapView view) {
+        if (churnReceiver != null) {
+            churnReceiver.unregister(view.getContext().getApplicationContext());
+        }
+        if (benchReceiver != null) {
+            benchReceiver.unregister(view.getContext().getApplicationContext());
+        }
         super.onDestroyImpl(context, view);
     }
 }
