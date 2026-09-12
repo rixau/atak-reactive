@@ -5,7 +5,14 @@ import { MarkersPage } from './pages/Markers';
 import { SettingsPage } from './pages/Settings';
 import { IntegrationTestPage } from './pages/IntegrationTest';
 import { EmbeddedPage } from './pages/Embedded';
+import { PerfPage } from './pages/Perf';
 import { useLocation } from 'react-router-dom';
+
+// The Perf tab is a build-time option: `VITE_PERF_TAB=true npm run build`
+// (then assemble the APK as usual). Vite substitutes the value when bundling,
+// so a normal build ships only the example pages and the Perf page is
+// tree-shaken out. Always on under the dev server.
+const showDevTools = import.meta.env.DEV || import.meta.env.VITE_PERF_TAB === 'true';
 
 export function App() {
   const location = useLocation();
@@ -37,6 +44,7 @@ export function App() {
           <Route path="/markers" element={<MarkersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/test" element={<IntegrationTestPage />} />
+          {showDevTools && <Route path="/perf" element={<PerfPage />} />}
         </Routes>
       </div>
 
@@ -45,6 +53,7 @@ export function App() {
         <Tab to="/markers" label="Map Items" />
         <Tab to="/settings" label="Settings" />
         <Tab to="/test" label="Test" />
+        {showDevTools && <Tab to="/perf" label="Perf" />}
       </nav>
     </div>
   );

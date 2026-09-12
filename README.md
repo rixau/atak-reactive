@@ -432,7 +432,13 @@ cd sdk && npm test          # 153 tests via vitest
 # Integration smoke test (emulator)
 # Open plugin in ATAK → tap Test tab
 cd example && ./scripts/integration-test.sh
+
+# Memory / CPU profile per scenario phase (device or emulator)
+# Open plugin in ATAK → Perf tab → Run, when prompted
+cd example && ./scripts/perf-profile.sh
 ```
+
+The profile isolates what the library adds on a busy map from what ATAK spends anyway; see [example/PERF.md](example/PERF.md) for the phases and how to read the result.
 
 ## Compatibility
 
