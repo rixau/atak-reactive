@@ -2,6 +2,7 @@ package com.atakmap.android.reactive.bridge;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import com.atakmap.android.maps.MapEvent;
 import com.atakmap.android.maps.MapEventDispatcher;
@@ -18,6 +19,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.lang.ref.WeakReference;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -25,6 +27,15 @@ public class MapItemEventRelay {
 
     private static final String TAG = "MapItemEventRelay";
     private static final long DEBOUNCE_MS = 100;
+    /**
+     * Hard ceiling on how long a batch may be held. The debounce below is
+     * trailing-edge, so without a deadline a stream of changes arriving more
+     * often than DEBOUNCE_MS would reschedule the flush forever and nothing
+     * would ever reach the WebView. That is not a corner case: a busy map, or
+     * CoT traffic for a few hundred tracks, updates far faster than every
+     * 100 ms.
+     */
+    private static final long MAX_FLUSH_DELAY_MS = 500;
 
     private final MapView mapView;
     private final BridgeEventEmitter emitter;
@@ -36,7 +47,18 @@ public class MapItemEventRelay {
     private final Map<String, Polyline.OnPointsChangedListener> shapeListeners = new ConcurrentHashMap<>();
     private final Map<String, WeakReference<Polyline>> shapeItems = new ConcurrentHashMap<>();
 
+    /**
+     * Guards {@link #pending} and {@link #oldestPendingAt}. Item listeners
+     * fire on whichever thread changed the item — for CoT traffic that is
+     * ATAK's CotDispatcher thread, not the UI thread — while flush() swaps the
+     * batch out on the main looper. Without this lock a change can land in a
+     * batch that has already been emitted and never reach the WebView, and a
+     * JSONArray being appended to while it is serialized can throw.
+     */
+    private final Object pendingLock = new Object();
     private PendingUpdate pending = new PendingUpdate();
+    /** When the oldest un-flushed change landed, or 0 if nothing is pending. */
+    private long oldestPendingAt = 0;
 
     private MapEventDispatcher.MapEventDispatchListener itemAddedListener;
     private MapEventDispatcher.MapEventDispatchListener itemRemovedListener;
@@ -113,8 +135,11 @@ public class MapItemEventRelay {
             dispatcher.removeMapEventListener(MapEvent.ITEM_REFRESH, itemRefreshListener);
         }
 
-        debounceHandler.removeCallbacksAndMessages(null);
-        pending = new PendingUpdate();
+        synchronized (pendingLock) {
+            debounceHandler.removeCallbacksAndMessages(null);
+            pending = new PendingUpdate();
+            oldestPendingAt = 0;
+        }
 
         Log.d(TAG, "Stopped listening for map item events");
     }
@@ -122,8 +147,10 @@ public class MapItemEventRelay {
     private void onItemAdded(MapItem item) {
         try {
             JSONObject serialized = MapItemSerializer.serialize(item);
-            pending.added.put(serialized);
-            scheduleFlush();
+            synchronized (pendingLock) {
+                pending.added.put(serialized);
+                scheduleFlush();
+            }
 
             if (item instanceof PointMapItem) {
                 attachPointListener((PointMapItem) item);
@@ -157,15 +184,19 @@ public class MapItemEventRelay {
             }
         }
 
-        pending.removed.put(uid);
-        scheduleFlush();
+        synchronized (pendingLock) {
+            pending.removed.put(uid);
+            scheduleFlush();
+        }
     }
 
     private void onItemUpdated(MapItem item) {
         try {
             JSONObject serialized = MapItemSerializer.serialize(item);
-            pending.addUpdated(item.getUID(), serialized);
-            scheduleFlush();
+            synchronized (pendingLock) {
+                pending.addUpdated(item.getUID(), serialized);
+                scheduleFlush();
+            }
         } catch (JSONException e) {
             Log.e(TAG, "Error serializing updated item", e);
         }
@@ -241,15 +272,40 @@ public class MapItemEventRelay {
     }
 
     private final Runnable flushRunnable = this::flush;
+    private final Runnable deadlineRunnable = this::flush;
 
+    /** Caller must hold {@link #pendingLock}. */
     private void scheduleFlush() {
+        // Coalesce rapid changes, but guarantee delivery even when the UI
+        // thread never goes idle. Two separate callbacks:
+        //
+        //  - flushRunnable is the trailing-edge debounce, cancelled and
+        //    re-posted on every change. On a quiet map it delivers DEBOUNCE_MS
+        //    after the last one.
+        //  - deadlineRunnable is posted once when a batch opens and is never
+        //    cancelled. Without it, a change stream faster than the looper can
+        //    drain starves the debounce forever: every change cancels the
+        //    pending flush before it reaches the front of the queue, so
+        //    lowering the delay does not help — the callback has to survive.
+        if (oldestPendingAt == 0) {
+            oldestPendingAt = SystemClock.uptimeMillis();
+            debounceHandler.postDelayed(deadlineRunnable, MAX_FLUSH_DELAY_MS);
+        }
         debounceHandler.removeCallbacks(flushRunnable);
         debounceHandler.postDelayed(flushRunnable, DEBOUNCE_MS);
     }
 
     private void flush() {
-        PendingUpdate update = pending;
-        pending = new PendingUpdate();
+        PendingUpdate update;
+        synchronized (pendingLock) {
+            debounceHandler.removeCallbacks(flushRunnable);
+            debounceHandler.removeCallbacks(deadlineRunnable);
+            update = pending;
+            pending = new PendingUpdate();
+            oldestPendingAt = 0;
+        }
+        // Serialize and emit outside the lock: nothing else can reach this
+        // batch any more, and the listeners should not wait on the WebView.
 
         if (update.added.length() == 0 && update.removed.length() == 0
                 && update.updatedArray().length() == 0) {
@@ -268,7 +324,7 @@ public class MapItemEventRelay {
     private static class PendingUpdate {
         final JSONArray added = new JSONArray();
         final JSONArray removed = new JSONArray();
-        private final Map<String, JSONObject> updated = new ConcurrentHashMap<>();
+        private final Map<String, JSONObject> updated = new LinkedHashMap<>();
 
         void addUpdated(String uid, JSONObject data) {
             updated.put(uid, data);
