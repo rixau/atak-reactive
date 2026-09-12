@@ -46,6 +46,18 @@ jobs:
 
   lib-compile:
     runs-on: ubuntu-latest
+    # The ATAK SDK jar is private and must not be visible to code we have not
+    # reviewed. Compiling a fork PR would put the jar on disk next to its
+    # ./gradlew, so forks skip this job; lib-compile-deferred reports that below.
+    # A fork PR that touches lib/ is verified by re-pushing it to a branch in this
+    # repo after review, and again on main after merge.
+    #
+    # GitHub already withholds secrets from fork PRs — without this gate the job
+    # ran anyway, failed at the download with a misleading "release not found",
+    # and every outside PR sat red for a reason unrelated to its contents.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     # Every version here is published as an AAR by publish.yml. Compiling against
     # only one of them let a break specific to an older ATAK SDK reach the release
     # job, after npm had already published. Keep this list and the publish matrix
@@ -89,3 +101,26 @@ jobs:
             || { echo "::error::bridge reports the wrong ATAK version"; \
                  grep -E 'BRIDGE_VERSION|ATAK_VERSION' "$GENERATED"; exit 1; }
           echo "OK: $(grep -E 'BRIDGE_VERSION|ATAK_VERSION' "$GENERATED" | tr -s ' ')"
+
+  # Stand-in for lib-compile on fork PRs, so a skipped compile is visible on the
+  # checks page rather than reading as "nothing to check". Warns when lib/ is
+  # touched; never fails, since a break there is caught on main after merge.
+  lib-compile-deferred:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name != github.repository
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Report whether lib/ changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILES=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[].filename')
+          if echo "$FILES" | grep -q '^lib/'; then
+            echo "::warning title=lib-compile deferred::This fork PR changes lib/ but was not compiled against the ATAK SDK (private jar). Re-push the branch to this repo to verify before merge."
+          else
+            echo "::notice title=lib-compile skipped::Fork PR does not touch lib/; the bridge compile runs on main after merge."
+          fi
