@@ -23,7 +23,6 @@ class MapItemStore {
   private subscribers = new Map<string, Subscriber>();
   private structuralSubscribers = new Map<string, StructuralSubscriber>();
   private streamActive = false;
-  private seeded = false;
 
   private getBridge() {
     return window._atak;
@@ -71,10 +70,13 @@ class MapItemStore {
     if (this.streamActive) return;
     this.streamActive = true;
 
-    // Seed from snapshot first
-    if (!this.seeded) {
-      this.seed();
-    }
+    // Re-seed on every restart, not just the first one. Between the last
+    // unsubscribe and this call nothing was listening — the user was on a tab
+    // with no map-item hook, or the panel was closed — and the map kept
+    // changing. Seeding once per page load would leave the store serving that
+    // frozen snapshot for the rest of the session, including items that have
+    // since been deleted.
+    this.seed();
 
     // Start native event stream
     this.getBridge()?.startMapItemStream();
@@ -92,8 +94,10 @@ class MapItemStore {
   }
 
   private seed() {
-    this.seeded = true;
     const raw = this.getBridge()?.getMapItemsSnapshot();
+    // Replace rather than merge: anything removed from the map while we were
+    // not listening has to disappear here too, or it lingers forever.
+    this.items.clear();
     if (!raw || raw === '[]' || raw === 'null') return;
     const snapshot = JSON.parse(raw) as MapItemData[];
     for (const item of snapshot) {
@@ -144,7 +148,6 @@ class MapItemStore {
     this.items.clear();
     this.subscribers.clear();
     this.structuralSubscribers.clear();
-    this.seeded = false;
   }
 }
 

@@ -2,6 +2,7 @@ package com.atakmap.android.reactive.bridge;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import com.atakmap.android.maps.MapEvent;
 import com.atakmap.android.maps.MapEventDispatcher;
@@ -25,6 +26,15 @@ public class MapItemEventRelay {
 
     private static final String TAG = "MapItemEventRelay";
     private static final long DEBOUNCE_MS = 100;
+    /**
+     * Hard ceiling on how long a batch may be held. The debounce below is
+     * trailing-edge, so without a deadline a stream of changes arriving more
+     * often than DEBOUNCE_MS would reschedule the flush forever and nothing
+     * would ever reach the WebView. That is not a corner case: a busy map, or
+     * CoT traffic for a few hundred tracks, updates far faster than every
+     * 100 ms.
+     */
+    private static final long MAX_FLUSH_DELAY_MS = 500;
 
     private final MapView mapView;
     private final BridgeEventEmitter emitter;
@@ -37,6 +47,8 @@ public class MapItemEventRelay {
     private final Map<String, WeakReference<Polyline>> shapeItems = new ConcurrentHashMap<>();
 
     private PendingUpdate pending = new PendingUpdate();
+    /** When the oldest un-flushed change landed, or 0 if nothing is pending. */
+    private long oldestPendingAt = 0;
 
     private MapEventDispatcher.MapEventDispatchListener itemAddedListener;
     private MapEventDispatcher.MapEventDispatchListener itemRemovedListener;
@@ -115,6 +127,7 @@ public class MapItemEventRelay {
 
         debounceHandler.removeCallbacksAndMessages(null);
         pending = new PendingUpdate();
+        oldestPendingAt = 0;
 
         Log.d(TAG, "Stopped listening for map item events");
     }
@@ -243,13 +256,27 @@ public class MapItemEventRelay {
     private final Runnable flushRunnable = this::flush;
 
     private void scheduleFlush() {
+        long now = SystemClock.uptimeMillis();
+        if (oldestPendingAt == 0) {
+            oldestPendingAt = now;
+        }
+
+        // Coalesce for DEBOUNCE_MS, but never hold a batch past the deadline,
+        // however fast the changes keep coming.
+        long delay = DEBOUNCE_MS;
+        long deadline = oldestPendingAt + MAX_FLUSH_DELAY_MS;
+        if (now + delay > deadline) {
+            delay = Math.max(0, deadline - now);
+        }
+
         debounceHandler.removeCallbacks(flushRunnable);
-        debounceHandler.postDelayed(flushRunnable, DEBOUNCE_MS);
+        debounceHandler.postDelayed(flushRunnable, delay);
     }
 
     private void flush() {
         PendingUpdate update = pending;
         pending = new PendingUpdate();
+        oldestPendingAt = 0;
 
         if (update.added.length() == 0 && update.removed.length() == 0
                 && update.updatedArray().length() == 0) {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createMockBridge } from './setup';
 import { makeMapItem, emitFromNative } from './helpers';
+import type { MapItemData } from '../types';
 
 // Fresh import each test
 async function loadModules() {
@@ -88,6 +89,50 @@ describe('MapItemStore', () => {
     expect(cb).toHaveBeenCalledTimes(1);
     expect(cb.mock.calls[0]![0]).toHaveLength(1);
     expect(cb.mock.calls[0]![0][0].uid).toBe('friendly');
+  });
+
+  // Regression: the store used to seed exactly once per page load, while the
+  // event subscription was torn down every time the last hook unmounted. Any
+  // change that happened in that gap was lost permanently — a panel would go
+  // on listing markers that had already been deleted from the map.
+  it('re-seeds on stream restart so changes missed while unsubscribed are not lost', async () => {
+    let snapshot = [makeMapItem({ uid: 'a' })];
+    window._atak = createMockBridge({
+      getMapItemsSnapshot: () => JSON.stringify(snapshot),
+    });
+
+    const { mapItemStore } = await loadModules();
+
+    const cb1 = vi.fn();
+    const unsub = mapItemStore.subscribe(undefined, cb1);
+    expect(cb1.mock.calls[0]![0].map((i: MapItemData) => i.uid)).toEqual(['a']);
+
+    // Last subscriber goes away: user switches to a tab with no map-item hook.
+    unsub();
+
+    // Map changes with nobody listening — 'a' is removed, 'b' arrives.
+    snapshot = [makeMapItem({ uid: 'b' })];
+
+    const cb2 = vi.fn();
+    mapItemStore.subscribe(undefined, cb2);
+
+    const uids = cb2.mock.calls[0]![0].map((i: MapItemData) => i.uid);
+    expect(uids).toEqual(['b']);
+    expect(uids).not.toContain('a');
+  });
+
+  it('does not re-seed while the stream is already running', async () => {
+    const snapshot = vi.fn(() => JSON.stringify([makeMapItem({ uid: 'a' })]));
+    window._atak = createMockBridge({ getMapItemsSnapshot: snapshot });
+
+    const { mapItemStore } = await loadModules();
+
+    mapItemStore.subscribe(undefined, vi.fn());
+    expect(snapshot).toHaveBeenCalledTimes(1);
+
+    // A second hook mounting must not pay for another snapshot.
+    mapItemStore.subscribe(undefined, vi.fn());
+    expect(snapshot).toHaveBeenCalledTimes(1);
   });
 
   it('structural subscribers only fire on add/remove, not update', async () => {
