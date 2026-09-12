@@ -254,26 +254,31 @@ public class MapItemEventRelay {
     }
 
     private final Runnable flushRunnable = this::flush;
+    private final Runnable deadlineRunnable = this::flush;
 
     private void scheduleFlush() {
-        long now = SystemClock.uptimeMillis();
+        // Coalesce rapid changes, but guarantee delivery even when the UI
+        // thread never goes idle. Two separate callbacks:
+        //
+        //  - flushRunnable is the trailing-edge debounce, cancelled and
+        //    re-posted on every change. On a quiet map it delivers DEBOUNCE_MS
+        //    after the last one.
+        //  - deadlineRunnable is posted once when a batch opens and is never
+        //    cancelled. Without it, a change stream faster than the looper can
+        //    drain starves the debounce forever: every change cancels the
+        //    pending flush before it reaches the front of the queue, so
+        //    lowering the delay does not help — the callback has to survive.
         if (oldestPendingAt == 0) {
-            oldestPendingAt = now;
+            oldestPendingAt = SystemClock.uptimeMillis();
+            debounceHandler.postDelayed(deadlineRunnable, MAX_FLUSH_DELAY_MS);
         }
-
-        // Coalesce for DEBOUNCE_MS, but never hold a batch past the deadline,
-        // however fast the changes keep coming.
-        long delay = DEBOUNCE_MS;
-        long deadline = oldestPendingAt + MAX_FLUSH_DELAY_MS;
-        if (now + delay > deadline) {
-            delay = Math.max(0, deadline - now);
-        }
-
         debounceHandler.removeCallbacks(flushRunnable);
-        debounceHandler.postDelayed(flushRunnable, delay);
+        debounceHandler.postDelayed(flushRunnable, DEBOUNCE_MS);
     }
 
     private void flush() {
+        debounceHandler.removeCallbacks(flushRunnable);
+        debounceHandler.removeCallbacks(deadlineRunnable);
         PendingUpdate update = pending;
         pending = new PendingUpdate();
         oldestPendingAt = 0;
