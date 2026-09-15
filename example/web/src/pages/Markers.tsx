@@ -1,10 +1,12 @@
 import { useSelfLocation, useMapEvent, useMapItems, addMarker, removeMarker, panTo } from '@atak-reactive/sdk';
+import { useLatencyProbe } from '../perf/latencyProbe';
 
 export function MarkersPage() {
   const location = useSelfLocation();
   const lastClick = useMapEvent('mapClick');
   const allItems = useMapItems({ visible: true });
   const items = allItems.filter(m => m.lat != null && m.lng != null);
+  useLatencyProbe(items);
 
   const dropAtSelf = () => {
     if (!location) return;

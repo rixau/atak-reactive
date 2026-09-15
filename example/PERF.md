@@ -187,10 +187,12 @@ What it says:
 - **The renderer-side cost is small and reproducible**: +1.4 and +1.5 points
   between `churn` and `churn-unsubscribed` across the two runs. That is the
   React + store-filter + re-render share.
-- **Delivery lags under load**: `lagMsAvg` 706 ms and 848 ms against a ~150 ms
-  floor. `evaluateJavascript` runs on the UI thread, which is already busy with
-  the map, so batches queue. This is contention, not serialization cost, and it
-  is what a user actually sees.
+- **Delivery lag**: `lagMsAvg` 706 ms and 848 ms — but do not quote those. The
+  load in this scenario comes from the page, so every marker move is posted to
+  the UI thread ahead of the batch that reports it. That is an artifact of the
+  harness, not a property of the library, and the contention this used to be
+  blamed on is not the cause. Measured against a real CoT feed the figure is
+  different at every load; see "Marker to pixels".
 - **JS→Java calls are cheap**: 200 `addMarker` in 136–216 ms, 200
   `updateMarker` in ~38–50 ms. Roughly 0.2–1 ms each.
 
@@ -253,6 +255,79 @@ the panel hidden with the relay still batching (248% vs 250% at 500 markers,
 below noise), 5.5 min sustained at 500 markers (renderer 57–69 MB, no trend, no
 ANR), renderer death while subscribed (old bridge disposed, fresh one created,
 no refcount drift), and removal through `t-x-d-d` (rows disappear).
+### Marker to pixels
+
+The CPU tables say a reactive panel is affordable. They say nothing about how
+long after a marker moves the screen shows it, which is what a user actually
+notices. `scripts/lat-compare.sh` measures that, against the same native
+control.
+
+`scripts/lat-probe.sh` runs **on the device** and sends a CoT marker whose
+callsign is `LAT-<device-clock millisecond at send>`. Generating the event on
+the device rather than the host is the point: that millisecond and `Date.now()`
+in the WebView then come from one clock, so the numbers carry no skew. A
+host-side sender cannot measure this honestly. The React page reports three
+stages (`web/src/perf/latencyProbe.ts`) and `NativeListReceiver` reports two;
+since that panel batches exactly the way `MapItemEventRelay` does, the gap
+between the two panels is the WebView hop and nothing else.
+
+Same emulator and build as above, with `VITE_PERF_TAB=true`. 90 s per cell, one
+ping every 1.3 s — deliberately not a harmonic of the 1 Hz load, or every
+sample lands at the same phase of the flush cycle and the distribution is a
+lie. Milliseconds:
+
+| load | panel | min | p50 | mean | p95 | max |
+|---|---|---|---|---|---|---|
+| quiet | native, row updated | 112 | 128 | 127 | 138 | 147 |
+| quiet | **React, painted** | 132 | 148 | **148** | 157 | 167 |
+| 100 @ 1 Hz | native, row updated | 18 | 266 | 274 | 487 | 515 |
+| 100 @ 1 Hz | **React, painted** | 142 | 581 | **581** | 978 | 1078 |
+| 250 @ 1 Hz | native, row updated | 32 | 262 | 266 | 499 | 516 |
+| 250 @ 1 Hz | **React, painted** | 148 | 591 | **610** | 1034 | 1110 |
+| 500 @ 1 Hz | native, row updated | 20 | 196 | 233 | 471 | 546 |
+| 500 @ 1 Hz | **React, painted** | 142 | 566 | **704** | — | 2742 |
+
+ATAK's own ingest — event on the wire to a `MapItem` listener firing — is 14 to
+24 ms at every load, so none of what follows is ATAK being slow.
+
+- **On a quiet map the WebView is free.** 148 ms to paint, of which 100 ms is
+  the relay's debounce. The React panel reaches JS at 119 ms where the native
+  panel updates its row at 127 ms — within noise of each other.
+- **Under load the React panel costs about twice the native one, and rendering
+  is not why.** Store re-filter plus React render is 2 ms at 100 markers, and
+  commit to painted is 25–30 ms. Roughly 300 ms sits between the relay flushing
+  and the JS handler running: serialize, `evaluateJavascript`, the hop into the
+  renderer process. That ~300 ms is the library's latency tax.
+- **The native panel holds the 500 ms deadline; the React panel does not.**
+  Batches reach JS every ~1.06 s at 100 markers and ~1.07 s at 250, against the
+  native panel's ~500 ms. The batching code is the same, so the extra second is
+  the WebView hop stretching the cycle.
+- **At 500 markers (~500 events/s) it stops being a latency story.** Batches
+  arrive every 3.46 s and **only 26 of 65 pings were ever shown**. The relay
+  coalesces per UID, so a ping landing between flushes is overwritten and never
+  reaches the screen at all. The mean in that row is survivorship bias — it
+  covers the freshest ping in each batch. The honest statement is that the list
+  runs up to 3.5 s stale, with a 2.7 s sample observed. The native panel showed
+  all 65 pings at the same load.
+
+Read the sample counts, not just the means. `latencyProbe.ts` logs a running
+batch count for exactly this reason: when the page logs fewer samples than
+`lat-probe.sh` sent, updates are being dropped and every latency figure in the
+row flatters the panel.
+
+Two things this does **not** show. The example's list is not virtualized, so
+the 500-marker case renders all 500 rows — and commit-to-painted still stayed
+under 40 ms, meaning the unvirtualized list is not what breaks. And inside the
+~300 ms between flush and JS, this harness cannot separate a flush runnable
+that ran late on a busy main thread from a renderer that executed the batch
+late; that needs a timestamp inside `MapItemEventRelay.flush()`.
+
+The 500 ms deadline is the biggest single lever on these numbers, and the CPU
+tables say there is headroom to shorten it. The collapse at 500 markers is a
+different problem: it is the O(store) work per batch — serializing every
+changed item, and `handleEvent` re-running `getFiltered()` for every subscriber
+— which is the design debt under "If the delta is bad".
+
 ## If the run aborts
 
 The script checks before every sample that ATAK still holds the pid it started

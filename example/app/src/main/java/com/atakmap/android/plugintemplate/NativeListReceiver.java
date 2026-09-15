@@ -189,7 +189,7 @@ public class NativeListReceiver extends DropDownReceiver implements OnStateListe
         };
         refreshListener = e -> {
             MapItem item = e.getItem();
-            if (item != null) markDirty(item.getUID());
+            if (item != null) { probe("listener", item); markDirty(item.getUID()); }
         };
         d.addMapEventListener(MapEvent.ITEM_ADDED, addedListener);
         d.addMapEventListener(MapEvent.ITEM_REMOVED, removedListener);
@@ -218,6 +218,25 @@ public class NativeListReceiver extends DropDownReceiver implements OnStateListe
             oldestPendingAt = 0;
         }
         Log.d(TAG, "stopped");
+    }
+
+    /**
+     * The native half of the latency probe (see web/src/perf/latencyProbe.ts).
+     * lat-probe.sh encodes the device-clock millisecond of the send in the
+     * callsign, so this splits the native side of the path: "listener" is how
+     * long ATAK took to hand the event to a MapItem listener (CoT parse plus
+     * the CotDispatcher hop), "flush" adds this panel's batching. Since that
+     * batching is the same 100 ms / 500 ms the relay uses, the gap between
+     * these numbers and the React panel's is the WebView hop.
+     */
+    private void probe(String stage, MapItem item) {
+        String t = item.getTitle();
+        if (t == null || !t.startsWith("LAT-")) return;
+        try {
+            Log.d(TAG, "LATNATIVE " + stage + "=" + (System.currentTimeMillis() - Long.parseLong(t.substring(4))));
+        } catch (NumberFormatException ignored) {
+            // not a probe marker after all
+        }
     }
 
     private void attach(PointMapItem item) {
@@ -277,7 +296,7 @@ public class NativeListReceiver extends DropDownReceiver implements OnStateListe
         for (String uid : d) {
             WeakReference<PointMapItem> ref = pointItems.get(uid);
             PointMapItem pmi = ref != null ? ref.get() : null;
-            if (pmi == null) rows.remove(uid); else put(pmi);
+            if (pmi == null) { rows.remove(uid); } else { probe("flush", pmi); put(pmi); }
         }
         rebuild();
     }
