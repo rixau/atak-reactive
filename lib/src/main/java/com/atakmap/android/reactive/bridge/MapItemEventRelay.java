@@ -34,8 +34,17 @@ public class MapItemEventRelay {
      * would ever reach the WebView. That is not a corner case: a busy map, or
      * CoT traffic for a few hundred tracks, updates far faster than every
      * 100 ms.
+     *
+     * Under such a feed the debounce never fires, so this value alone sets the
+     * delivery cadence and a change waits a uniform 0 to MAX_FLUSH_DELAY_MS to
+     * reach the page. Measured end to end (see example/PERF.md, "Marker to
+     * pixels"), mean latency is about half this number, and batch cadence
+     * tracks it almost exactly. Shortening it therefore buys latency in
+     * proportion, at a cost in batch count; 300 rather than 500 measured as
+     * roughly a third less latency for one to two points of renderer CPU, with
+     * no measurable change on ATAK's side at 500 markers.
      */
-    private static final long MAX_FLUSH_DELAY_MS = 500;
+    private static final long MAX_FLUSH_DELAY_MS = 300;
 
     private final MapView mapView;
     private final BridgeEventEmitter emitter;
