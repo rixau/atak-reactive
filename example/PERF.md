@@ -26,8 +26,9 @@ Reading the code, the cost splits into a fixed part and a variable part:
   calls `startMapItemStream()` / `stopMapItemStream()`, and
   `MapItemEventRelay` attaches native listeners only while that count is
   non-zero. Updates are coalesced per UID with a 100 ms trailing debounce and
-  a 500 ms deadline, so under a continuous feed the WebView sees at most two
-  batches a second no matter how many events arrive. Items are serialized on
+  a 300 ms deadline, so under a continuous feed the WebView sees a bounded
+  number of batches a second no matter how many events arrive. Items are
+  serialized on
   whichever thread changed them — `CotDispatcher` for a CoT feed — and only
   the batched `evaluateJavascript` lands on the UI thread. The hot loop on a
   busy map is: serialize changed items → build one JSON payload →
@@ -303,7 +304,9 @@ Every cell delivered all 65 pings. Nothing was coalesced away at any load.
   its own process.
 - **Mean latency is about half the deadline**, which is the deadline working as
   designed. A continuous feed starves the 100 ms debounce, so the deadline
-  fires on schedule and an event waits a uniform 0–500 ms for the next flush.
+  fires on schedule and an event waits a uniform 0 to `MAX_FLUSH_DELAY_MS` for
+  the next flush. The tables above were taken at the old 500 ms default; see
+  below for what the current 300 ms gives.
 
 The example's list is not virtualized, so the 500-marker case renders all 500
 rows — and commit-to-painted still stayed under 40 ms. The unvirtualized list
@@ -312,23 +315,55 @@ is not what breaks first.
 #### What the deadline is worth
 
 `MAX_FLUSH_DELAY_MS` in `MapItemEventRelay` is the one constant that moves
-these numbers. Sweeping it at 100 markers @ 1 Hz, everything else held fixed:
+these numbers. Under a continuous feed the debounce never fires, so this value
+alone sets the cadence and a change waits a uniform 0 to `MAX_FLUSH_DELAY_MS`
+for the next flush. Swept with everything else held fixed, CPU reported as
+panel minus its own no-panel baseline in the same cell so session drift
+cancels:
 
-| deadline | batch cadence | p50 | mean | p95 | max | batches / 90 s |
-|---|---|---|---|---|---|---|
-| 500 (default) | 0.51 s | 298 | 300 | 529 | 565 | 177 |
-| 300 | 0.34 s | 211 | 213 | 344 | 355 | 267 |
-| 150 | 0.17 s | 139 | 126 | 190 | 208 | 533 |
+**100 markers @ 1 Hz**
 
-Cadence tracks the constant almost exactly (0.51 / 0.34 / 0.17 against 0.50 /
-0.30 / 0.15), so the timer — not the bridge — is what paces delivery. Shortening
-it buys latency at a proportional cost in batch count.
+| deadline | cadence | latency mean | ATAK CPU | renderer CPU | batches / 90 s |
+|---|---|---|---|---|---|
+| 500 | 0.48 s | 337 ms | +3.3 ±2.5 | 4.0% | 177 |
+| **300** | 0.32 s | **225 ms** | +8.8 ±2.0 | 5.0% | 267 |
+| 150 | 0.16 s | 144 ms | +10.7 ±2.3 | 8.3% | 533 |
 
-Do not change the default on the strength of that table alone. The CPU figures
-earlier in this document were measured at 500 ms, and both the per-item
-serialization and `handleEvent`'s `getFiltered()` scan per subscriber scale with
-batch count, so 150 ms triples work that has never been measured at that rate.
-Measure CPU at the candidate value first.
+**500 markers @ 0.5 Hz** — same store size and batch size, a rate this
+emulator can actually ingest:
+
+| deadline | cadence | latency mean | ATAK CPU | renderer CPU | renderer PSS |
+|---|---|---|---|---|---|
+| 500 | 0.47 s | 319 ms | −1.0 ±3.1 | 7.5% | 153 MB |
+| **300** | 0.31 s | **215 ms** | −0.9 ±3.9 | 9.4% | 159 MB |
+
+Cadence tracks the constant almost exactly, so the timer — not the bridge — is
+what paces delivery.
+
+- **300 ms is the default** on this evidence: about a third less latency at
+  both store sizes, for one to two points of renderer CPU on a separate
+  process. At 500 markers the ATAK-side difference is indistinguishable from
+  zero, so the fear that shortening it would multiply the per-batch O(store)
+  work did not materialise — though note the ±3-4 point interval there could
+  hide the +5.5 the 100-marker cell resolved.
+- **150 ms was not taken.** It buys another 81 ms but renderer CPU goes 5.0% to
+  8.3% — a 66% increase for a 36% gain, and the curve is bending the wrong way.
+- Nothing was dropped at either setting: every ping was delivered in all four
+  cells.
+
+A caveat on the absolutes: this session's emulator ran roughly 40% hotter than
+the one that produced the tables above (190% versus 142% ATAK CPU at the same
+100-track load), which is exactly why the CPU figures here are differences
+against a baseline taken in the same cell rather than raw numbers.
+
+**Where it does break.** At 500 markers @ 1 Hz — 500 events/s — this emulator
+could not keep up, and a backlog built during the load ramp that was still
+draining 90 s later: the probe reported 21 to 30 second latencies, decreasing
+over the run, while the relay flushed on schedule at 0.66 s. About a quarter of
+pings never reached the screen, coalesced away per UID while queued. That is an
+ATAK ingest limit rather than a library one, and no deadline value addresses
+it, but it is the failure mode to recognise: if latency is measured in seconds
+and falling, the queue is upstream and the numbers describe saturation.
 
 #### An earlier version of this section was wrong
 
