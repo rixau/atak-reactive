@@ -47,8 +47,15 @@ jobs:
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+  # Runs after publish-aar, not alongside it. Neither registry can be
+  # republished at the same version, so if the two run in parallel and the AAR
+  # matrix fails, npm is already live advertising a CLI whose `init` generates
+  # `implementation "dev.atakreactive:bridge-<atak>:<version>"` against Maven
+  # coordinates that were never published. Ordering means npm never announces a
+  # version whose AARs are missing; the reverse (AARs without npm) is the
+  # recoverable direction.
   publish-npm:
-    needs: check-version
+    needs: [check-version, publish-aar]
     if: needs.check-version.outputs.changed == 'true'
     runs-on: ubuntu-latest
     steps:
