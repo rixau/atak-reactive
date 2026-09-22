@@ -36,3 +36,4 @@ lib/sdks/
 mapping.txt
 !example/app/libs/*.jar
 !lib/gradle/wrapper/gradle-wrapper.jar
+!example/gradle/wrapper/gradle-wrapper.jar

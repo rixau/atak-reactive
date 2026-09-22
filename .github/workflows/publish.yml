@@ -129,3 +129,58 @@ jobs:
             --title "$VERSION" \
             --generate-notes \
             || echo "Release already exists"
+
+  # The example plugin, published to Arsenal C2 so there is something to install
+  # and try without building it. After `release`, not alongside the registries:
+  # nothing depends on the example, so a failure here must never hold back npm or
+  # Maven, and the example should only ever ship for a version that did.
+  #
+  # Skips, rather than fails, until the ARSENAL_TOKEN secret exists.
+  publish-example:
+    needs: [check-version, release]
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    env:
+      ARSENAL_TOKEN: ${{ secrets.ARSENAL_TOKEN }}
+    steps:
+      - name: Check for the Arsenal C2 token
+        id: token
+        run: |
+          if [ -z "$ARSENAL_TOKEN" ]; then
+            echo "::notice title=publish-example skipped::ARSENAL_TOKEN is not set, so the example was not published."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.token.outputs.present == 'true'
+
+      - uses: actions/setup-java@v5
+        if: steps.token.outputs.present == 'true'
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: actions/setup-node@v7
+        if: steps.token.outputs.present == 'true'
+        with:
+          node-version: 22
+
+      - uses: gradle/actions/setup-gradle@v6
+        if: steps.token.outputs.present == 'true'
+
+      - name: Build the example APK
+        id: build
+        if: steps.token.outputs.present == 'true'
+        run: echo "apk=$(./scripts/build-example.sh | tail -1)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.CI_SDK_TOKEN }}
+
+      - name: Publish to Arsenal C2
+        if: steps.token.outputs.present == 'true'
+        run: ./scripts/publish-example.sh "${{ steps.build.outputs.apk }}"
+        env:
+          ARSENAL_ORG: ${{ vars.ARSENAL_ORG || 'user_rixau' }}
+          ARSENAL_CHANNEL: release
+          ARSENAL_NOTES: atak-reactive v${{ needs.check-version.outputs.version }}

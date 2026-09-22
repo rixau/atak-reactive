@@ -8,7 +8,9 @@
 
 buildscript {
 
-    ext.PLUGIN_VERSION = "0.1"
+    // atak-reactive: the example ships with each release, so it carries the
+    // release's version rather than a number of its own.
+    ext.PLUGIN_VERSION = file("${rootDir}/../version.txt").text.trim()
     ext.ATAK_VERSION = '5.6.0'
 
     def takdevVersion = '3.+'
@@ -263,6 +265,10 @@ android {
     }
 
     defaultConfig {
+        // Not the template's com.atakmap.android.plugintemplate.plugin: the example
+        // is published to Arsenal C2, where the first push of a package name claims
+        // it, and on a device it would collide with any other template-derived plugin.
+        applicationId "dev.atakreactive.example"
         minSdkVersion 21
         targetSdkVersion 34
 
