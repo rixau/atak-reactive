@@ -173,7 +173,14 @@ jobs:
       - name: Build the example APK
         id: build
         if: steps.token.outputs.present == 'true'
-        run: echo "apk=$(./scripts/build-example.sh | tail -1)" >> "$GITHUB_OUTPUT"
+        # Two statements, not `echo "apk=$(...)"`: command substitution inside echo
+        # discards the script's exit status, so a failed build would report a green
+        # step with an empty apk and fail later in the publish step instead.
+        # `shell: bash` for the pipefail that makes `| tail` propagate the failure.
+        shell: bash
+        run: |
+          apk="$(./scripts/build-example.sh | tail -1)"
+          echo "apk=${apk}" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.CI_SDK_TOKEN }}
 

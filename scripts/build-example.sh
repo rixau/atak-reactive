@@ -29,10 +29,14 @@ gh release download "sdk-${ATAK_VERSION}" \
     --skip-existing \
     --pattern atak-gradle-takdev.jar \
     --pattern android_keystore \
-    --pattern proguard-release-keep.txt >&2
+    --pattern proguard-release-keep.txt >&2 || true
 
-# gh skips a pattern that matches nothing without complaint, and takdev then fails
-# much later with an error that does not name the file. Check here instead.
+# The download is allowed to fail above so this check can report it. gh exits
+# non-zero when *no* pattern matches and says only "no assets match the file
+# pattern", naming neither the release nor which file is missing - and under
+# `set -e` that would abort before the message below, which is the one that says
+# what to do. Anything genuinely wrong (a network failure, a bad token) leaves a
+# file missing too, so nothing is swallowed.
 for f in main.jar atak-gradle-takdev.jar android_keystore proguard-release-keep.txt; do
     [ -f "${SDK}/${f}" ] || {
         echo "error: ${f} is missing from the sdk-${ATAK_VERSION} release of rixau/atak-ci-resources." >&2
