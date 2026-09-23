@@ -1,0 +1,95 @@
+name: Publish example
+
+# Builds the example plugin's release APK and publishes it to Arsenal C2, so
+# there is something to install and try without building it.
+#
+# Two entry points, one definition. `publish.yml` calls this on every release,
+# and it can be run by hand for a version that is already out — which is the
+# only way to publish the example for a release that shipped before this
+# workflow existed, since the release path keys off a version.txt change.
+#
+# Skips, rather than fails, until the ARSENAL_TOKEN secret exists.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The release being published, for the release notes.
+        type: string
+        required: true
+      channel:
+        type: string
+        default: release
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release track to publish to.
+        type: choice
+        options: [release, rc, beta, alpha]
+        default: release
+      dry-run:
+        description: Check the APK without publishing it.
+        type: boolean
+        default: false
+
+jobs:
+  publish-example:
+    runs-on: ubuntu-latest
+    env:
+      ARSENAL_TOKEN: ${{ secrets.ARSENAL_TOKEN }}
+    steps:
+      - name: Check for the Arsenal C2 token
+        id: token
+        run: |
+          if [ -z "$ARSENAL_TOKEN" ]; then
+            echo "::notice title=publish-example skipped::ARSENAL_TOKEN is not set, so the example was not published."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.token.outputs.present == 'true'
+
+      - uses: actions/setup-java@v5
+        if: steps.token.outputs.present == 'true'
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: actions/setup-node@v7
+        if: steps.token.outputs.present == 'true'
+        with:
+          node-version: 22
+
+      - uses: gradle/actions/setup-gradle@v6
+        if: steps.token.outputs.present == 'true'
+
+      - name: Build the example APK
+        id: build
+        if: steps.token.outputs.present == 'true'
+        # Two statements, not `echo "apk=$(...)"`: command substitution inside echo
+        # discards the script's exit status, so a failed build would report a green
+        # step with an empty apk and fail later in the publish step instead.
+        # `shell: bash` for the pipefail that makes `| tail` propagate the failure.
+        shell: bash
+        run: |
+          apk="$(./scripts/build-example.sh | tail -1)"
+          echo "apk=${apk}" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.CI_SDK_TOKEN }}
+
+      - name: Publish to Arsenal C2
+        if: steps.token.outputs.present == 'true'
+        shell: bash
+        # A hand-run publish has no version input; the checkout's version.txt is
+        # the version it would be publishing anyway.
+        run: |
+          version="${{ inputs.version }}"
+          [ -n "${version}" ] || version="$(tr -d '[:space:]' < version.txt)"
+          ARSENAL_NOTES="atak-reactive v${version}" \
+            ./scripts/publish-example.sh "${{ steps.build.outputs.apk }}" ${DRY_RUN}
+        env:
+          ARSENAL_ORG: ${{ vars.ARSENAL_ORG || 'user_rixau' }}
+          ARSENAL_CHANNEL: ${{ inputs.channel }}
+          DRY_RUN: ${{ inputs.dry-run && '--dry-run' || '' }}

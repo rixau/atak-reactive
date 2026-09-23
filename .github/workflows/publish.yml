@@ -136,3 +136,18 @@ jobs:
             --title "$VERSION" \
             --generate-notes \
             || echo "Release already exists"
+
+  # The example plugin, published to Arsenal C2. After `release`, not alongside
+  # the registries: nothing depends on the example, so a failure here must never
+  # hold back npm or Maven, and the example should only ever ship for a version
+  # that did.
+  #
+  # The job itself lives in publish-example.yml, which can also be run by hand —
+  # the only way to publish the example for a version that is already out.
+  publish-example:
+    needs: [check-version, release]
+    if: needs.check-version.outputs.changed == 'true'
+    uses: ./.github/workflows/publish-example.yml
+    with:
+      version: ${{ needs.check-version.outputs.version }}
+    secrets: inherit
