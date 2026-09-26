@@ -11,7 +11,7 @@ public class PluginTemplateTool extends AbstractPluginTool {
         super(context,
                 context.getString(R.string.app_name),
                 context.getString(R.string.app_name),
-                context.getResources().getDrawable(R.drawable.ic_launcher, null),
+                context.getResources().getDrawable(R.drawable.ic_reactive_tool, null),
                 ReactiveExampleComponent.SHOW_REACT);
     }
 }
