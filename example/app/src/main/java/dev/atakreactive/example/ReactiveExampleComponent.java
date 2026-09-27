@@ -1,4 +1,4 @@
-package com.atakmap.android.plugintemplate;
+package dev.atakreactive.example;
 
 import android.content.Context;
 import android.content.Intent;
@@ -6,15 +6,14 @@ import android.content.Intent;
 import com.atakmap.android.dropdown.DropDownMapComponent;
 import com.atakmap.android.ipc.AtakBroadcast.DocumentedIntentFilter;
 import com.atakmap.android.maps.MapView;
-import com.atakmap.android.plugintemplate.plugin.R;
 import com.atakmap.android.reactive.ReactiveDropDown;
 import com.atakmap.coremap.log.Log;
 
 public class ReactiveExampleComponent extends DropDownMapComponent {
 
     private static final String TAG = "ReactiveExample";
-    public static final String SHOW_REACT = "com.atakmap.android.plugintemplate.SHOW_REACT";
-    public static final String SHOW_MIXED = "com.atakmap.android.plugintemplate.SHOW_MIXED";
+    public static final String SHOW_REACT = "dev.atakreactive.example.SHOW_REACT";
+    public static final String SHOW_MIXED = "dev.atakreactive.example.SHOW_MIXED";
 
     private ReactiveDropDown reactiveDropDown;
     private MixedExampleReceiver mixedReceiver;

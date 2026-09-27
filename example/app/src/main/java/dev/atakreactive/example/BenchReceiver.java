@@ -1,4 +1,4 @@
-package com.atakmap.android.plugintemplate;
+package dev.atakreactive.example;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -17,15 +17,15 @@ import com.atakmap.coremap.log.Log;
  * process-local. It just re-broadcasts the plugin's own show intents.
  * <pre>
  * adb shell am broadcast -p com.atakmap.app.civ \
- *     -a com.atakmap.android.plugintemplate.BENCH --es op native-list
+ *     -a dev.atakreactive.example.BENCH --es op native-list
  * adb shell am broadcast -p com.atakmap.app.civ \
- *     -a com.atakmap.android.plugintemplate.BENCH --es op react
+ *     -a dev.atakreactive.example.BENCH --es op react
  * </pre>
  */
 public class BenchReceiver extends BroadcastReceiver {
 
     private static final String TAG = "Bench";
-    public static final String ACTION = "com.atakmap.android.plugintemplate.BENCH";
+    public static final String ACTION = "dev.atakreactive.example.BENCH";
 
     public void register(Context appContext) {
         IntentFilter filter = new IntentFilter(ACTION);

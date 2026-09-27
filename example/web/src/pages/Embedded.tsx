@@ -46,7 +46,7 @@ export function EmbeddedPage() {
 
       <div style={styles.card}>
         <h2 style={styles.sectionTitle}>ACTIONS</h2>
-        <button onClick={() => sendBroadcast('com.atakmap.android.plugintemplate.SHOW_REACT')} style={styles.buttonOutline}>
+        <button onClick={() => sendBroadcast('dev.atakreactive.example.SHOW_REACT')} style={styles.buttonOutline}>
           Open Full React Dropdown
         </button>
         <button onClick={dropMarker} disabled={!location} style={styles.button}>

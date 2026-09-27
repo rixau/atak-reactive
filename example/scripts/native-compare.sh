@@ -52,7 +52,7 @@ echo "ts,phase,atak_pss_kb,renderer_pss_kb,renderer_count,atak_cpu_pct,renderer_
 echo "atak pid: $ATAK_PID   output: $CSV"
 
 S="adb shell"
-CH="am broadcast -p $PKG -a com.atakmap.android.plugintemplate.NATIVE_CHURN"
+CH="am broadcast -p $PKG -a dev.atakreactive.example.NATIVE_CHURN"
 
 # ---- sampling (same primitives as perf-profile.sh, so numbers compare) -------
 

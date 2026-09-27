@@ -1,4 +1,4 @@
-package com.atakmap.android.plugintemplate;
+package dev.atakreactive.example;
 
 import android.content.Context;
 import android.content.Intent;

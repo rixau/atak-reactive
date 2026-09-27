@@ -53,7 +53,7 @@ CSV="$OUT_DIR/$STAMP-cot.csv"
 echo "phase,atak_cpu_pct,atak_pss_mb,renderer_pss_mb,renderer_cpu_pct" > "$CSV"
 
 S="adb shell input"
-B="adb shell am broadcast -p $PKG -a com.atakmap.android.plugintemplate.BENCH"
+B="adb shell am broadcast -p $PKG -a dev.atakreactive.example.BENCH"
 
 # ---- sampling ----------------------------------------------------------------
 # One CPU reading per WINDOW seconds from /proc ticks, rather than the 3 s

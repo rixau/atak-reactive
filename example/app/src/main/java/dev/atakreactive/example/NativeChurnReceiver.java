@@ -1,4 +1,4 @@
-package com.atakmap.android.plugintemplate;
+package dev.atakreactive.example;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -31,16 +31,16 @@ import java.util.List;
  * Driven from adb, so no UI interaction is needed while measuring:
  * <pre>
  * adb shell am broadcast -p com.atakmap.app.civ \
- *     -a com.atakmap.android.plugintemplate.NATIVE_CHURN \
+ *     -a dev.atakreactive.example.NATIVE_CHURN \
  *     --es op start --ei count 200 --ei hz 1
  * adb shell am broadcast -p com.atakmap.app.civ \
- *     -a com.atakmap.android.plugintemplate.NATIVE_CHURN --es op stop
+ *     -a dev.atakreactive.example.NATIVE_CHURN --es op stop
  * </pre>
  */
 public class NativeChurnReceiver extends BroadcastReceiver {
 
     private static final String TAG = "NativeChurn";
-    public static final String ACTION = "com.atakmap.android.plugintemplate.NATIVE_CHURN";
+    public static final String ACTION = "dev.atakreactive.example.NATIVE_CHURN";
     private static final String UID_PREFIX = "PERFLOAD-";
 
     private final MapView mapView;

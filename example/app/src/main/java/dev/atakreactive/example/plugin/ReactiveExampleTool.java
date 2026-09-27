@@ -1,13 +1,15 @@
-package com.atakmap.android.plugintemplate.plugin;
+package dev.atakreactive.example.plugin;
 
 import android.content.Context;
 
 import com.atak.plugins.impl.AbstractPluginTool;
-import com.atakmap.android.plugintemplate.ReactiveExampleComponent;
 
-public class PluginTemplateTool extends AbstractPluginTool {
+import dev.atakreactive.example.R;
+import dev.atakreactive.example.ReactiveExampleComponent;
 
-    public PluginTemplateTool(Context context) {
+public class ReactiveExampleTool extends AbstractPluginTool {
+
+    public ReactiveExampleTool(Context context) {
         super(context,
                 context.getString(R.string.app_name),
                 context.getString(R.string.app_name),
