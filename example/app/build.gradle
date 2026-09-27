@@ -8,9 +8,11 @@
 
 buildscript {
 
-    // atak-reactive: the example ships with each release, so it carries the
-    // release's version rather than a number of its own.
-    ext.PLUGIN_VERSION = file("${rootDir}/../version.txt").text.trim()
+    // atak-reactive: the example versions itself. It is a demo app, not part of
+    // the published surface, so its releases are its own — bumping example/version.txt
+    // is what publishes it to Arsenal C2 (.github/workflows/publish-example.yml),
+    // and a library release no longer drags the example along with it.
+    ext.PLUGIN_VERSION = file("${rootDir}/version.txt").text.trim()
     ext.ATAK_VERSION = '5.6.0'
 
     def takdevVersion = '3.+'

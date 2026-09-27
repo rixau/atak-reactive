@@ -102,9 +102,10 @@ jobs:
                  grep -E 'BRIDGE_VERSION|ATAK_VERSION' "$GENERATED"; exit 1; }
           echo "OK: $(grep -E 'BRIDGE_VERSION|ATAK_VERSION' "$GENERATED" | tr -s ' ')"
 
-  # Builds the example's release APK the way publish.yml does before pushing it
-  # to Arsenal C2, so a break in the example (or in the build script) shows up on
-  # the PR that caused it rather than after a release has already gone out. Gated
+  # Builds the example's release APK the way publish-example.yml does before
+  # pushing it to Arsenal C2, so a break in the example (or in the build script)
+  # shows up on the PR that caused it rather than on the version bump that tries
+  # to publish it — the bump commit is not where the break was introduced. Gated
   # like lib-compile: the build needs the private ATAK SDK.
   example-build:
     runs-on: ubuntu-latest
