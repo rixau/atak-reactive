@@ -260,6 +260,11 @@ public class ReactiveWebView extends FrameLayout {
      */
     private void pauseWebView() {
         stopDevRetry();
+        // Cancel a resume that is still queued behind createWebView(). Leaving it set
+        // would let the deferred init replay it, reviving a view the host had already
+        // paused — and setting hostResumed with it, so every later re-attach would
+        // resume it too.
+        pendingResume = false;
         if (destroyed) return;
 
         if (webView != null) {
@@ -343,6 +348,15 @@ public class ReactiveWebView extends FrameLayout {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         pauseWebView();
+        // destroy() used to unhook these on the way out. Keep that half: a parked
+        // panel has no business holding map, NavView, radial-menu and preference
+        // listeners, or pushing evaluateJavascript into a WebView that is off-window.
+        // onAttachedToWindow() replays onResume(), which registers them again — both
+        // sides are idempotent, so the round trip is safe to repeat.
+        stopPreferenceListener();
+        if (eventEmitter != null) {
+            eventEmitter.stopListening();
+        }
     }
 
     // --- Private helpers ---
