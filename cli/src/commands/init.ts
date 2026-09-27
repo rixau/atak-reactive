@@ -12,7 +12,7 @@ import {
   removeSourceInstall,
   findMapComponents,
   deriveIntentAction,
-  readPluginImpl,
+  readPluginImpls,
   isTemplateOwned,
   TEMPLATE_PACKAGE,
   injectReactiveRegistration,
@@ -42,22 +42,42 @@ const ICON_DENSITIES = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];
  *
  * Returns the lines so the dry-run can report the same thing it would print.
  */
-function templatePackageWarning(appDir: string, embedded: boolean): string[] {
-  if (!isTemplateOwned(readPluginImpl(appDir))) return [];
+function templatePackageWarning(appDir: string, intentAction: string | null): string[] {
+  // Two independent hazards, read off two independent strings. plugin.xml can
+  // be renamed without the Java package moving (it is a one-line edit, so it
+  // tends to happen first), which leaves the intent action still colliding, and
+  // gating both on plugin.xml would miss exactly that case.
+  const collidingImpls = readPluginImpls(appDir).filter(isTemplateOwned);
+  const collidingAction = isTemplateOwned(intentAction) ? intentAction : null;
+  if (collidingImpls.length === 0 && collidingAction === null) return [];
+
   const lines = [
-    `Warning: this plugin still declares the ATAK template's class in plugin.xml,`,
-    `  under ${TEMPLATE_PACKAGE}.`,
-    '',
-    '  ATAK identifies a plugin by its implementation class name, so two plugins',
-    '  built from the template collide on one device: the second to be scanned is',
-    '  silently skipped and shows as "Not loaded", with nothing logged as an error.',
+    `Warning: this plugin still uses the ATAK template's package, ${TEMPLATE_PACKAGE}.`,
   ];
-  if (!embedded) {
+
+  if (collidingImpls.length > 0) {
     lines.push(
-      '  Intent actions are derived from that package too, and ATAK\'s broadcast',
-      '  bus is process-wide, so those collide as well.',
+      '',
+      '  ATAK identifies a plugin by the implementation class named in plugin.xml,',
+      '  and de-duplicates across every plugin installed on the device:',
+      ...collidingImpls.map((impl) => `    ${impl}`),
+      '  Any other plugin built from the template declares the same class, and',
+      '  whichever ATAK scans second is silently skipped: it shows as "Not loaded"',
+      '  and will not enable, with nothing logged as an error. Which of the two',
+      '  loses is arbitrary and can change between installs.',
     );
   }
+
+  if (collidingAction !== null) {
+    lines.push(
+      '',
+      '  The intent action for your React screen is namespaced on that package too:',
+      `    ${collidingAction}`,
+      "  ATAK's broadcast bus is shared by every loaded plugin, so two unrenamed",
+      "  plugins trigger each other's screens.",
+    );
+  }
+
   lines.push(
     '',
     '  Rename the Java package before you publish, and update the impl= in',
@@ -477,6 +497,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
 
     // MapComponent registration
+    let dryRunAction: string | null = null;
     if (!opts.embedded) {
       const mapComponents = findMapComponents(appDir);
       if (mapComponents.length === 0) {
@@ -484,12 +505,14 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       } else if (mapComponents.length === 1) {
         const comp = mapComponents[0]!;
         const content = readFileSync(comp.filePath, 'utf-8');
+        // Derived whether or not it is already registered: an action injected by
+        // an earlier run is just as collision-prone as one about to be written.
+        dryRunAction = deriveIntentAction(comp.packageName);
         if (content.includes('ReactiveDropDown')) {
           log(`  ✓ ReactiveDropDown already registered in ${comp.relativePath}`);
         } else {
-          const action = deriveIntentAction(comp.packageName);
           log(`  + Register ReactiveDropDown in ${comp.relativePath}`);
-          log(`    Intent action: ${action}`);
+          log(`    Intent action: ${dryRunAction}`);
         }
       } else {
         log(`  ⚠ ${mapComponents.length} MapComponents found — manual registration needed`);
@@ -499,7 +522,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
 
     // Template package collision
-    for (const line of templatePackageWarning(appDir, !!opts.embedded)) {
+    for (const line of templatePackageWarning(appDir, dryRunAction)) {
       log(line ? `  ${line}` : '');
     }
 
@@ -735,7 +758,7 @@ preBuild.dependsOn buildWebAssets
     }
   }
 
-  const templateWarning = templatePackageWarning(appDir, !!opts.embedded);
+  const templateWarning = templatePackageWarning(appDir, intentAction);
   if (templateWarning.length) {
     log('');
     for (const line of templateWarning) log(line);

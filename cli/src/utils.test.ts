@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -7,6 +7,9 @@ import {
   parseAtakVersion,
   parseAarVersion,
   deriveIntentAction,
+  readPluginImpls,
+  isTemplateOwned,
+  TEMPLATE_PACKAGE,
   isNewerVersion,
   fetchLatestVersion,
   parsePortArg,
@@ -441,5 +444,68 @@ describe('dev server port resolution', () => {
 
   it('returns nothing for an empty list', () => {
     expect(parseAdbDeviceList('List of devices attached\n')).toEqual([]);
+  });
+});
+
+describe('readPluginImpls', () => {
+  /** Write a plugin.xml into a throwaway app dir and return that dir. */
+  const withPluginXml = (body: string): string => {
+    const appDir = mkdtempSync(join(tmpdir(), 'atak-impl-'));
+    mkdirSync(join(appDir, 'src', 'main', 'assets'), { recursive: true });
+    writeFileSync(join(appDir, 'src', 'main', 'assets', 'plugin.xml'), body);
+    return appDir;
+  };
+
+  it('returns every extension, not just the first', () => {
+    // ATAK asks for IPlugin and IToolbarItem separately and de-dupes each one,
+    // so a renamed first extension does not make a later one safe.
+    const dir = withPluginXml(`<plugin>
+  <extension type="gov.tak.api.plugin.IPlugin" impl="com.acme.recon.plugin.ReconLifecycle" singleton="true" />
+  <extension type="com.atak.plugins.impl.IToolbarItem" impl="${TEMPLATE_PACKAGE}.plugin.PluginTemplateTool" singleton="true" />
+</plugin>`);
+    expect(readPluginImpls(dir)).toEqual([
+      'com.acme.recon.plugin.ReconLifecycle',
+      `${TEMPLATE_PACKAGE}.plugin.PluginTemplateTool`,
+    ]);
+  });
+
+  it('ignores commented-out extensions, as ATAK does', () => {
+    // SimpleXML drops comments, so a half-finished rename that left the old
+    // impl in a comment block must not be reported as a live collision.
+    const dir = withPluginXml(`<plugin>
+  <!-- was: <extension impl="${TEMPLATE_PACKAGE}.plugin.PluginTemplateLifecycle" /> -->
+  <extension type="gov.tak.api.plugin.IPlugin" impl="com.acme.recon.plugin.ReconLifecycle" singleton="true" />
+</plugin>`);
+    expect(readPluginImpls(dir)).toEqual(['com.acme.recon.plugin.ReconLifecycle']);
+  });
+
+  it('accepts single-quoted attributes', () => {
+    const dir = withPluginXml(`<plugin><extension impl='com.acme.recon.plugin.ReconLifecycle' /></plugin>`);
+    expect(readPluginImpls(dir)).toEqual(['com.acme.recon.plugin.ReconLifecycle']);
+  });
+
+  it('does not match a longer attribute ending in impl', () => {
+    const dir = withPluginXml(`<plugin><extension simpl="nope" impl="com.acme.Real" /></plugin>`);
+    expect(readPluginImpls(dir)).toEqual(['com.acme.Real']);
+  });
+
+  it('returns nothing when there is no plugin.xml', () => {
+    expect(readPluginImpls(mkdtempSync(join(tmpdir(), 'atak-impl-')))).toEqual([]);
+  });
+});
+
+describe('isTemplateOwned', () => {
+  it('matches a class under the template package', () => {
+    expect(isTemplateOwned(`${TEMPLATE_PACKAGE}.plugin.PluginTemplateLifecycle`)).toBe(true);
+  });
+
+  it('requires a package boundary, not a bare prefix', () => {
+    // com.atakmap.android.plugintemplatex is somebody else's package entirely.
+    expect(isTemplateOwned(`${TEMPLATE_PACKAGE}x.plugin.Foo`)).toBe(false);
+  });
+
+  it('is false for a renamed class and for null', () => {
+    expect(isTemplateOwned('com.acme.recon.plugin.ReconLifecycle')).toBe(false);
+    expect(isTemplateOwned(null)).toBe(false);
   });
 });

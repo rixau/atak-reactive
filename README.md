@@ -37,13 +37,7 @@ context.getResources().getDrawable(R.drawable.ic_reactive_tool, null)
 
 Using it is optional and nothing else references it — your plugin's own launcher icon and manifest are left exactly as they are.
 
-**If you started from the ATAK plugin template, rename its Java package before you publish.** `init` warns about this, and it is worth understanding because the failure is silent.
-
-ATAK identifies a plugin by the implementation class name in `app/src/main/assets/plugin.xml`, and de-duplicates across every plugin installed on the device. Two plugins that both still declare the template's `com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle` collide: whichever ATAK scans second is skipped, shows as "Not loaded" in the plugin manager, and refuses to enable. Nothing is logged as an error — the only sign is `Already loaded, skipping plugin extension` at debug level.
-
-Intent actions have the same problem. `init` derives the action for your React screen from the package declared in your MapComponent, and ATAK's broadcast bus is shared by every loaded plugin, so two unrenamed plugins trigger each other's screens.
-
-Renaming the Java package fixes both. Changing only `applicationId` does not — ATAK keys on the class name, not the package id.
+If you started from the ATAK plugin template, also see [Rename the template's Java package](#rename-the-templates-java-package) — `init` warns about it, and the failure it prevents is silent.
 
 **2. Develop with hot reload**
 
@@ -114,6 +108,18 @@ Builds web assets into the APK.
 Signing is your project's `signingConfig`, not something the CLI does. The ATAK plugin template ships a release config using the ATAK **development** keystore — that produces a signed APK suitable for sideloading and testing, but it is a keystore every ATAK developer has, not yours. If your project has no release `signingConfig`, Gradle emits an `-unsigned.apk`, which ATAK will not load.
 
 Substitute your own signing config before distributing through TAK.gov or an organization's plugin store.
+
+## Rename the template's Java package
+
+If your plugin started from the ATAK plugin template, rename its Java package before you publish. `init` warns when it sees the template's package, because the failure it causes is silent and easy to misread.
+
+ATAK identifies a plugin by the implementation class named in `app/src/main/assets/plugin.xml`, and de-duplicates by that class name across every plugin installed on the device. Two plugins that both still declare the template's `com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle` collide: one of them is silently skipped, shows as "Not loaded" in ATAK's plugin manager, and will not enable. Nothing is logged as an error — the only trace is `Already loaded, skipping plugin extension` at debug level. Which of the two loses is arbitrary and can change between installs, so testing once and seeing your plugin win does not mean you are safe.
+
+ATAK requests each extension type separately and de-dupes each one, so check every `<extension>` in the file, not just the first.
+
+Intent actions have the same problem. `init` derives the action for your React screen from the package declared in your MapComponent, and ATAK's broadcast bus is shared by every loaded plugin, so two unrenamed plugins trigger each other's screens.
+
+Renaming the Java package fixes both. Changing only `applicationId` does not — ATAK keys on the class name, not the package id.
 
 ## React Hooks
 

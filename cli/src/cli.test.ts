@@ -403,6 +403,25 @@ describe.skipIf(isWin)('init --dry-run — reports without writing', () => {
 });
 
 describe.skipIf(isWin)('init — template package collision', () => {
+  const writeMultiPluginXml = (fx: Fixture, exts: Array<[string, string]>) => {
+    const dir = join(fx.root, 'app', 'src', 'main', 'assets');
+    mkdirSync(dir, { recursive: true });
+    const body = exts
+      .map(([type, impl]) => `  <extension type="${type}" impl="${impl}" singleton="true" />`)
+      .join('\n');
+    writeFileSync(join(dir, 'plugin.xml'), `<plugin>\n${body}\n</plugin>\n`);
+  };
+
+  /** A MapComponent in `pkg`, which is what init derives the intent action from. */
+  const writeMapComponent = (fx: Fixture, pkg: string) => {
+    const dir = join(fx.root, 'app', 'src', 'main', 'java', ...pkg.split('.'));
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'PluginMapComponent.java'),
+      `package ${pkg};\npublic class PluginMapComponent {\n  public void onCreate() {\n    this.registerDropDownReceiver(a, b);\n  }\n}\n`,
+    );
+  };
+
   const writePluginXml = (fx: Fixture, impl: string) => {
     const dir = join(fx.root, 'app', 'src', 'main', 'assets');
     mkdirSync(dir, { recursive: true });
@@ -437,8 +456,45 @@ describe.skipIf(isWin)('init — template package collision', () => {
     const r = runCli(fx, ['init', '--embedded']);
 
     expect(r.out).toContain('com.atakmap.android.plugintemplate');
-    // the intent-action half does not apply when there is no dropdown
-    expect(r.out).not.toContain('broadcast bus is process-wide');
+    // The intent-action half does not apply when there is no dropdown. Assert on
+    // a fragment that sits within one output line: the warning is emitted as
+    // separate lines, so anything spanning a wrap can never match and the
+    // assertion would pass no matter what the code did.
+    expect(r.out).not.toContain('broadcast bus is shared');
+  });
+
+  it('warns when a later extension is the template class, not just the first', () => {
+    // ATAK de-dupes every extension independently, so a renamed lifecycle does
+    // not make a still-template toolbar item safe.
+    const fx = makeFixture();
+    writeMultiPluginXml(fx, [
+      ['gov.tak.api.plugin.IPlugin', 'com.acme.recon.plugin.ReconLifecycle'],
+      ['com.atak.plugins.impl.IToolbarItem', 'com.atakmap.android.plugintemplate.plugin.PluginTemplateTool'],
+    ]);
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).toContain('com.atakmap.android.plugintemplate.plugin.PluginTemplateTool');
+  });
+
+  it('warns about the intent action even when plugin.xml has been renamed', () => {
+    // Renaming plugin.xml is a one-line edit and tends to happen first; the Java
+    // package is the work people defer, and the action is derived from it.
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.acme.recon.plugin.ReconLifecycle');
+    writeMapComponent(fx, 'com.atakmap.android.plugintemplate');
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).toContain('com.atakmap.android.plugintemplate.SHOW_REACT');
+    expect(r.out).toContain('broadcast bus is shared');
+  });
+
+  it('does not claim intents collide when no MapComponent was found', () => {
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle');
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).toContain('Not loaded');
+    expect(r.out).not.toContain('broadcast bus is shared');
   });
 
   it('reports it under --dry-run without writing anything', () => {

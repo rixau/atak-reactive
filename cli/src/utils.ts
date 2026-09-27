@@ -226,18 +226,27 @@ export function deriveIntentAction(packageName: string): string {
 export const TEMPLATE_PACKAGE = 'com.atakmap.android.plugintemplate';
 
 /**
- * The IPlugin implementation class a plugin declares in assets/plugin.xml, or
- * null if there is no plugin.xml or no impl in it.
+ * Every implementation class a plugin declares in assets/plugin.xml, in
+ * document order. Empty if there is no plugin.xml or nothing declared.
  *
- * This exact string is what ATAK's plugin registry keys on, so it is the thing
- * worth reading — a project can have moved its applicationId, or renamed some
- * directories, and still be handing ATAK the template's class name.
+ * These exact strings are what ATAK's plugin registry keys on, so they are the
+ * thing worth reading — a project can have moved its applicationId, or renamed
+ * some directories, and still be handing ATAK the template's class name.
+ *
+ * All of them, not just the first: ATAK collects every <extension> and de-dupes
+ * each one independently, so a file whose first extension has been renamed can
+ * still collide on a later one. ATAK asks for two extension types (IPlugin and
+ * IToolbarItem), so more than one entry is a supported shape.
+ *
+ * Comments are stripped first because ATAK parses this file with SimpleXML,
+ * which ignores them. A half-finished rename tends to leave the old impl in a
+ * comment block, and warning about that would be a false positive.
  */
-export function readPluginImpl(appDir: string): string | null {
+export function readPluginImpls(appDir: string): string[] {
   const pluginXml = join(appDir, 'src', 'main', 'assets', 'plugin.xml');
-  if (!existsSync(pluginXml)) return null;
-  const match = readFileSync(pluginXml, 'utf-8').match(/\bimpl\s*=\s*"([^"]+)"/);
-  return match ? match[1]! : null;
+  if (!existsSync(pluginXml)) return [];
+  const xml = readFileSync(pluginXml, 'utf-8').replace(/<!--[\s\S]*?-->/g, '');
+  return [...xml.matchAll(/\bimpl\s*=\s*(["'])(.*?)\1/g)].map((m) => m[2]!);
 }
 
 /** Whether a fully-qualified name still sits under the ATAK template's package. */
