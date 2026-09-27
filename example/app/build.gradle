@@ -106,7 +106,11 @@ def supportedFlavors =
 
 android {
     compileSdk 36
-    namespace 'com.atakmap.android.plugintemplate.plugin'
+    // atak-reactive: matches applicationId. ATAK's AtakPluginRegistry de-duplicates
+    // IPlugin extensions by implementation class name across every installed plugin,
+    // so the example cannot keep the template's com.atakmap.android.plugintemplate
+    // package -- any other template-derived plugin would shadow it.
+    namespace 'dev.atakreactive.example'
 
     buildFeatures {
         buildConfig = true
@@ -270,6 +274,8 @@ android {
         // Not the template's com.atakmap.android.plugintemplate.plugin: the example
         // is published to Arsenal C2, where the first push of a package name claims
         // it, and on a device it would collide with any other template-derived plugin.
+        // The Java package, the namespace above and the plugin.xml impl= all match
+        // this id for the same reason -- see the note on namespace.
         applicationId "dev.atakreactive.example"
         minSdkVersion 21
         targetSdkVersion 34

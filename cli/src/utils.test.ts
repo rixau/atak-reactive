@@ -333,7 +333,7 @@ describe('deriveIntentAction', () => {
   });
 
   it('works with deep package names', () => {
-    expect(deriveIntentAction('com.atakmap.android.plugintemplate')).toBe('com.atakmap.android.plugintemplate.SHOW_REACT');
+    expect(deriveIntentAction('com.acme.android.deep.plugin')).toBe('com.acme.android.deep.plugin.SHOW_REACT');
   });
 
   it('works with short package names', () => {

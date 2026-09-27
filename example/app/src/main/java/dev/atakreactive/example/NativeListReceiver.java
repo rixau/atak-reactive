@@ -1,4 +1,4 @@
-package com.atakmap.android.plugintemplate;
+package dev.atakreactive.example;
 
 import android.content.Context;
 import android.content.Intent;
@@ -52,7 +52,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class NativeListReceiver extends DropDownReceiver implements OnStateListener {
 
     private static final String TAG = "NativeList";
-    public static final String SHOW = "com.atakmap.android.plugintemplate.SHOW_NATIVE_LIST";
+    public static final String SHOW = "dev.atakreactive.example.SHOW_NATIVE_LIST";
 
     private static final long DEBOUNCE_MS = 100;
     private static final long MAX_FLUSH_DELAY_MS = 500;

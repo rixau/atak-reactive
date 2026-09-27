@@ -52,7 +52,7 @@ mkdir -p "$RAW"
 adb push "$HERE/lat-probe.sh" /data/local/tmp/lat-probe.sh > /dev/null
 adb shell chmod 755 /data/local/tmp/lat-probe.sh
 
-B="adb shell am broadcast -p $PKG -a com.atakmap.android.plugintemplate.BENCH"
+B="adb shell am broadcast -p $PKG -a dev.atakreactive.example.BENCH"
 LOAD_PID=""
 
 start_load() {

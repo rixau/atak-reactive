@@ -6,7 +6,7 @@ export function HomePage() {
   const selected = useMapEvent('itemSelected');
 
   const openMixedDemo = () => {
-    sendBroadcast('com.atakmap.android.plugintemplate.SHOW_MIXED');
+    sendBroadcast('dev.atakreactive.example.SHOW_MIXED');
   };
 
   return (

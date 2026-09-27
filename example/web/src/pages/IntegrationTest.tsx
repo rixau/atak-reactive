@@ -163,7 +163,7 @@ export function IntegrationTestPage() {
 
     // --- Intent send (just verify no crash) ---
     try {
-      sendBroadcast('com.atakmap.android.plugintemplate.TEST_INTENT', { test: true });
+      sendBroadcast('dev.atakreactive.example.TEST_INTENT', { test: true });
       log(true, 'sendBroadcast no crash');
     } catch (e) {
       log(false, 'sendBroadcast', String(e));
