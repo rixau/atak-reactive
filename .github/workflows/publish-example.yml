@@ -72,18 +72,32 @@ jobs:
           # Compare against the push's base, not HEAD~1: a push that carries the
           # bump plus a follow-up commit would read as unchanged at HEAD~1 and
           # silently skip. The shallow clone above does not contain the base, so
-          # fetch just that commit; if it cannot be resolved (a force push, a new
-          # branch) PREV is empty and the version counts as changed, which is the
-          # safe direction — Arsenal C2 rejects a versionCode it already has.
+          # fetch just that commit.
           git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null || true
-          PREV=$(git show "$BEFORE":example/version.txt 2>/dev/null | tr -d '[:space:]' || echo "")
-          echo "Previous: ${PREV:-<unknown>} → Current: $VERSION"
 
-          if [ "$VERSION" != "$PREV" ]; then
+          # Three outcomes, and collapsing them is what makes this subtle. A base
+          # that cannot be resolved at all (a force push, a new branch) publishes:
+          # something moved and we cannot see what, and Arsenal C2 rejects a
+          # versionCode it already has. A base that resolves but has no
+          # example/version.txt is the commit that introduced per-example
+          # versioning, which is not a bump — publishing there would re-push a
+          # version that already shipped with the library. Only a base whose
+          # version differs is a real bump.
+          if ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "Base $BEFORE is unavailable; treating $VERSION as new."
             echo "publish=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice title=publish-example skipped::example/version.txt is still $VERSION, so there is nothing new to publish."
+          elif ! git cat-file -e "$BEFORE":example/version.txt 2>/dev/null; then
+            echo "::notice title=publish-example skipped::This push introduced example/version.txt ($VERSION) rather than bumping it. Run this workflow by hand to publish $VERSION now."
             echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            PREV=$(git show "$BEFORE":example/version.txt | tr -d '[:space:]')
+            echo "Previous: $PREV → Current: $VERSION"
+            if [ "$VERSION" != "$PREV" ]; then
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::notice title=publish-example skipped::example/version.txt is still $VERSION, so there is nothing new to publish."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
   publish-example:
