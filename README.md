@@ -413,7 +413,7 @@ ReactiveWebView view = new ReactiveWebView(mapView, ctx, "web/index.html");
 view.addBridge(new PlatformSimBridge(simulator, emitter));
 ```
 
-**Lifecycle:** Call `onResume()` when the view becomes visible, `onPause()` when hidden. `destroy()` is called automatically when the view is detached from the window, but you can call it earlier for explicit cleanup. `useDropdownSize()` and `useDropdownVisible()` return defaults in embedded views — they only update inside `ReactiveDropDown`.
+**Lifecycle:** Call `onResume()` when the view becomes visible, `onPause()` when hidden, and `destroy()` once you are done with the view — from `onDropDownClose()` if you rebuild it on each open (as above), otherwise from `disposeImpl()`. Teardown is yours to drive: detaching the view only pauses it and unhooks its listeners, because ATAK detaches and re-attaches a retained panel's view on its own, and the view restores itself when it comes back. `useDropdownSize()` and `useDropdownVisible()` return defaults in embedded views — they only update inside `ReactiveDropDown`.
 
 ## Architecture
 

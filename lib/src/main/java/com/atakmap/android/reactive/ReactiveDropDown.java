@@ -365,6 +365,19 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         showDropDown(container, HALF_WIDTH, FULL_HEIGHT,
                 FULL_WIDTH, HALF_HEIGHT, false, this);
 
+        // showDropDown() does not open the panel here — it queues the work on the map
+        // view. When the panel is already open that queued work closes it before
+        // reopening, which fires onDropDownClose() and tears the listeners back down.
+        // Starting them inline would therefore leave them stopped with nothing to
+        // restart them, so everything that has to survive the reopen is queued behind
+        // it instead.
+        getMapView().post(this::onPanelOpened);
+    }
+
+    /** Load the UI and start listening, once ATAK has actually opened the panel. */
+    private void onPanelOpened() {
+        if (disposed || webView == null) return;
+
         if (devMode) {
             webView.loadUrl(LOADING_HTML);
 
@@ -511,6 +524,9 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     }
 
     private void startPreferenceListener() {
+        // Registering a second listener would strand the first: the field is the only
+        // handle on it, so overwriting it leaves it subscribed for good.
+        if (prefListener != null) return;
         try {
             AtakPreferences prefs = AtakPreferences.getInstance(
                     getMapView().getContext());

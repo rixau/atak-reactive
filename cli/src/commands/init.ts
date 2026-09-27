@@ -617,6 +617,11 @@ preBuild.dependsOn buildWebAssets
     log('    ReactiveWebView reactView = new ReactiveWebView(mapView, ctx, "web/index.html");');
     log('    myContainer.addView(reactView);');
     log('    reactView.onResume();');
+    log('');
+    log('  Then pause it when hidden and destroy it when you are done with it:');
+    log('');
+    log('    reactView.onPause();   // tab switched away / panel hidden');
+    log('    reactView.destroy();   // onDropDownClose() or disposeImpl()');
   } else {
     logStep('Registering ReactiveDropDown...');
 

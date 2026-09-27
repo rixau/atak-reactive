@@ -69,6 +69,13 @@ public class ReactiveWebView extends FrameLayout {
      * stays on about:blank — see the mapView.post(...) block in the constructor.
      */
     private boolean pendingResume = false;
+    /**
+     * The host's last onResume()/onPause() intent, replayed after ATAK detaches and
+     * re-attaches this view behind the host's back. See onAttachedToWindow().
+     */
+    private boolean hostResumed = false;
+    /** False until the first onAttachedToWindow(), so the first attach is not a re-attach. */
+    private boolean everAttached = false;
 
     /**
      * Create a reactive web view.
@@ -210,6 +217,7 @@ public class ReactiveWebView extends FrameLayout {
      * visible (e.g. when the tab is selected or the dropdown opens).
      */
     public void onResume() {
+        hostResumed = true;
         if (destroyed) return;
 
         // WebView creation is deferred to mapView.post(...) in the constructor, so a
@@ -242,7 +250,21 @@ public class ReactiveWebView extends FrameLayout {
      * Pause the web view. Call when the view is hidden (e.g. tab switched away).
      */
     public void onPause() {
+        hostResumed = false;
+        pauseWebView();
+    }
+
+    /**
+     * Stop the WebView without recording it as the host's wish, so a pause forced by
+     * a detach does not suppress the resume when the view comes back.
+     */
+    private void pauseWebView() {
         stopDevRetry();
+        // Cancel a resume that is still queued behind createWebView(). Leaving it set
+        // would let the deferred init replay it, reviving a view the host had already
+        // paused — and setting hostResumed with it, so every later re-attach would
+        // resume it too.
+        pendingResume = false;
         if (destroyed) return;
 
         if (webView != null) {
@@ -296,10 +318,45 @@ public class ReactiveWebView extends FrameLayout {
         }
     }
 
+    /**
+     * ATAK parks a panel by pulling its view out of the window and putting the very
+     * same instance back later — DropDownManager's retain stack, which every
+     * transient drop-down pushes onto, the loadout list behind the ATAK hamburger
+     * included. The host is never told, so it will not call onResume() again;
+     * restore whatever it last asked for.
+     */
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (!everAttached) {
+            everAttached = true;
+            return;
+        }
+        if (hostResumed) {
+            onResume();
+        }
+    }
+
+    /**
+     * Deliberately not destroy(). Tearing the WebView down here left a retained panel
+     * blank for the rest of the session: the child view was gone and the `destroyed`
+     * flag turned every later onResume() into a no-op, so all that came back was this
+     * view's own background colour. Hosts own the teardown and call destroy() from
+     * their disposeImpl().
+     */
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        destroy();
+        pauseWebView();
+        // destroy() used to unhook these on the way out. Keep that half: a parked
+        // panel has no business holding map, NavView, radial-menu and preference
+        // listeners, or pushing evaluateJavascript into a WebView that is off-window.
+        // onAttachedToWindow() replays onResume(), which registers them again — both
+        // sides are idempotent, so the round trip is safe to repeat.
+        stopPreferenceListener();
+        if (eventEmitter != null) {
+            eventEmitter.stopListening();
+        }
     }
 
     // --- Private helpers ---
@@ -345,6 +402,10 @@ public class ReactiveWebView extends FrameLayout {
     }
 
     private void startPreferenceListener() {
+        // onResume() runs on every tab switch and on every re-attach. Registering a
+        // second listener would strand the first: the field is the only handle on it,
+        // so overwriting it leaves it subscribed with no way to ever unregister.
+        if (prefListener != null) return;
         try {
             AtakPreferences prefs = AtakPreferences.getInstance(
                     mapView.getContext());
