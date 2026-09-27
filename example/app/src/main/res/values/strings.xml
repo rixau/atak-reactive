@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App -->
-    <string name="app_name">Plugin Template</string>
+    <!-- atak-reactive: android:label, so this is the name ATAK's plugin manager
+         shows and the name Arsenal C2 reads off the APK. It was the template's
+         "Plugin Template", which said nothing about what the plugin is and
+         collided with every other template-derived plugin in a listing. -->
+    <string name="app_name">ATAK Reactive Example</string>
     <!-- description -->
-    <string name="app_desc">This plugin demonstrate bare bones plugin UI, and may be used to start a new plugin project</string>
+    <string name="app_desc">Example plugin for atak-reactive: a React UI in a WebView panel, wired to ATAK\'s map engine through the typed JavaScript bridge. Demonstrates markers, shapes, routes, GPS, CoT, and the perf harness.</string>
 
 
 
