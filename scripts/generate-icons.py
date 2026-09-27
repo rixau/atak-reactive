@@ -37,7 +37,7 @@ from PIL import Image, ImageDraw
 S = 2048
 
 ORBIT = (0x3D, 0xF5, 0x7E, 255)  # phosphor green, the accent
-CORE = (0xE8, 0xF5, 0xE9, 255)   # brackets + nucleus on the colour plate
+BRACKET = (0xE8, 0xF5, 0xE9, 255)  # brackets on the colour plate
 PLATE = (0x12, 0x18, 0x26, 255)  # plate behind the colour icon
 WHITE = (0xFF, 0xFF, 0xFF, 255)
 
@@ -65,25 +65,31 @@ def orbit(color, width, a, b, angle):
     return layer.rotate(angle, resample=Image.BICUBIC, center=(c, c))
 
 
-def mark(orbit_color, core_color):
-    """The logo itself, filling the full canvas."""
+def mark(orbit_color, bracket_color):
+    """The logo itself, filling the full canvas.
+
+    The stroke is deliberately light and there is no nucleus. Checked on a
+    420dpi device, where ATAK draws the tool icon at 79px: at a heavier weight
+    the two orbits and a centre dot fused into a solid four-lobe blob, which
+    read as muddy next to ATAK's own open line art. Thinner strokes and a wider
+    minor axis keep the two ellipses distinct all the way down to 24px. Verify
+    at 24px before thickening any of this.
+    """
     img = blank()
     for angle in (55, 125):
         img = Image.alpha_composite(
-            img, orbit(orbit_color, int(S * 0.072), S * 0.315, S * 0.128, angle))
+            img, orbit(orbit_color, int(S * 0.055), S * 0.320, S * 0.142, angle))
 
     draw = ImageDraw.Draw(img)
-    c, r = S / 2, S * 0.080
-    draw.ellipse([c - r, c - r, c + r, c + r], fill=core_color)
 
     # Four corner brackets. Straight lines survive downsampling far better than
     # the orbits do, which is what keeps the mark readable at 24-32px.
-    width = int(S * 0.072)
+    width = int(S * 0.055)
     near, far, length = S * 0.062, S * 0.938, S * 0.225
     for x, y, sx, sy in ((near, near, 1, 1), (far, near, -1, 1),
                          (near, far, 1, -1), (far, far, -1, -1)):
-        draw.line([x, y, x + sx * length, y], fill=core_color, width=width)
-        draw.line([x, y, x, y + sy * length], fill=core_color, width=width)
+        draw.line([x, y, x + sx * length, y], fill=bracket_color, width=width)
+        draw.line([x, y, x, y + sy * length], fill=bracket_color, width=width)
     return img
 
 
@@ -100,7 +106,7 @@ def launcher():
     plate = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     ImageDraw.Draw(plate).rounded_rectangle([0, 0, S - 1, S - 1],
                                             radius=int(S * 0.22), fill=PLATE)
-    return Image.alpha_composite(plate, inset(mark(ORBIT, CORE), 0.10))
+    return Image.alpha_composite(plate, inset(mark(ORBIT, BRACKET), 0.10))
 
 
 def tool():
