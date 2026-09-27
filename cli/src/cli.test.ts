@@ -402,6 +402,64 @@ describe.skipIf(isWin)('init --dry-run — reports without writing', () => {
   });
 });
 
+describe.skipIf(isWin)('init — tool icon', () => {
+  const resDir = (fx: Fixture) => join(fx.root, 'app', 'src', 'main', 'res');
+  const toolIcon = (fx: Fixture, density: string) =>
+    join(resDir(fx), `drawable-${density}`, 'ic_reactive_tool.png');
+
+  it('copies the full density set into an existing res/', () => {
+    const fx = makeFixture();
+    mkdirSync(resDir(fx), { recursive: true });
+    runCli(fx, ['init']);
+
+    for (const density of ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) {
+      expect(existsSync(toolIcon(fx, density))).toBe(true);
+    }
+  });
+
+  it('leaves the host plugin its own identity — no launcher icon, no manifest edit', () => {
+    const fx = makeFixture();
+    mkdirSync(join(resDir(fx), 'drawable'), { recursive: true });
+    const launcher = join(resDir(fx), 'drawable', 'ic_launcher.png');
+    writeFileSync(launcher, 'theirs');
+    const manifest = join(fx.root, 'app', 'src', 'main', 'AndroidManifest.xml');
+    writeFileSync(manifest, '<manifest android:icon="@drawable/ic_launcher" />\n');
+
+    runCli(fx, ['init']);
+
+    expect(readFileSync(launcher, 'utf-8')).toBe('theirs');
+    expect(readFileSync(manifest, 'utf-8')).toContain('@drawable/ic_launcher');
+  });
+
+  it('never overwrites an icon someone has already replaced', () => {
+    const fx = makeFixture();
+    mkdirSync(join(resDir(fx), 'drawable-xhdpi'), { recursive: true });
+    writeFileSync(toolIcon(fx, 'xhdpi'), 'custom');
+
+    runCli(fx, ['init']);
+
+    expect(readFileSync(toolIcon(fx, 'xhdpi'), 'utf-8')).toBe('custom');
+    // the densities it had not filled in are still copied
+    expect(existsSync(toolIcon(fx, 'mdpi'))).toBe(true);
+  });
+
+  it('skips quietly when the project has no res/ at all', () => {
+    const fx = makeFixture();
+    const r = runCli(fx, ['init']);
+    expect(r.out).toContain('res not found');
+    expect(existsSync(resDir(fx))).toBe(false);
+  });
+
+  it('reports the copy under --dry-run without writing it', () => {
+    const fx = makeFixture();
+    mkdirSync(resDir(fx), { recursive: true });
+    const r = runCli(fx, ['init', '--dry-run']);
+
+    expect(r.out).toContain('+ Add ic_reactive_tool');
+    expect(existsSync(toolIcon(fx, 'mdpi'))).toBe(false);
+  });
+});
+
 
 describe.skipIf(isWin)('dev install — build and install, no server', () => {
   it('builds and installs but never opens a tunnel or starts Vite', () => {

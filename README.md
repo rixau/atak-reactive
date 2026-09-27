@@ -29,6 +29,14 @@ npx @atak-reactive/cli init
 
 This adds the bridge AAR, patches `build.gradle`, creates a `web/` folder with React + Vite, and registers a `ReactiveDropDown` in your MapComponent. Use `--embedded` to skip the dropdown and wire up `ReactiveWebView` yourself. Use `--dry-run` to preview changes without writing anything.
 
+It also drops an `ic_reactive_tool` drawable into `res/drawable-*`, which you can hand to your `AbstractPluginTool` to brand the plugin's entry in ATAK's side menu:
+
+```java
+context.getResources().getDrawable(R.drawable.ic_reactive_tool, null)
+```
+
+Using it is optional and nothing else references it — your plugin's own launcher icon and manifest are left exactly as they are.
+
 **2. Develop with hot reload**
 
 ```bash

@@ -20,6 +20,34 @@ import {
   logError,
 } from '../utils.js';
 
+/** Density buckets the icon template ships, see scripts/generate-icons.py. */
+const ICON_DENSITIES = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];
+
+/**
+ * Drop `ic_reactive_tool` into the host plugin's res/ so it can brand its
+ * side-menu entry with the atak-reactive mark if it wants to.
+ *
+ * Deliberately additive: this writes one new drawable name and nothing else. A
+ * host plugin owns its own identity, so we never touch its `ic_launcher` or its
+ * manifest, and we skip any density it has already filled in rather than
+ * overwriting art someone may have replaced on purpose.
+ */
+function copyToolIcon(appDir: string): 'copied' | 'present' | 'no-res' {
+  const resDir = join(appDir, 'src', 'main', 'res');
+  if (!existsSync(resDir)) return 'no-res';
+
+  const templates = join(__dirname, 'templates', 'res');
+  let copied = 0;
+  for (const density of ICON_DENSITIES) {
+    const dest = join(resDir, `drawable-${density}`, 'ic_reactive_tool.png');
+    if (existsSync(dest)) continue;
+    mkdirSync(join(resDir, `drawable-${density}`), { recursive: true });
+    cpSync(join(templates, `drawable-${density}`, 'ic_reactive_tool.png'), dest);
+    copied++;
+  }
+  return copied > 0 ? 'copied' : 'present';
+}
+
 /**
  * Ensure the project's .gitignore covers what we generate — and, importantly,
  * `local.properties`, which holds tak.gov Artifactory credentials
@@ -379,6 +407,13 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       log('  + Run npm install in web/');
     }
 
+    // Tool icon
+    if (existsSync(join(appDir, 'src', 'main', 'res', 'drawable-mdpi', 'ic_reactive_tool.png'))) {
+      log('  ✓ ic_reactive_tool already present');
+    } else {
+      log('  + Add ic_reactive_tool to res/drawable-* (existing icons untouched)');
+    }
+
     // Gitignore
     const gi = existsSync(gitignore) ? readFileSync(gitignore, 'utf-8') : '';
     const wants: Array<[string, boolean]> = [
@@ -539,6 +574,22 @@ preBuild.dependsOn buildWebAssets
     );
 
     log('Created web/ with React + Vite + TypeScript');
+  }
+
+  // 9b. Tool icon for the side-menu entry
+  logStep('Adding tool icon...');
+  switch (copyToolIcon(appDir)) {
+    case 'copied':
+      log('Added ic_reactive_tool to res/drawable-*');
+      log('  To use it, pass it to your AbstractPluginTool:');
+      log('    context.getResources().getDrawable(R.drawable.ic_reactive_tool, null)');
+      break;
+    case 'present':
+      log('ic_reactive_tool already present');
+      break;
+    case 'no-res':
+      log('Warning: app/src/main/res not found, skipping');
+      break;
   }
 
   // 10. .gitignore — already handled up front (applies to every path, see ensureGitignore)
