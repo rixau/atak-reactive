@@ -37,6 +37,14 @@ context.getResources().getDrawable(R.drawable.ic_reactive_tool, null)
 
 Using it is optional and nothing else references it — your plugin's own launcher icon and manifest are left exactly as they are.
 
+**If you started from the ATAK plugin template, rename its Java package before you publish.** `init` warns about this, and it is worth understanding because the failure is silent.
+
+ATAK identifies a plugin by the implementation class name in `app/src/main/assets/plugin.xml`, and de-duplicates across every plugin installed on the device. Two plugins that both still declare the template's `com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle` collide: whichever ATAK scans second is skipped, shows as "Not loaded" in the plugin manager, and refuses to enable. Nothing is logged as an error — the only sign is `Already loaded, skipping plugin extension` at debug level.
+
+Intent actions have the same problem. `init` derives the action for your React screen from the package declared in your MapComponent, and ATAK's broadcast bus is shared by every loaded plugin, so two unrenamed plugins trigger each other's screens.
+
+Renaming the Java package fixes both. Changing only `applicationId` does not — ATAK keys on the class name, not the package id.
+
 **2. Develop with hot reload**
 
 ```bash

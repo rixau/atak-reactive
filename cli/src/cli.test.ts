@@ -402,6 +402,63 @@ describe.skipIf(isWin)('init --dry-run — reports without writing', () => {
   });
 });
 
+describe.skipIf(isWin)('init — template package collision', () => {
+  const writePluginXml = (fx: Fixture, impl: string) => {
+    const dir = join(fx.root, 'app', 'src', 'main', 'assets');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'plugin.xml'),
+      `<plugin>\n  <extension type="gov.tak.api.plugin.IPlugin" impl="${impl}" singleton="true" />\n</plugin>\n`,
+    );
+  };
+
+  it('warns when plugin.xml still declares the template class', () => {
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle');
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).toContain('com.atakmap.android.plugintemplate');
+    expect(r.out).toContain('Not loaded');
+    expect(r.out).toContain('plugin.xml');
+  });
+
+  it('stays quiet once the plugin has been renamed off the template', () => {
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.acme.recon.plugin.ReconLifecycle');
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).not.toContain('com.atakmap.android.plugintemplate');
+    expect(r.out).not.toContain('Not loaded');
+  });
+
+  it('warns in --embedded mode too — the collision is not about the dropdown', () => {
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle');
+    const r = runCli(fx, ['init', '--embedded']);
+
+    expect(r.out).toContain('com.atakmap.android.plugintemplate');
+    // the intent-action half does not apply when there is no dropdown
+    expect(r.out).not.toContain('broadcast bus is process-wide');
+  });
+
+  it('reports it under --dry-run without writing anything', () => {
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle');
+    const r = runCli(fx, ['init', '--dry-run']);
+
+    expect(r.out).toContain('com.atakmap.android.plugintemplate');
+    expect(existsSync(join(fx.root, 'web', 'src', 'App.tsx'))).toBe(false);
+  });
+
+  it('does not trip over a project with no plugin.xml at all', () => {
+    const fx = makeFixture();
+    const r = runCli(fx, ['init']);
+
+    expect(r.status).toBe(0);
+    expect(r.out).not.toContain('com.atakmap.android.plugintemplate');
+  });
+});
+
 describe.skipIf(isWin)('init — tool icon', () => {
   const resDir = (fx: Fixture) => join(fx.root, 'app', 'src', 'main', 'res');
   const toolIcon = (fx: Fixture, density: string) =>

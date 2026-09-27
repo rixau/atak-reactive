@@ -222,6 +222,29 @@ export function deriveIntentAction(packageName: string): string {
   return `${packageName}.SHOW_REACT`;
 }
 
+/** The Java package the stock ATAK plugin template ships with. */
+export const TEMPLATE_PACKAGE = 'com.atakmap.android.plugintemplate';
+
+/**
+ * The IPlugin implementation class a plugin declares in assets/plugin.xml, or
+ * null if there is no plugin.xml or no impl in it.
+ *
+ * This exact string is what ATAK's plugin registry keys on, so it is the thing
+ * worth reading — a project can have moved its applicationId, or renamed some
+ * directories, and still be handing ATAK the template's class name.
+ */
+export function readPluginImpl(appDir: string): string | null {
+  const pluginXml = join(appDir, 'src', 'main', 'assets', 'plugin.xml');
+  if (!existsSync(pluginXml)) return null;
+  const match = readFileSync(pluginXml, 'utf-8').match(/\bimpl\s*=\s*"([^"]+)"/);
+  return match ? match[1]! : null;
+}
+
+/** Whether a fully-qualified name still sits under the ATAK template's package. */
+export function isTemplateOwned(fqName: string | null): boolean {
+  return fqName !== null && fqName.startsWith(`${TEMPLATE_PACKAGE}.`);
+}
+
 /**
  * Detect the current install type for atak-reactive.
  */

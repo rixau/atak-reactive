@@ -12,6 +12,9 @@ import {
   removeSourceInstall,
   findMapComponents,
   deriveIntentAction,
+  readPluginImpl,
+  isTemplateOwned,
+  TEMPLATE_PACKAGE,
   injectReactiveRegistration,
   exec,
   log,
@@ -22,6 +25,46 @@ import {
 
 /** Density buckets the icon template ships, see scripts/generate-icons.py. */
 const ICON_DENSITIES = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];
+
+/**
+ * Warn when the plugin still hands ATAK the template's implementation class.
+ *
+ * ATAK's AtakPluginRegistry de-duplicates IPlugin extensions by implementation
+ * class name across every installed plugin, and AtakBroadcast actions are
+ * process-wide within ATAK. A project still on the template's package therefore
+ * collides with every other unrenamed template-derived plugin on the same
+ * device: one of the two is silently skipped — it just reads "Not loaded" in
+ * ATAK's plugin manager, with no error — and their intent actions cross-fire.
+ *
+ * `init` deliberately only reports this. Renaming someone's Java package
+ * rewrites their source tree, their plugin.xml and their manifest, which is far
+ * beyond what adding a React screen to a plugin should do.
+ *
+ * Returns the lines so the dry-run can report the same thing it would print.
+ */
+function templatePackageWarning(appDir: string, embedded: boolean): string[] {
+  if (!isTemplateOwned(readPluginImpl(appDir))) return [];
+  const lines = [
+    `Warning: this plugin still declares the ATAK template's class in plugin.xml,`,
+    `  under ${TEMPLATE_PACKAGE}.`,
+    '',
+    '  ATAK identifies a plugin by its implementation class name, so two plugins',
+    '  built from the template collide on one device: the second to be scanned is',
+    '  silently skipped and shows as "Not loaded", with nothing logged as an error.',
+  ];
+  if (!embedded) {
+    lines.push(
+      '  Intent actions are derived from that package too, and ATAK\'s broadcast',
+      '  bus is process-wide, so those collide as well.',
+    );
+  }
+  lines.push(
+    '',
+    '  Rename the Java package before you publish, and update the impl= in',
+    '  app/src/main/assets/plugin.xml to match.',
+  );
+  return lines;
+}
 
 /**
  * Drop `ic_reactive_tool` into the host plugin's res/ so it can brand its
@@ -455,6 +498,11 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       log('  - Skipping ReactiveDropDown registration (--embedded mode)');
     }
 
+    // Template package collision
+    for (const line of templatePackageWarning(appDir, !!opts.embedded)) {
+      log(line ? `  ${line}` : '');
+    }
+
     log('');
     log('Run without --dry-run to apply.');
     return;
@@ -685,6 +733,12 @@ preBuild.dependsOn buildWebAssets
     if (mapComponents.length === 1) {
       intentAction = deriveIntentAction(mapComponents[0]!.packageName);
     }
+  }
+
+  const templateWarning = templatePackageWarning(appDir, !!opts.embedded);
+  if (templateWarning.length) {
+    log('');
+    for (const line of templateWarning) log(line);
   }
 
   console.log('');
