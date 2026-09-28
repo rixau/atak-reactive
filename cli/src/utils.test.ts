@@ -8,7 +8,10 @@ import {
   parseAarVersion,
   deriveIntentAction,
   readPluginImpls,
-  readRegisteredAction,
+  readRegisteredActions,
+  stripJavaComments,
+  hasRegistrationInsertPoint,
+  isReactiveRegistered,
   isTemplateOwned,
   TEMPLATE_PACKAGE,
   isNewerVersion,
@@ -511,7 +514,31 @@ describe('isTemplateOwned', () => {
   });
 });
 
-describe('readRegisteredAction', () => {
+describe('stripJavaComments', () => {
+  it('removes line and block comments', () => {
+    expect(stripJavaComments('a; // gone\nb; /* also\n gone */ c;')).toBe('a; \nb;   c;');
+  });
+
+  it('leaves // and /* inside string literals alone', () => {
+    const src = 'x("http://a/b"); y("/* not a comment */"); // real';
+    expect(stripJavaComments(src)).toBe('x("http://a/b"); y("/* not a comment */"); ');
+  });
+
+  it('honours escaped quotes inside a literal', () => {
+    expect(stripJavaComments('s("say \\"hi\\" // still string"); // gone'))
+      .toBe('s("say \\"hi\\" // still string"); ');
+  });
+
+  it('handles char literals holding a quote or a slash', () => {
+    expect(stripJavaComments("c = '\"'; d = '/'; // x")).toBe("c = '\"'; d = '/'; ");
+  });
+
+  it('drops an unterminated block comment to end of input', () => {
+    expect(stripJavaComments('a; /* never closed')).toBe('a;  ');
+  });
+});
+
+describe('readRegisteredActions', () => {
   const withSource = (body: string): string => {
     const dir = mkdtempSync(join(tmpdir(), 'atak-act-'));
     const file = join(dir, 'PluginMapComponent.java');
@@ -526,7 +553,24 @@ describe('readRegisteredAction', () => {
       reactFilter.addAction("com.acme.recon.SHOW_REACT",
               "React screen powered by atak-reactive");
     `);
-    expect(readRegisteredAction(file)).toBe('com.acme.recon.SHOW_REACT');
+    expect(readRegisteredActions(file)).toEqual(['com.acme.recon.SHOW_REACT']);
+  });
+
+  it('returns every action on the filter, in order', () => {
+    const file = withSource(`
+      reactFilter.addAction("com.acme.recon.SHOW_REACT", "a");
+      reactFilter.addAction("com.acme.recon.SHOW_OTHER", "b");
+    `);
+    expect(readRegisteredActions(file)).toEqual(['com.acme.recon.SHOW_REACT', 'com.acme.recon.SHOW_OTHER']);
+  });
+
+  it('ignores commented-out registrations', () => {
+    const file = withSource(`
+      // reactFilter.addAction("com.old.ONE", "gone");
+      /* reactFilter.addAction("com.old.TWO", "gone"); */
+      reactFilter.addAction("com.acme.recon.SHOW_REACT", "live");
+    `);
+    expect(readRegisteredActions(file)).toEqual(['com.acme.recon.SHOW_REACT']);
   });
 
   it('ignores addAction calls on other filters', () => {
@@ -534,11 +578,39 @@ describe('readRegisteredAction', () => {
       otherFilter.addAction("com.acme.other.SOMETHING", "not ours");
       reactFilter.addAction("com.acme.recon.SHOW_REACT", "ours");
     `);
-    expect(readRegisteredAction(file)).toBe('com.acme.recon.SHOW_REACT');
+    expect(readRegisteredActions(file)).toEqual(['com.acme.recon.SHOW_REACT']);
   });
 
-  it('returns null when nothing is registered, and for a missing file', () => {
-    expect(readRegisteredAction(withSource('public class Foo {}'))).toBeNull();
-    expect(readRegisteredAction(join(tmpdir(), 'does-not-exist-atak.java'))).toBeNull();
+  it('returns nothing when nothing is registered, and for a missing file', () => {
+    expect(readRegisteredActions(withSource('public class Foo {}'))).toEqual([]);
+    expect(readRegisteredActions(join(tmpdir(), 'does-not-exist-atak.java'))).toEqual([]);
+  });
+});
+
+describe('hasRegistrationInsertPoint', () => {
+  it('matches the call the injector inserts after', () => {
+    expect(hasRegistrationInsertPoint('this.registerDropDownReceiver(a, b);')).toBe(true);
+  });
+
+  it('does not match a call without this., which the injector cannot use', () => {
+    expect(hasRegistrationInsertPoint('registerDropDownReceiver(a, b);')).toBe(false);
+  });
+
+  it('is not left stateful by a previous match', () => {
+    // A shared /g regex would carry lastIndex across calls and start failing
+    // on the second identical input.
+    const src = 'this.registerDropDownReceiver(a, b);';
+    expect(hasRegistrationInsertPoint(src)).toBe(true);
+    expect(hasRegistrationInsertPoint(src)).toBe(true);
+  });
+});
+
+describe('isReactiveRegistered', () => {
+  it('keys on the class, so a differently named filter still counts as registered', () => {
+    expect(isReactiveRegistered('ReactiveDropDown r = new ReactiveDropDown(v, c, "web/index.html");\nf.addAction("x", "y");')).toBe(true);
+  });
+
+  it('does not treat a stray reactFilter variable as a registration', () => {
+    expect(isReactiveRegistered('DocumentedIntentFilter reactFilter = new DocumentedIntentFilter();')).toBe(false);
   });
 });

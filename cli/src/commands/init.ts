@@ -13,7 +13,9 @@ import {
   findMapComponents,
   deriveIntentAction,
   readPluginImpls,
-  readRegisteredAction,
+  readRegisteredActions,
+  hasRegistrationInsertPoint,
+  isReactiveRegistered,
   isTemplateOwned,
   TEMPLATE_PACKAGE,
   injectReactiveRegistration,
@@ -30,27 +32,30 @@ const ICON_DENSITIES = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];
 /**
  * Warn when the plugin still hands ATAK the template's implementation class.
  *
- * ATAK's AtakPluginRegistry de-duplicates IPlugin extensions by implementation
- * class name across every installed plugin, and AtakBroadcast actions are
- * process-wide within ATAK. A project still on the template's package therefore
- * collides with every other unrenamed template-derived plugin on the same
- * device: one of the two is silently skipped — it just reads "Not loaded" in
- * ATAK's plugin manager, with no error — and their intent actions cross-fire.
+ * ATAK's AtakPluginRegistry de-duplicates plugin extensions by implementation
+ * class name across every installed plugin — one shared map, keyed on the
+ * class string alone — and AtakBroadcast actions are process-wide within ATAK.
+ * A project still on the template's package therefore collides with every
+ * other unrenamed template-derived plugin on the same device: one of them is
+ * silently skipped — it just reads "Not loaded" in ATAK's plugin manager, with
+ * no error — and their intent actions cross-fire.
  *
  * `init` deliberately only reports this. Renaming someone's Java package
  * rewrites their source tree, their plugin.xml and their manifest, which is far
  * beyond what adding a React screen to a plugin should do.
  *
- * Returns the lines so the dry-run can report the same thing it would print.
+ * Returns the lines so the dry-run can report the same thing the real run
+ * prints. Both paths hand in the actions the project will actually listen on,
+ * decided the same way, so the two cannot disagree about this warning.
  */
-function templatePackageWarning(appDir: string, intentAction: string | null): string[] {
+function templatePackageWarning(appDir: string, intentActions: string[]): string[] {
   // Two independent hazards, read off two independent strings. plugin.xml can
   // be renamed without the Java package moving (it is a one-line edit, so it
   // tends to happen first), which leaves the intent action still colliding, and
   // gating both on plugin.xml would miss exactly that case.
   const collidingImpls = readPluginImpls(appDir).filter(isTemplateOwned);
-  const collidingAction = isTemplateOwned(intentAction) ? intentAction : null;
-  if (collidingImpls.length === 0 && collidingAction === null) return [];
+  const collidingActions = intentActions.filter(isTemplateOwned);
+  if (collidingImpls.length === 0 && collidingActions.length === 0) return [];
 
   const lines = [
     `Warning: this plugin still uses the ATAK template's package, ${TEMPLATE_PACKAGE}.`,
@@ -71,11 +76,13 @@ function templatePackageWarning(appDir: string, intentAction: string | null): st
     );
   }
 
-  if (collidingAction !== null) {
+  if (collidingActions.length > 0) {
     lines.push(
       '',
-      '  The intent action for your React screen is namespaced on that package too:',
-      `    ${collidingAction}`,
+      `  The intent ${collidingActions.length === 1 ? 'action' : 'actions'} for your React screen ${
+        collidingActions.length === 1 ? 'is' : 'are'
+      } namespaced on that package too:`,
+      ...collidingActions.map((action) => `    ${action}`),
       "  ATAK's broadcast bus is shared by every loaded plugin, so two unrenamed",
       "  plugins trigger each other's screens.",
     );
@@ -500,7 +507,9 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
 
     // MapComponent registration
-    let dryRunAction: string | null = null;
+    // The actions the project will listen on after a real run, decided by the
+    // same three outcomes the real run has — so the warning below matches it.
+    let dryRunActions: string[] = [];
     if (!opts.embedded) {
       const mapComponents = findMapComponents(appDir);
       if (mapComponents.length === 0) {
@@ -508,16 +517,19 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       } else if (mapComponents.length === 1) {
         const comp = mapComponents[0]!;
         const content = readFileSync(comp.filePath, 'utf-8');
-        if (content.includes('ReactiveDropDown')) {
+        if (isReactiveRegistered(content)) {
           // Read, not derived: an action already in the file may have been
           // edited by hand, and warning about a string that is not in the
           // project would be worse than saying nothing.
-          dryRunAction = readRegisteredAction(comp.filePath);
+          dryRunActions = readRegisteredActions(comp.filePath);
           log(`  ✓ ReactiveDropDown already registered in ${comp.relativePath}`);
+        } else if (!hasRegistrationInsertPoint(content)) {
+          log(`  ⚠ Could not find registerDropDownReceiver in ${comp.relativePath} — manual registration needed`);
         } else {
-          dryRunAction = deriveIntentAction(comp.packageName);
+          const action = deriveIntentAction(comp.packageName);
+          dryRunActions = [action];
           log(`  + Register ReactiveDropDown in ${comp.relativePath}`);
-          log(`    Intent action: ${dryRunAction}`);
+          log(`    Intent action: ${action}`);
         }
       } else {
         log(`  ⚠ ${mapComponents.length} MapComponents found — manual registration needed`);
@@ -527,7 +539,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
 
     // Template package collision
-    for (const line of templatePackageWarning(appDir, dryRunAction)) {
+    for (const line of templatePackageWarning(appDir, dryRunActions)) {
       log(line ? `  ${line}` : '');
     }
 
@@ -682,6 +694,7 @@ preBuild.dependsOn buildWebAssets
 
   // 12. Auto-register ReactiveDropDown in MapComponent (skip for --embedded)
   let intentAction: string | null = null;
+  let registeredActions: string[] = [];
 
   if (opts.embedded) {
     logStep('Skipping ReactiveDropDown registration (--embedded mode)');
@@ -721,11 +734,14 @@ preBuild.dependsOn buildWebAssets
       const result = injectReactiveRegistration(comp.filePath, derivedAction);
 
       // What the project actually listens on, which is only the derived string
-      // when we were the ones who just wrote it.
-      intentAction =
-        result === 'injected' ? derivedAction
-        : result === 'already_exists' ? readRegisteredAction(comp.filePath)
-        : null;
+      // when we were the ones who just wrote it. Nothing at all when the
+      // injection failed: no action was written, so there is none to warn
+      // about or to tell the user to broadcast.
+      registeredActions =
+        result === 'injected' ? [derivedAction]
+        : result === 'already_exists' ? readRegisteredActions(comp.filePath)
+        : [];
+      intentAction = registeredActions[0] ?? null;
 
       switch (result) {
         case 'injected':
@@ -766,7 +782,7 @@ preBuild.dependsOn buildWebAssets
     }
   }
 
-  const templateWarning = templatePackageWarning(appDir, intentAction);
+  const templateWarning = templatePackageWarning(appDir, registeredActions);
   if (templateWarning.length) {
     log('');
     for (const line of templateWarning) log(line);

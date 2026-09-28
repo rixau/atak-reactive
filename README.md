@@ -119,6 +119,8 @@ ATAK requests each extension type separately and de-dupes each one, so check eve
 
 Intent actions have the same problem. `init` derives the action for your React screen from the package declared in your MapComponent, and ATAK's broadcast bus is shared by every loaded plugin, so two unrenamed plugins trigger each other's screens.
 
+On a re-run, when `ReactiveDropDown` is already registered, `init` reads the action back out of your MapComponent rather than re-deriving it, so a hand-edited action is judged as written. It recognises the literal shape it wrote — `reactFilter.addAction("…")` — and nothing else: if you renamed the filter variable or moved the action into a constant, the intent check is skipped rather than guessed at. The `plugin.xml` check is unaffected.
+
 Renaming the Java package fixes both. Changing only `applicationId` does not — ATAK keys on the class name, not the package id.
 
 ## React Hooks

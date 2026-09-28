@@ -414,21 +414,39 @@ describe.skipIf(isWin)('init — template package collision', () => {
 
   /**
    * A MapComponent in `pkg`, which is what init derives the intent action from.
-   * Pass `registeredAction` to simulate a project where ReactiveDropDown is
-   * already wired up listening on that exact action.
+   * `registeredAction` simulates a project where ReactiveDropDown is already
+   * wired up on exactly that action. `body` replaces the generated body
+   * outright, for shapes the simple form cannot express (comments, several
+   * actions, a registerDropDownReceiver call init cannot inject after).
    */
-  const writeMapComponent = (fx: Fixture, pkg: string, registeredAction?: string) => {
+  const writeMapComponent = (
+    fx: Fixture,
+    pkg: string,
+    registeredAction?: string,
+    body?: string,
+  ) => {
     const dir = join(fx.root, 'app', 'src', 'main', 'java', ...pkg.split('.'));
     mkdirSync(dir, { recursive: true });
     const existing = registeredAction
       ? `    ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");\n` +
         `    reactFilter.addAction("${registeredAction}", "React screen");\n`
       : '';
+    const onCreate = body ?? `${existing}    this.registerDropDownReceiver(a, b);\n`;
     writeFileSync(
       join(dir, 'PluginMapComponent.java'),
-      `package ${pkg};\npublic class PluginMapComponent {\n  public void onCreate() {\n${existing}    this.registerDropDownReceiver(a, b);\n  }\n}\n`,
+      `package ${pkg};\npublic class PluginMapComponent {\n  public void onCreate() {\n${onCreate}  }\n}\n`,
     );
   };
+  const mapComponentPath = (fx: Fixture, pkg: string) =>
+    join(fx.root, 'app', 'src', 'main', 'java', ...pkg.split('.'), 'PluginMapComponent.java');
+
+  const TPL = 'com.atakmap.android.plugintemplate';
+  const TPL_ACTION = `${TPL}.SHOW_REACT`;
+  const CLEAN_IMPL = 'com.acme.recon.plugin.ReconLifecycle';
+  const CLEAN_ACTION = 'com.acme.recon.SHOW_REACT';
+  // A line that already-registered projects contain, and the summary prints.
+  const trigger = (action: string) => `Trigger: adb shell am broadcast -a ${action}`;
+  const GENERIC_TRIGGER = 'Trigger the React screen from your plugin UI';
 
   const writePluginXml = (fx: Fixture, impl: string) => {
     const dir = join(fx.root, 'app', 'src', 'main', 'assets');
@@ -538,16 +556,186 @@ describe.skipIf(isWin)('init — template package collision', () => {
     expect(r.out).toContain('com.atakmap.android.plugintemplate.SHOW_REACT');
   });
 
-  it('names the action the project actually registered, not the one init would derive', () => {
+  it('uses the action the project actually registered, in both the warning and the summary', () => {
     // Already registered with a hand-edited action: the derived string appears
-    // nowhere in the project, so warning about it would be a false positive.
+    // nowhere in the project, so warning about it would be a false positive —
+    // and the closing "Trigger" hint must name the real one, not the derived one.
     const fx = makeFixture();
-    writePluginXml(fx, 'com.acme.recon.plugin.ReconLifecycle');
-    writeMapComponent(fx, 'com.atakmap.android.plugintemplate', 'com.acme.recon.SHOW_REACT');
+    writePluginXml(fx, CLEAN_IMPL);
+    writeMapComponent(fx, TPL, CLEAN_ACTION);
     const r = runCli(fx, ['init']);
 
-    expect(r.out).not.toContain('com.atakmap.android.plugintemplate.SHOW_REACT');
+    expect(r.out).not.toContain(TPL_ACTION);
     expect(r.out).not.toContain('broadcast bus is shared');
+    expect(r.out).toContain(trigger(CLEAN_ACTION));
+  });
+
+  it('does the same under --dry-run: reads the registered action rather than deriving', () => {
+    const fx = makeFixture();
+    writePluginXml(fx, CLEAN_IMPL);
+    writeMapComponent(fx, TPL, CLEAN_ACTION);
+    const r = runCli(fx, ['init', '--dry-run']);
+
+    expect(r.out).not.toContain(TPL_ACTION);
+    expect(r.out).not.toContain('broadcast bus is shared');
+  });
+
+  it('ignores a commented-out template action and reads the live one (line comment)', () => {
+    // Commenting out the old line is how a hand-edited action usually comes to
+    // exist. Java comments must be stripped the way XML comments are for
+    // plugin.xml, or the warning names a string the plugin no longer listens on.
+    const fx = makeFixture();
+    writePluginXml(fx, CLEAN_IMPL);
+    writeMapComponent(fx, TPL, undefined,
+      `    ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");\n` +
+      `    // reactFilter.addAction("${TPL_ACTION}", "old");\n` +
+      `    reactFilter.addAction("${CLEAN_ACTION}", "React screen");\n` +
+      `    this.registerDropDownReceiver(a, b);\n`);
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).not.toContain(TPL_ACTION);
+    expect(r.out).not.toContain('broadcast bus is shared');
+    expect(r.out).toContain(trigger(CLEAN_ACTION));
+  });
+
+  it('ignores a commented-out template action (block comment)', () => {
+    const fx = makeFixture();
+    writePluginXml(fx, CLEAN_IMPL);
+    writeMapComponent(fx, TPL, undefined,
+      `    ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");\n` +
+      `    /* reactFilter.addAction("${TPL_ACTION}", "old");\n       reactFilter.addAction("${TPL}.OTHER", "older"); */\n` +
+      `    reactFilter.addAction("${CLEAN_ACTION}", "React screen");\n` +
+      `    this.registerDropDownReceiver(a, b);\n`);
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).not.toContain(TPL_ACTION);
+    expect(r.out).toContain(trigger(CLEAN_ACTION));
+  });
+
+  it('does not mistake // inside a string literal for a comment', () => {
+    // A naive stripper would delete from the URL's // to end of line, hiding the
+    // template action that follows it on the same line — a false negative.
+    const fx = makeFixture();
+    writePluginXml(fx, CLEAN_IMPL);
+    writeMapComponent(fx, TPL, undefined,
+      `    ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");\n` +
+      `    String docs = "http://example.invalid/x"; reactFilter.addAction("${TPL_ACTION}", "o");\n` +
+      `    this.registerDropDownReceiver(a, b);\n`);
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).toContain('broadcast bus is shared');
+    expect(r.out).toContain(TPL_ACTION);
+  });
+
+  it('checks every registered action, not just the first', () => {
+    // The same "first only" fault that was fixed for plugin.xml impls.
+    const fx = makeFixture();
+    writePluginXml(fx, CLEAN_IMPL);
+    writeMapComponent(fx, TPL, undefined,
+      `    ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");\n` +
+      `    reactFilter.addAction("${CLEAN_ACTION}", "React screen");\n` +
+      `    reactFilter.addAction("${TPL_ACTION}", "legacy");\n` +
+      `    this.registerDropDownReceiver(a, b);\n`);
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).toContain('broadcast bus is shared');
+    expect(r.out).toContain(TPL_ACTION);
+  });
+
+  it('writes exactly the derived action into the MapComponent and reports that same string', () => {
+    // Pins the assumption behind the 'injected' arm: the derived string is what
+    // we wrote, unchanged. Read the file back rather than trusting the log.
+    const fx = makeFixture();
+    writePluginXml(fx, CLEAN_IMPL);
+    writeMapComponent(fx, 'com.acme.recon');
+    const r = runCli(fx, ['init']);
+
+    const src = readFileSync(mapComponentPath(fx, 'com.acme.recon'), 'utf-8');
+    expect(src).toContain(`reactFilter.addAction("${CLEAN_ACTION}",`);
+    expect(r.out).toContain(`Intent action: ${CLEAN_ACTION}`);
+    expect(r.out).toContain(trigger(CLEAN_ACTION));
+  });
+
+  it('gives no action when injection fails — no intent warning, generic trigger hint', () => {
+    // registerDropDownReceiver without `this.` is a call the injector cannot
+    // insert after. Nothing was written, so there is no action to warn about
+    // or to tell the user to broadcast.
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle');
+    writeMapComponent(fx, TPL, undefined, `    registerDropDownReceiver(a, b);\n`);
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).toContain('Could not find registerDropDownReceiver');
+    expect(r.out).toContain('Not loaded');
+    expect(r.out).not.toContain('broadcast bus is shared');
+    expect(r.out).not.toContain('broadcast -a');
+    expect(r.out).toContain(GENERIC_TRIGGER);
+  });
+
+  it('predicts a failed injection under --dry-run instead of promising a registration', () => {
+    // Dry-run and the real run must agree. Before, dry-run never tested the
+    // insertion point, so it printed "+ Register" and an intent warning for a
+    // project the real run would refuse.
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle');
+    writeMapComponent(fx, TPL, undefined, `    registerDropDownReceiver(a, b);\n`);
+    const r = runCli(fx, ['init', '--dry-run']);
+
+    expect(r.out).toContain('Could not find registerDropDownReceiver');
+    expect(r.out).not.toContain('+ Register ReactiveDropDown');
+    expect(r.out).not.toContain('broadcast bus is shared');
+    expect(r.out).toContain('Not loaded');
+  });
+
+  it('treats a dropdown registered through a renamed filter as registered (real run)', () => {
+    // The reader only recognises `reactFilter.addAction("…")`, so here it finds
+    // nothing and the intent half is skipped rather than guessed. But the
+    // project IS registered, and must not be offered a second registration.
+    const fx = makeFixture();
+    writePluginXml(fx, CLEAN_IMPL);
+    writeMapComponent(fx, TPL, undefined,
+      `    ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");\n` +
+      `    DocumentedIntentFilter f = new DocumentedIntentFilter();\n` +
+      `    f.addAction("${TPL_ACTION}", "React screen");\n` +
+      `    this.registerDropDownReceiver(reactScreen, f);\n`);
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).toContain('already registered');
+    expect(r.out).not.toContain('Registered in');
+    expect(r.out).not.toContain('broadcast bus is shared');
+    expect(r.out).toContain(GENERIC_TRIGGER);
+  });
+
+  it('predicts the same for a renamed filter under --dry-run', () => {
+    // Kills the mutant that keys "already registered" on the reactFilter
+    // variable instead of the class: that would promise a fresh registration
+    // and warn about a derived action the real run never writes.
+    const fx = makeFixture();
+    writePluginXml(fx, CLEAN_IMPL);
+    writeMapComponent(fx, TPL, undefined,
+      `    ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");\n` +
+      `    DocumentedIntentFilter f = new DocumentedIntentFilter();\n` +
+      `    f.addAction("${TPL_ACTION}", "React screen");\n` +
+      `    this.registerDropDownReceiver(reactScreen, f);\n`);
+    const r = runCli(fx, ['init', '--dry-run']);
+
+    expect(r.out).toContain('already registered');
+    expect(r.out).not.toContain('+ Register ReactiveDropDown');
+    expect(r.out).not.toContain(TPL_ACTION);
+    expect(r.out).not.toContain('broadcast bus is shared');
+  });
+
+  it('lists every colliding class and pluralises accordingly', () => {
+    const fx = makeFixture();
+    writeMultiPluginXml(fx, [
+      ['gov.tak.api.plugin.IPlugin', `${TPL}.plugin.PluginTemplateLifecycle`],
+      ['com.atak.plugins.impl.IToolbarItem', `${TPL}.plugin.PluginTemplateTool`],
+    ]);
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).toContain(`${TPL}.plugin.PluginTemplateLifecycle`);
+    expect(r.out).toContain(`${TPL}.plugin.PluginTemplateTool`);
+    expect(r.out).toContain('declares the same classes');
   });
 
   it('does not claim intents collide when no MapComponent was found', () => {

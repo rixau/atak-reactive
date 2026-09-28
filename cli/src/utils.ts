@@ -255,20 +255,100 @@ export function isTemplateOwned(fqName: string | null): boolean {
 }
 
 /**
- * The intent action an already-registered ReactiveDropDown listens on, read out
- * of the MapComponent source. Null if it cannot be found.
+ * Remove Java comments, leaving string and character literals intact.
+ *
+ * A regex is not enough here: `//` inside a string literal ("http://…") is not
+ * a comment, and treating it as one would swallow the rest of the line — which
+ * can hide a real addAction. So this walks the source and tracks whether it is
+ * inside a literal. Comments are replaced with a space rather than removed, so
+ * tokens on either side of a block comment do not run together.
+ */
+export function stripJavaComments(src: string): string {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i]!;
+    const next = src[i + 1];
+    if (c === '"' || c === "'") {
+      // Copy the literal through its closing quote, honouring backslash escapes.
+      const quote = c;
+      out += c;
+      i++;
+      while (i < src.length && src[i] !== quote) {
+        if (src[i] === '\\' && i + 1 < src.length) {
+          out += src[i]! + src[i + 1]!;
+          i += 2;
+          continue;
+        }
+        out += src[i]!;
+        i++;
+      }
+      if (i < src.length) {
+        out += quote;
+        i++;
+      }
+    } else if (c === '/' && next === '/') {
+      while (i < src.length && src[i] !== '\n') i++;
+    } else if (c === '/' && next === '*') {
+      const end = src.indexOf('*/', i + 2);
+      i = end === -1 ? src.length : end + 2;
+      out += ' ';
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return out;
+}
+
+/**
+ * Every intent action an already-registered ReactiveDropDown listens on, read
+ * out of the MapComponent source. Empty if none can be found.
  *
  * Read rather than derived, because the two can disagree. deriveIntentAction
  * only says what `init` *would* write; someone who edited the action by hand
  * would otherwise be warned about a string that appears nowhere in their
- * project. Null suppresses the intent half of the warning, which is the right
- * trade: naming no action is better than naming the wrong one.
+ * project. Comments are stripped first, for the same reason plugin.xml's are:
+ * commenting out the old line is exactly how a hand-edited action comes to
+ * exist, and the old line must not win over the live one.
+ *
+ * All of them, not the first: a DocumentedIntentFilter can carry several
+ * actions, and a template-owned one later in the list collides just the same.
+ *
+ * What counts as found is deliberately narrow — the literal shape `init`
+ * writes, `reactFilter.addAction("…")`. A renamed filter variable or an action
+ * held in a constant is not recognised, and the intent half of the warning is
+ * then skipped rather than guessed at. Naming no action is better than naming
+ * the wrong one.
  */
-export function readRegisteredAction(filePath: string): string | null {
-  if (!existsSync(filePath)) return null;
-  const match = readFileSync(filePath, 'utf-8')
-    .match(/reactFilter\s*\.\s*addAction\(\s*"([^"]+)"/);
-  return match ? match[1]! : null;
+export function readRegisteredActions(filePath: string): string[] {
+  if (!existsSync(filePath)) return [];
+  const src = stripJavaComments(readFileSync(filePath, 'utf-8'));
+  return [...src.matchAll(/reactFilter\s*\.\s*addAction\(\s*"([^"]+)"/g)].map((m) => m[1]!);
+}
+
+/**
+ * The call injectReactiveRegistration inserts after. One definition so the
+ * dry-run can predict a failed injection with the same test the injector uses.
+ */
+const REGISTER_CALL = /this\.registerDropDownReceiver\([^)]+\);/g;
+
+/**
+ * Whether a MapComponent already registers a ReactiveDropDown.
+ *
+ * One definition, used by the injector to decide 'already_exists' and by the
+ * dry-run to predict it, so the two cannot drift apart. It keys on the class
+ * name, not on the `reactFilter` variable: a project that registered the
+ * dropdown through a differently named filter is still registered, and must
+ * not be offered a second registration.
+ */
+export function isReactiveRegistered(content: string): boolean {
+  return content.includes('ReactiveDropDown');
+}
+
+/** Whether injectReactiveRegistration would find somewhere to insert. */
+export function hasRegistrationInsertPoint(content: string): boolean {
+  return new RegExp(REGISTER_CALL.source).test(content);
 }
 
 /**
@@ -367,13 +447,12 @@ export function injectReactiveRegistration(
 ): 'injected' | 'already_exists' | 'failed' {
   const content = readFileSync(filePath, 'utf-8');
 
-  // Check if already registered
-  if (content.includes('ReactiveDropDown')) {
+  if (isReactiveRegistered(content)) {
     return 'already_exists';
   }
 
   // Find the last registerDropDownReceiver call to insert after
-  const registerPattern = /this\.registerDropDownReceiver\([^)]+\);/g;
+  const registerPattern = new RegExp(REGISTER_CALL.source, 'g');
   let lastMatch: RegExpExecArray | null = null;
   let match: RegExpExecArray | null;
   while ((match = registerPattern.exec(content)) !== null) {
