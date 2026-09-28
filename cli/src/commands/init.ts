@@ -13,6 +13,7 @@ import {
   findMapComponents,
   deriveIntentAction,
   readPluginImpls,
+  readRegisteredAction,
   isTemplateOwned,
   TEMPLATE_PACKAGE,
   injectReactiveRegistration,
@@ -61,10 +62,12 @@ function templatePackageWarning(appDir: string, intentAction: string | null): st
       '  ATAK identifies a plugin by the implementation class named in plugin.xml,',
       '  and de-duplicates across every plugin installed on the device:',
       ...collidingImpls.map((impl) => `    ${impl}`),
-      '  Any other plugin built from the template declares the same class, and',
+      `  Any other plugin built from the template declares the same ${
+        collidingImpls.length === 1 ? 'class' : 'classes'
+      }, and`,
       '  whichever ATAK scans second is silently skipped: it shows as "Not loaded"',
-      '  and will not enable, with nothing logged as an error. Which of the two',
-      '  loses is arbitrary and can change between installs.',
+      '  and will not enable, with nothing logged as an error. Which plugin loses',
+      '  is arbitrary and can change between installs.',
     );
   }
 
@@ -505,12 +508,14 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       } else if (mapComponents.length === 1) {
         const comp = mapComponents[0]!;
         const content = readFileSync(comp.filePath, 'utf-8');
-        // Derived whether or not it is already registered: an action injected by
-        // an earlier run is just as collision-prone as one about to be written.
-        dryRunAction = deriveIntentAction(comp.packageName);
         if (content.includes('ReactiveDropDown')) {
+          // Read, not derived: an action already in the file may have been
+          // edited by hand, and warning about a string that is not in the
+          // project would be worse than saying nothing.
+          dryRunAction = readRegisteredAction(comp.filePath);
           log(`  ✓ ReactiveDropDown already registered in ${comp.relativePath}`);
         } else {
+          dryRunAction = deriveIntentAction(comp.packageName);
           log(`  + Register ReactiveDropDown in ${comp.relativePath}`);
           log(`    Intent action: ${dryRunAction}`);
         }
@@ -712,19 +717,26 @@ preBuild.dependsOn buildWebAssets
       log('  this.registerDropDownReceiver(reactScreen, reactFilter);');
     } else if (mapComponents.length === 1) {
       const comp = mapComponents[0]!;
-      intentAction = deriveIntentAction(comp.packageName);
-      const result = injectReactiveRegistration(comp.filePath, intentAction);
+      const derivedAction = deriveIntentAction(comp.packageName);
+      const result = injectReactiveRegistration(comp.filePath, derivedAction);
+
+      // What the project actually listens on, which is only the derived string
+      // when we were the ones who just wrote it.
+      intentAction =
+        result === 'injected' ? derivedAction
+        : result === 'already_exists' ? readRegisteredAction(comp.filePath)
+        : null;
 
       switch (result) {
         case 'injected':
           log(`Registered in ${comp.relativePath}`);
           log(`  Class: ${comp.className}`);
-          log(`  Intent action: ${intentAction}`);
+          log(`  Intent action: ${derivedAction}`);
           log('');
           log('  Added:');
           log('    import com.atakmap.android.reactive.ReactiveDropDown;');
           log(`    ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");`);
-          log(`    reactFilter.addAction("${intentAction}", ...);`);
+          log(`    reactFilter.addAction("${derivedAction}", ...);`);
           log(`    this.registerDropDownReceiver(reactScreen, reactFilter);`);
           break;
         case 'already_exists':
@@ -751,10 +763,6 @@ preBuild.dependsOn buildWebAssets
       log('  reactFilter.addAction("com.yourplugin.SHOW_REACT",');
       log('          "React screen powered by atak-reactive");');
       log('  this.registerDropDownReceiver(reactScreen, reactFilter);');
-    }
-
-    if (mapComponents.length === 1) {
-      intentAction = deriveIntentAction(mapComponents[0]!.packageName);
     }
   }
 

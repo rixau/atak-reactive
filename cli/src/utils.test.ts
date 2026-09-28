@@ -8,6 +8,7 @@ import {
   parseAarVersion,
   deriveIntentAction,
   readPluginImpls,
+  readRegisteredAction,
   isTemplateOwned,
   TEMPLATE_PACKAGE,
   isNewerVersion,
@@ -507,5 +508,37 @@ describe('isTemplateOwned', () => {
   it('is false for a renamed class and for null', () => {
     expect(isTemplateOwned('com.acme.recon.plugin.ReconLifecycle')).toBe(false);
     expect(isTemplateOwned(null)).toBe(false);
+  });
+});
+
+describe('readRegisteredAction', () => {
+  const withSource = (body: string): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'atak-act-'));
+    const file = join(dir, 'PluginMapComponent.java');
+    writeFileSync(file, body);
+    return file;
+  };
+
+  it('reads the action out of an injected registration', () => {
+    const file = withSource(`
+      ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");
+      DocumentedIntentFilter reactFilter = new DocumentedIntentFilter();
+      reactFilter.addAction("com.acme.recon.SHOW_REACT",
+              "React screen powered by atak-reactive");
+    `);
+    expect(readRegisteredAction(file)).toBe('com.acme.recon.SHOW_REACT');
+  });
+
+  it('ignores addAction calls on other filters', () => {
+    const file = withSource(`
+      otherFilter.addAction("com.acme.other.SOMETHING", "not ours");
+      reactFilter.addAction("com.acme.recon.SHOW_REACT", "ours");
+    `);
+    expect(readRegisteredAction(file)).toBe('com.acme.recon.SHOW_REACT');
+  });
+
+  it('returns null when nothing is registered, and for a missing file', () => {
+    expect(readRegisteredAction(withSource('public class Foo {}'))).toBeNull();
+    expect(readRegisteredAction(join(tmpdir(), 'does-not-exist-atak.java'))).toBeNull();
   });
 });

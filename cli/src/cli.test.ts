@@ -412,13 +412,21 @@ describe.skipIf(isWin)('init — template package collision', () => {
     writeFileSync(join(dir, 'plugin.xml'), `<plugin>\n${body}\n</plugin>\n`);
   };
 
-  /** A MapComponent in `pkg`, which is what init derives the intent action from. */
-  const writeMapComponent = (fx: Fixture, pkg: string) => {
+  /**
+   * A MapComponent in `pkg`, which is what init derives the intent action from.
+   * Pass `registeredAction` to simulate a project where ReactiveDropDown is
+   * already wired up listening on that exact action.
+   */
+  const writeMapComponent = (fx: Fixture, pkg: string, registeredAction?: string) => {
     const dir = join(fx.root, 'app', 'src', 'main', 'java', ...pkg.split('.'));
     mkdirSync(dir, { recursive: true });
+    const existing = registeredAction
+      ? `    ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");\n` +
+        `    reactFilter.addAction("${registeredAction}", "React screen");\n`
+      : '';
     writeFileSync(
       join(dir, 'PluginMapComponent.java'),
-      `package ${pkg};\npublic class PluginMapComponent {\n  public void onCreate() {\n    this.registerDropDownReceiver(a, b);\n  }\n}\n`,
+      `package ${pkg};\npublic class PluginMapComponent {\n  public void onCreate() {\n${existing}    this.registerDropDownReceiver(a, b);\n  }\n}\n`,
     );
   };
 
@@ -486,6 +494,60 @@ describe.skipIf(isWin)('init — template package collision', () => {
 
     expect(r.out).toContain('com.atakmap.android.plugintemplate.SHOW_REACT');
     expect(r.out).toContain('broadcast bus is shared');
+    // plugin.xml is already fixed, so the registry half must not be claimed
+    expect(r.out).not.toContain('Not loaded');
+  });
+
+  it('says nothing at all about a project that has been fully renamed', () => {
+    // The single most important property of the feature: no false positives on
+    // a correct project. Without this, dropping the isTemplateOwned guard on
+    // the action leaves the whole suite green.
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.acme.recon.plugin.ReconLifecycle');
+    writeMapComponent(fx, 'com.acme.recon');
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).not.toContain("still uses the ATAK template's package");
+    expect(r.out).not.toContain('broadcast bus is shared');
+    expect(r.out).not.toContain('Not loaded');
+  });
+
+  it('reports the intent half under --dry-run when the package is the template', () => {
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.acme.recon.plugin.ReconLifecycle');
+    writeMapComponent(fx, 'com.atakmap.android.plugintemplate');
+    const r = runCli(fx, ['init', '--dry-run']);
+
+    expect(r.out).toContain('broadcast bus is shared');
+    expect(r.out).toContain('com.atakmap.android.plugintemplate.SHOW_REACT');
+  });
+
+  it('still warns when the already-registered action is itself the template one', () => {
+    // The mirror of the test below. Without this, a readRegisteredAction that
+    // always returned null would suppress every warning and stay green.
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.acme.recon.plugin.ReconLifecycle');
+    writeMapComponent(
+      fx,
+      'com.atakmap.android.plugintemplate',
+      'com.atakmap.android.plugintemplate.SHOW_REACT',
+    );
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).toContain('broadcast bus is shared');
+    expect(r.out).toContain('com.atakmap.android.plugintemplate.SHOW_REACT');
+  });
+
+  it('names the action the project actually registered, not the one init would derive', () => {
+    // Already registered with a hand-edited action: the derived string appears
+    // nowhere in the project, so warning about it would be a false positive.
+    const fx = makeFixture();
+    writePluginXml(fx, 'com.acme.recon.plugin.ReconLifecycle');
+    writeMapComponent(fx, 'com.atakmap.android.plugintemplate', 'com.acme.recon.SHOW_REACT');
+    const r = runCli(fx, ['init']);
+
+    expect(r.out).not.toContain('com.atakmap.android.plugintemplate.SHOW_REACT');
+    expect(r.out).not.toContain('broadcast bus is shared');
   });
 
   it('does not claim intents collide when no MapComponent was found', () => {

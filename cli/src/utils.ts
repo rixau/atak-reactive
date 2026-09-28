@@ -255,6 +255,23 @@ export function isTemplateOwned(fqName: string | null): boolean {
 }
 
 /**
+ * The intent action an already-registered ReactiveDropDown listens on, read out
+ * of the MapComponent source. Null if it cannot be found.
+ *
+ * Read rather than derived, because the two can disagree. deriveIntentAction
+ * only says what `init` *would* write; someone who edited the action by hand
+ * would otherwise be warned about a string that appears nowhere in their
+ * project. Null suppresses the intent half of the warning, which is the right
+ * trade: naming no action is better than naming the wrong one.
+ */
+export function readRegisteredAction(filePath: string): string | null {
+  if (!existsSync(filePath)) return null;
+  const match = readFileSync(filePath, 'utf-8')
+    .match(/reactFilter\s*\.\s*addAction\(\s*"([^"]+)"/);
+  return match ? match[1]! : null;
+}
+
+/**
  * Detect the current install type for atak-reactive.
  */
 export function detectInstallType(
