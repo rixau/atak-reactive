@@ -45,6 +45,15 @@ STATUS="$(curl -sS -o "${BODY}" -w '%{http_code}' -X POST "${URL}/upload?${QUERY
     ${ARSENAL_NOTES:+-F "releaseNotes=${ARSENAL_NOTES}"} \
     -F "artifact=@${APK}")"
 
+# The example ships one APK per ATAK version, pushed one at a time into the same
+# release. If a push fails partway, re-running the workflow re-pushes the builds
+# that already landed, and those are refused as duplicates. That refusal means
+# the build is already published, so it is not an error here.
+if [ "${STATUS}" = 409 ] && [ "$(jq -r '.error? // empty' "${BODY}" 2>/dev/null)" = artifact_already_exists ]; then
+    echo "::notice title=already published::$(basename "${APK}") is already in the registry; skipping it."
+    exit 0
+fi
+
 if [ "${STATUS}" -lt 200 ] || [ "${STATUS}" -ge 300 ]; then
     echo "::error::Arsenal C2 refused the upload (HTTP ${STATUS}): $(head -c 500 "${BODY}")"
     exit 1

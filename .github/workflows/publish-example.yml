@@ -1,7 +1,8 @@
 name: Publish example
 
-# Builds the example plugin's release APK and publishes it to Arsenal C2, so
-# there is something to install and try without building it.
+# Builds the example plugin's release APK for each supported ATAK version and
+# publishes them to Arsenal C2 as one release, so there is something to install
+# and try without building it.
 #
 # The example has its own version, in example/version.txt, and its own release
 # cadence: bumping that file on main is what publishes it. A library release
@@ -100,9 +101,18 @@ jobs:
             fi
           fi
 
-  publish-example:
+  # One APK per ATAK version, the same versions the bridge is compiled and
+  # published for (test.yml, publish.yml). takdev takes the versionCode from the
+  # commit timestamp, so all four builds of one commit share it, and each push
+  # below joins the same Arsenal C2 release as another artifact rather than
+  # becoming a release of its own. A device is served the build for the newest
+  # ATAK version it can run.
+  build-example:
     needs: check-version
     if: needs.check-version.outputs.publish == 'true'
+    strategy:
+      matrix:
+        atak-version: ['5.4.0', '5.5.0', '5.5.1', '5.6.0']
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -118,24 +128,50 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Build the example APK
+      - name: Build the example APK (ATAK ${{ matrix.atak-version }})
         id: build
         # Two statements, not `echo "apk=$(...)"`: command substitution inside echo
         # discards the script's exit status, so a failed build would report a green
-        # step with an empty apk and fail later in the publish step instead.
+        # step with an empty apk and fail later in the upload step instead.
         # `shell: bash` for the pipefail that makes `| tail` propagate the failure.
         shell: bash
         run: |
-          apk="$(./scripts/build-example.sh | tail -1)"
+          apk="$(./scripts/build-example.sh ${{ matrix.atak-version }} | tail -1)"
           echo "apk=${apk}" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.CI_SDK_TOKEN }}
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: example-${{ matrix.atak-version }}
+          path: ${{ steps.build.outputs.apk }}
+          if-no-files-found: error
+          retention-days: 7
+
+  # Publishes only once every build has succeeded, so a release never goes out
+  # missing an ATAK version because one build broke. The pushes run one after
+  # another in a single job: the first creates the release and the rest join it,
+  # and joining pushes must repeat the first one's channel and release notes.
+  publish-example:
+    needs: [check-version, build-example]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: example-*
+          path: apks
+
       - name: Publish to Arsenal C2
         shell: bash
         run: |
-          ARSENAL_NOTES="atak-reactive example v${{ needs.check-version.outputs.version }}" \
-            ./scripts/publish-example.sh "${{ steps.build.outputs.apk }}" ${DRY_RUN}
+          for v in 5.4.0 5.5.0 5.5.1 5.6.0; do
+            apk="$(find "apks/example-${v}" -name '*.apk' | head -1)"
+            [ -n "${apk}" ] || { echo "::error::no APK was built for ATAK ${v}"; exit 1; }
+            ARSENAL_NOTES="atak-reactive example v${{ needs.check-version.outputs.version }}" \
+              ./scripts/publish-example.sh "${apk}" ${DRY_RUN}
+          done
         env:
           ARSENAL_TOKEN: ${{ secrets.ARSENAL_TOKEN }}
           ARSENAL_ORG: ${{ vars.ARSENAL_ORG || 'user_rixau' }}

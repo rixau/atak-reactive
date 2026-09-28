@@ -13,7 +13,10 @@ buildscript {
     // is what publishes it to Arsenal C2 (.github/workflows/publish-example.yml),
     // and a library release no longer drags the example along with it.
     ext.PLUGIN_VERSION = file("${rootDir}/version.txt").text.trim()
-    ext.ATAK_VERSION = '5.6.0'
+    // atak-reactive: the example is published once per ATAK version CI supports,
+    // each APK a separate artifact of the same release (publish-example.yml).
+    // -PatakVersion picks the SDK to build against; the default is the newest.
+    ext.ATAK_VERSION = project.findProperty('atakVersion') ?: '5.6.0'
 
     def takdevVersion = '3.+'
 

@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # Builds the example plugin's civ release APK from a clean checkout.
-# Usage: ./scripts/build-example.sh
+# Usage: ./scripts/build-example.sh [atak-version]
+#
+# atak-version defaults to the one in example/app/build.gradle.
 #
 # Prints the APK path on the last line of stdout.
 #
@@ -18,8 +20,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
 
-ATAK_VERSION="$(sed -n "s/^ *ext.ATAK_VERSION = '\(.*\)'.*/\1/p" example/app/build.gradle)"
-[ -n "${ATAK_VERSION}" ] || { echo "error: no ext.ATAK_VERSION in example/app/build.gradle" >&2; exit 1; }
+ATAK_VERSION="${1:-$(sed -n "s/^ *ext.ATAK_VERSION = .*?: '\(.*\)'.*/\1/p" example/app/build.gradle)}"
+[ -n "${ATAK_VERSION}" ] || { echo "error: no default ext.ATAK_VERSION in example/app/build.gradle" >&2; exit 1; }
 SDK="${ROOT}/lib/sdks/${ATAK_VERSION}"
 
 ./scripts/download-sdk.sh "${ATAK_VERSION}" >&2
@@ -56,6 +58,7 @@ done
 # Clear old outputs so the lookup below cannot pick up a stale APK.
 rm -rf example/app/build/outputs/apk
 (cd example && ./gradlew --no-daemon assembleCivRelease \
+    -PatakVersion="${ATAK_VERSION}" \
     -Psdk.path="${SDK}" \
     -Ptakdev.plugin="${SDK}/atak-gradle-takdev.jar") >&2
 
