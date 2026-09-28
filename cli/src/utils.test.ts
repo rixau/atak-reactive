@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -7,6 +7,13 @@ import {
   parseAtakVersion,
   parseAarVersion,
   deriveIntentAction,
+  readPluginImpls,
+  readRegisteredActions,
+  stripJavaComments,
+  hasRegistrationInsertPoint,
+  isReactiveRegistered,
+  isTemplateOwned,
+  TEMPLATE_PACKAGE,
   isNewerVersion,
   fetchLatestVersion,
   parsePortArg,
@@ -441,5 +448,169 @@ describe('dev server port resolution', () => {
 
   it('returns nothing for an empty list', () => {
     expect(parseAdbDeviceList('List of devices attached\n')).toEqual([]);
+  });
+});
+
+describe('readPluginImpls', () => {
+  /** Write a plugin.xml into a throwaway app dir and return that dir. */
+  const withPluginXml = (body: string): string => {
+    const appDir = mkdtempSync(join(tmpdir(), 'atak-impl-'));
+    mkdirSync(join(appDir, 'src', 'main', 'assets'), { recursive: true });
+    writeFileSync(join(appDir, 'src', 'main', 'assets', 'plugin.xml'), body);
+    return appDir;
+  };
+
+  it('returns every extension, not just the first', () => {
+    // ATAK asks for IPlugin and IToolbarItem separately and de-dupes each one,
+    // so a renamed first extension does not make a later one safe.
+    const dir = withPluginXml(`<plugin>
+  <extension type="gov.tak.api.plugin.IPlugin" impl="com.acme.recon.plugin.ReconLifecycle" singleton="true" />
+  <extension type="com.atak.plugins.impl.IToolbarItem" impl="${TEMPLATE_PACKAGE}.plugin.PluginTemplateTool" singleton="true" />
+</plugin>`);
+    expect(readPluginImpls(dir)).toEqual([
+      'com.acme.recon.plugin.ReconLifecycle',
+      `${TEMPLATE_PACKAGE}.plugin.PluginTemplateTool`,
+    ]);
+  });
+
+  it('ignores commented-out extensions, as ATAK does', () => {
+    // SimpleXML drops comments, so a half-finished rename that left the old
+    // impl in a comment block must not be reported as a live collision.
+    const dir = withPluginXml(`<plugin>
+  <!-- was: <extension impl="${TEMPLATE_PACKAGE}.plugin.PluginTemplateLifecycle" /> -->
+  <extension type="gov.tak.api.plugin.IPlugin" impl="com.acme.recon.plugin.ReconLifecycle" singleton="true" />
+</plugin>`);
+    expect(readPluginImpls(dir)).toEqual(['com.acme.recon.plugin.ReconLifecycle']);
+  });
+
+  it('accepts single-quoted attributes', () => {
+    const dir = withPluginXml(`<plugin><extension impl='com.acme.recon.plugin.ReconLifecycle' /></plugin>`);
+    expect(readPluginImpls(dir)).toEqual(['com.acme.recon.plugin.ReconLifecycle']);
+  });
+
+  it('does not match a longer attribute ending in impl', () => {
+    const dir = withPluginXml(`<plugin><extension simpl="nope" impl="com.acme.Real" /></plugin>`);
+    expect(readPluginImpls(dir)).toEqual(['com.acme.Real']);
+  });
+
+  it('returns nothing when there is no plugin.xml', () => {
+    expect(readPluginImpls(mkdtempSync(join(tmpdir(), 'atak-impl-')))).toEqual([]);
+  });
+});
+
+describe('isTemplateOwned', () => {
+  it('matches a class under the template package', () => {
+    expect(isTemplateOwned(`${TEMPLATE_PACKAGE}.plugin.PluginTemplateLifecycle`)).toBe(true);
+  });
+
+  it('requires a package boundary, not a bare prefix', () => {
+    // com.atakmap.android.plugintemplatex is somebody else's package entirely.
+    expect(isTemplateOwned(`${TEMPLATE_PACKAGE}x.plugin.Foo`)).toBe(false);
+  });
+
+  it('is false for a renamed class and for null', () => {
+    expect(isTemplateOwned('com.acme.recon.plugin.ReconLifecycle')).toBe(false);
+    expect(isTemplateOwned(null)).toBe(false);
+  });
+});
+
+describe('stripJavaComments', () => {
+  it('removes line and block comments', () => {
+    expect(stripJavaComments('a; // gone\nb; /* also\n gone */ c;')).toBe('a; \nb;   c;');
+  });
+
+  it('leaves // and /* inside string literals alone', () => {
+    const src = 'x("http://a/b"); y("/* not a comment */"); // real';
+    expect(stripJavaComments(src)).toBe('x("http://a/b"); y("/* not a comment */"); ');
+  });
+
+  it('honours escaped quotes inside a literal', () => {
+    expect(stripJavaComments('s("say \\"hi\\" // still string"); // gone'))
+      .toBe('s("say \\"hi\\" // still string"); ');
+  });
+
+  it('handles char literals holding a quote or a slash', () => {
+    expect(stripJavaComments("c = '\"'; d = '/'; // x")).toBe("c = '\"'; d = '/'; ");
+  });
+
+  it('drops an unterminated block comment to end of input', () => {
+    expect(stripJavaComments('a; /* never closed')).toBe('a;  ');
+  });
+});
+
+describe('readRegisteredActions', () => {
+  const withSource = (body: string): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'atak-act-'));
+    const file = join(dir, 'PluginMapComponent.java');
+    writeFileSync(file, body);
+    return file;
+  };
+
+  it('reads the action out of an injected registration', () => {
+    const file = withSource(`
+      ReactiveDropDown reactScreen = new ReactiveDropDown(view, context, "web/index.html");
+      DocumentedIntentFilter reactFilter = new DocumentedIntentFilter();
+      reactFilter.addAction("com.acme.recon.SHOW_REACT",
+              "React screen powered by atak-reactive");
+    `);
+    expect(readRegisteredActions(file)).toEqual(['com.acme.recon.SHOW_REACT']);
+  });
+
+  it('returns every action on the filter, in order', () => {
+    const file = withSource(`
+      reactFilter.addAction("com.acme.recon.SHOW_REACT", "a");
+      reactFilter.addAction("com.acme.recon.SHOW_OTHER", "b");
+    `);
+    expect(readRegisteredActions(file)).toEqual(['com.acme.recon.SHOW_REACT', 'com.acme.recon.SHOW_OTHER']);
+  });
+
+  it('ignores commented-out registrations', () => {
+    const file = withSource(`
+      // reactFilter.addAction("com.old.ONE", "gone");
+      /* reactFilter.addAction("com.old.TWO", "gone"); */
+      reactFilter.addAction("com.acme.recon.SHOW_REACT", "live");
+    `);
+    expect(readRegisteredActions(file)).toEqual(['com.acme.recon.SHOW_REACT']);
+  });
+
+  it('ignores addAction calls on other filters', () => {
+    const file = withSource(`
+      otherFilter.addAction("com.acme.other.SOMETHING", "not ours");
+      reactFilter.addAction("com.acme.recon.SHOW_REACT", "ours");
+    `);
+    expect(readRegisteredActions(file)).toEqual(['com.acme.recon.SHOW_REACT']);
+  });
+
+  it('returns nothing when nothing is registered, and for a missing file', () => {
+    expect(readRegisteredActions(withSource('public class Foo {}'))).toEqual([]);
+    expect(readRegisteredActions(join(tmpdir(), 'does-not-exist-atak.java'))).toEqual([]);
+  });
+});
+
+describe('hasRegistrationInsertPoint', () => {
+  it('matches the call the injector inserts after', () => {
+    expect(hasRegistrationInsertPoint('this.registerDropDownReceiver(a, b);')).toBe(true);
+  });
+
+  it('does not match a call without this., which the injector cannot use', () => {
+    expect(hasRegistrationInsertPoint('registerDropDownReceiver(a, b);')).toBe(false);
+  });
+
+  it('is not left stateful by a previous match', () => {
+    // A shared /g regex would carry lastIndex across calls and start failing
+    // on the second identical input.
+    const src = 'this.registerDropDownReceiver(a, b);';
+    expect(hasRegistrationInsertPoint(src)).toBe(true);
+    expect(hasRegistrationInsertPoint(src)).toBe(true);
+  });
+});
+
+describe('isReactiveRegistered', () => {
+  it('keys on the class, so a differently named filter still counts as registered', () => {
+    expect(isReactiveRegistered('ReactiveDropDown r = new ReactiveDropDown(v, c, "web/index.html");\nf.addAction("x", "y");')).toBe(true);
+  });
+
+  it('does not treat a stray reactFilter variable as a registration', () => {
+    expect(isReactiveRegistered('DocumentedIntentFilter reactFilter = new DocumentedIntentFilter();')).toBe(false);
   });
 });

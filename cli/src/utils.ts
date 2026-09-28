@@ -222,6 +222,135 @@ export function deriveIntentAction(packageName: string): string {
   return `${packageName}.SHOW_REACT`;
 }
 
+/** The Java package the stock ATAK plugin template ships with. */
+export const TEMPLATE_PACKAGE = 'com.atakmap.android.plugintemplate';
+
+/**
+ * Every implementation class a plugin declares in assets/plugin.xml, in
+ * document order. Empty if there is no plugin.xml or nothing declared.
+ *
+ * These exact strings are what ATAK's plugin registry keys on, so they are the
+ * thing worth reading — a project can have moved its applicationId, or renamed
+ * some directories, and still be handing ATAK the template's class name.
+ *
+ * All of them, not just the first: ATAK collects every <extension> and de-dupes
+ * each one independently, so a file whose first extension has been renamed can
+ * still collide on a later one. ATAK asks for two extension types (IPlugin and
+ * IToolbarItem), so more than one entry is a supported shape.
+ *
+ * Comments are stripped first because ATAK parses this file with SimpleXML,
+ * which ignores them. A half-finished rename tends to leave the old impl in a
+ * comment block, and warning about that would be a false positive.
+ */
+export function readPluginImpls(appDir: string): string[] {
+  const pluginXml = join(appDir, 'src', 'main', 'assets', 'plugin.xml');
+  if (!existsSync(pluginXml)) return [];
+  const xml = readFileSync(pluginXml, 'utf-8').replace(/<!--[\s\S]*?-->/g, '');
+  return [...xml.matchAll(/\bimpl\s*=\s*(["'])(.*?)\1/g)].map((m) => m[2]!);
+}
+
+/** Whether a fully-qualified name still sits under the ATAK template's package. */
+export function isTemplateOwned(fqName: string | null): boolean {
+  return fqName !== null && fqName.startsWith(`${TEMPLATE_PACKAGE}.`);
+}
+
+/**
+ * Remove Java comments, leaving string and character literals intact.
+ *
+ * A regex is not enough here: `//` inside a string literal ("http://…") is not
+ * a comment, and treating it as one would swallow the rest of the line — which
+ * can hide a real addAction. So this walks the source and tracks whether it is
+ * inside a literal. Comments are replaced with a space rather than removed, so
+ * tokens on either side of a block comment do not run together.
+ */
+export function stripJavaComments(src: string): string {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i]!;
+    const next = src[i + 1];
+    if (c === '"' || c === "'") {
+      // Copy the literal through its closing quote, honouring backslash escapes.
+      const quote = c;
+      out += c;
+      i++;
+      while (i < src.length && src[i] !== quote) {
+        if (src[i] === '\\' && i + 1 < src.length) {
+          out += src[i]! + src[i + 1]!;
+          i += 2;
+          continue;
+        }
+        out += src[i]!;
+        i++;
+      }
+      if (i < src.length) {
+        out += quote;
+        i++;
+      }
+    } else if (c === '/' && next === '/') {
+      while (i < src.length && src[i] !== '\n') i++;
+    } else if (c === '/' && next === '*') {
+      const end = src.indexOf('*/', i + 2);
+      i = end === -1 ? src.length : end + 2;
+      out += ' ';
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return out;
+}
+
+/**
+ * Every intent action an already-registered ReactiveDropDown listens on, read
+ * out of the MapComponent source. Empty if none can be found.
+ *
+ * Read rather than derived, because the two can disagree. deriveIntentAction
+ * only says what `init` *would* write; someone who edited the action by hand
+ * would otherwise be warned about a string that appears nowhere in their
+ * project. Comments are stripped first, for the same reason plugin.xml's are:
+ * commenting out the old line is exactly how a hand-edited action comes to
+ * exist, and the old line must not win over the live one.
+ *
+ * All of them, not the first: a DocumentedIntentFilter can carry several
+ * actions, and a template-owned one later in the list collides just the same.
+ *
+ * What counts as found is deliberately narrow — the literal shape `init`
+ * writes, `reactFilter.addAction("…")`. A renamed filter variable or an action
+ * held in a constant is not recognised, and the intent half of the warning is
+ * then skipped rather than guessed at. Naming no action is better than naming
+ * the wrong one.
+ */
+export function readRegisteredActions(filePath: string): string[] {
+  if (!existsSync(filePath)) return [];
+  const src = stripJavaComments(readFileSync(filePath, 'utf-8'));
+  return [...src.matchAll(/reactFilter\s*\.\s*addAction\(\s*"([^"]+)"/g)].map((m) => m[1]!);
+}
+
+/**
+ * The call injectReactiveRegistration inserts after. One definition so the
+ * dry-run can predict a failed injection with the same test the injector uses.
+ */
+const REGISTER_CALL = /this\.registerDropDownReceiver\([^)]+\);/g;
+
+/**
+ * Whether a MapComponent already registers a ReactiveDropDown.
+ *
+ * One definition, used by the injector to decide 'already_exists' and by the
+ * dry-run to predict it, so the two cannot drift apart. It keys on the class
+ * name, not on the `reactFilter` variable: a project that registered the
+ * dropdown through a differently named filter is still registered, and must
+ * not be offered a second registration.
+ */
+export function isReactiveRegistered(content: string): boolean {
+  return content.includes('ReactiveDropDown');
+}
+
+/** Whether injectReactiveRegistration would find somewhere to insert. */
+export function hasRegistrationInsertPoint(content: string): boolean {
+  return new RegExp(REGISTER_CALL.source).test(content);
+}
+
 /**
  * Detect the current install type for atak-reactive.
  */
@@ -318,13 +447,12 @@ export function injectReactiveRegistration(
 ): 'injected' | 'already_exists' | 'failed' {
   const content = readFileSync(filePath, 'utf-8');
 
-  // Check if already registered
-  if (content.includes('ReactiveDropDown')) {
+  if (isReactiveRegistered(content)) {
     return 'already_exists';
   }
 
   // Find the last registerDropDownReceiver call to insert after
-  const registerPattern = /this\.registerDropDownReceiver\([^)]+\);/g;
+  const registerPattern = new RegExp(REGISTER_CALL.source, 'g');
   let lastMatch: RegExpExecArray | null = null;
   let match: RegExpExecArray | null;
   while ((match = registerPattern.exec(content)) !== null) {
