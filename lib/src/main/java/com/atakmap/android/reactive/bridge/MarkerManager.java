@@ -82,6 +82,9 @@ public class MarkerManager {
                 applyIcon(m, opts.optString("iconUri"),
                         opts.optInt("iconColor", 0));
             }
+            // setTitle, setType and setIcon fire nothing MapItemEventRelay
+            // listens to (only setPoint does), so announce the change.
+            refresh(m);
         });
 
         return true;
@@ -96,7 +99,10 @@ public class MarkerManager {
 
         int iconColor = opts.optInt("iconColor", 0);
 
-        mapView.post(() -> applyIcon(marker, iconUri, iconColor));
+        mapView.post(() -> {
+            applyIcon(marker, iconUri, iconColor);
+            refresh(marker);
+        });
         return true;
     }
 
@@ -152,6 +158,15 @@ public class MarkerManager {
             return (Marker) item;
         }
         return null;
+    }
+
+    /**
+     * Dispatches ITEM_REFRESH so MapItemEventRelay (and anything else on the
+     * map event bus) sees changes that fire no item listener of their own.
+     * Must run on the UI thread.
+     */
+    private void refresh(Marker marker) {
+        marker.refresh(mapView.getMapEventDispatcher(), null, MarkerManager.class);
     }
 
     private MapGroup resolveGroup(String groupName) {
