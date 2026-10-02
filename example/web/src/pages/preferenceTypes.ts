@@ -73,10 +73,64 @@ function showRead(v: string | null | undefined): string {
   return v === undefined ? 'undefined' : JSON.stringify(v);
 }
 
+const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/** Removes every key this page writes. Removing an absent key is a no-op. */
+function removeTestKeys() {
+  sendBroadcast(PREF_TEST_ACTION, { op: 'clear' });
+  removePreference(HOSTILE_KEY);
+  removePreference(INJECTION_KEY);
+}
+
+/**
+ * SharedPreferences notifies listeners only when a value actually changes. A run
+ * that died between writing and clearing (ATAK killed, panel closed) leaves the
+ * test keys set, and the next run's writes then fire no events at all, so every
+ * "arrives as" check would time out with "no event". Start from a clean slate.
+ *
+ * Resolves to the keys that were still set after the timeout; empty means clean.
+ */
+async function clearLeftovers(keys: string[]): Promise<string[]> {
+  const dirty = () => keys.filter(k => getPreference(k) != null);
+  if (dirty().length === 0) return [];
+  removeTestKeys();
+  // The typed clear goes through a broadcast, so it lands asynchronously.
+  const deadline = Date.now() + TIMEOUT_MS;
+  while (dirty().length > 0 && Date.now() < deadline) await delay(50);
+  // Let the null preferenceChanged events from the removal reach the WebView,
+  // so the write step below does not mistake them for its own.
+  await delay(500);
+  return dirty();
+}
+
 export async function runPreferenceTypeTests(): Promise<Result[]> {
   const results: Result[] = [];
   const typedKeys = Object.keys(TYPED_EXPECTED).map(k => TYPED_PREFIX + k);
 
+  try {
+    const leftover = await clearLeftovers([...typedKeys, HOSTILE_KEY, INJECTION_KEY]);
+    if (leftover.length > 0) {
+      results.push({
+        name: 'preference test keys start cleared',
+        pass: false,
+        detail: `still set: ${leftover.join(' ')}`,
+      });
+    }
+
+    await runChecks(results, typedKeys);
+  } finally {
+    // Whatever happened above, do not leave test keys behind for the next run.
+    try {
+      removeTestKeys();
+    } catch {
+      // The bridge is gone; the next run's clearLeftovers will handle it.
+    }
+  }
+
+  return results;
+}
+
+async function runChecks(results: Result[], typedKeys: string[]) {
   // --- Typed values written natively ---
   const written = await collect(typedKeys, () =>
     sendBroadcast(PREF_TEST_ACTION, { op: 'write' }));
@@ -119,23 +173,21 @@ export async function runPreferenceTypeTests(): Promise<Result[]> {
     pass: hostileRead === HOSTILE_VALUE,
     detail: showRead(hostileRead),
   });
-  removePreference(HOSTILE_KEY);
 
-  // --- A crafted string cannot run code ---
+  // --- A crafted string arrives intact and cannot run code ---
+  // One check: "not injected" on its own also passes when no event arrived at
+  // all, which proves nothing. The payload must have been evaluated (the event
+  // arrived, value intact) and must not have run the crafted code.
   const w = window as unknown as { __prefInjected?: number };
   delete w.__prefInjected;
   const injected = await collect([INJECTION_KEY], () => setPreference(INJECTION_KEY, INJECTION_VALUE));
+  const crafted = injected.get(INJECTION_KEY);
+  const ran = w.__prefInjected !== undefined;
   results.push({
-    name: 'preference value cannot run code in the WebView',
-    pass: w.__prefInjected === undefined,
-    detail: w.__prefInjected === undefined ? 'not injected' : 'INJECTED',
+    name: 'crafted preference value arrives intact without running code',
+    pass: crafted === INJECTION_VALUE && !ran,
+    detail: `${ran ? 'INJECTED' : 'not injected'}, value ${show(crafted)}`,
   });
-  results.push({
-    name: 'preferenceChanged delivers crafted string intact',
-    pass: injected.get(INJECTION_KEY) === INJECTION_VALUE,
-    detail: show(injected.get(INJECTION_KEY)),
-  });
-  removePreference(INJECTION_KEY);
 
   // --- An absent key reads as null ---
   const absent = getPreference('test.reactive.never-written');
@@ -144,6 +196,4 @@ export async function runPreferenceTypeTests(): Promise<Result[]> {
     pass: absent === null,
     detail: showRead(absent),
   });
-
-  return results;
 }

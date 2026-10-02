@@ -84,13 +84,6 @@ jobs:
             -PatakSdkPath=sdks/${{ matrix.atak-version }}/main.jar \
             -PatakVersion=${{ matrix.atak-version }}
 
-      - name: Unit-test bridge
-        run: |
-          cd lib
-          ./gradlew :bridge:testReleaseUnitTest \
-            -PatakSdkPath=sdks/${{ matrix.atak-version }}/main.jar \
-            -PatakVersion=${{ matrix.atak-version }}
-
       # getBridgeVersion() was a hardcoded "0.0.0" for every release up to 0.2.0,
       # so the SDK's mismatch check was noise and a real mismatch was invisible.
       # No JS test can catch a regression here — under vitest SDK_VERSION falls
@@ -108,6 +101,35 @@ jobs:
             || { echo "::error::bridge reports the wrong ATAK version"; \
                  grep -E 'BRIDGE_VERSION|ATAK_VERSION' "$GENERATED"; exit 1; }
           echo "OK: $(grep -E 'BRIDGE_VERSION|ATAK_VERSION' "$GENERATED" | tr -s ' ')"
+
+  # The bridge's JVM unit tests. They exercise only plain-Java helpers, so the
+  # result does not depend on the ATAK version and one run is enough; they used
+  # to run once per lib-compile matrix entry. They still need the private SDK
+  # jar, though: testReleaseUnitTest compiles all of lib/src/main first, and
+  # most of it imports ATAK classes, so the job is gated exactly like
+  # lib-compile and fork PRs skip it.
+  lib-unit-tests:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Download ATAK SDK (5.6.0)
+        run: ./scripts/download-sdk.sh 5.6.0
+        env:
+          GH_TOKEN: ${{ secrets.CI_SDK_TOKEN }}
+      - name: Unit-test bridge
+        run: |
+          cd lib
+          ./gradlew :bridge:testReleaseUnitTest \
+            -PatakSdkPath=sdks/5.6.0/main.jar \
+            -PatakVersion=5.6.0
 
   # Builds the example's release APK the way publish-example.yml does before
   # pushing it to Arsenal C2, so a break in the example (or in the build script)
@@ -157,7 +179,7 @@ jobs:
           FILES=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
             --paginate --jq '.[].filename')
           if echo "$FILES" | grep -q '^lib/'; then
-            echo "::warning title=lib-compile deferred::This fork PR changes lib/ but was not compiled against the ATAK SDK (private jar). Re-push the branch to this repo to verify before merge."
+            echo "::warning title=lib-compile deferred::This fork PR changes lib/ but was not compiled or unit-tested against the ATAK SDK (private jar). Re-push the branch to this repo to verify before merge."
           else
             echo "::notice title=lib-compile skipped::Fork PR does not touch lib/; the bridge compile runs on main after merge."
           fi

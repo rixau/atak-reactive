@@ -82,6 +82,9 @@ export function IntegrationTestPage() {
   const testRouteUid = useRef<string | null>(null);
   const testGeofenceShapeUid = useRef<string | null>(null);
   const prefTests = useRef<Promise<void> | null>(null);
+  // Drives the banner and the COMPLETE line. phase.current is a ref, so setting
+  // it to 'done' alone does not re-render.
+  const [done, setDone] = useState(false);
   const phase = useRef<
     | 'setup' | 'verify-stream' | 'verify-update' | 'verify-meta' | 'verify-remove'
     | 'shape-create' | 'shape-verify-stream' | 'shape-update' | 'shape-verify-update' | 'shape-remove' | 'shape-verify-remove'
@@ -104,8 +107,12 @@ export function IntegrationTestPage() {
     // --- Preference types (#65) ---
     // Independent of the map-item chain below, so it runs alongside it and
     // still reports if that chain stalls.
+    // A rejection is recorded as a failure rather than left unhandled: the final
+    // phase waits on this promise, and without the catch COMPLETE would never
+    // print and integration-test.sh would report a TIMEOUT instead.
     prefTests.current = runPreferenceTypeTests()
-      .then(rs => rs.forEach(addResult));
+      .then(rs => rs.forEach(addResult))
+      .catch(e => addResult({ name: 'preference type tests ran', pass: false, detail: String(e) }));
 
     // --- Bridge basics ---
     const native = isNative();
@@ -600,11 +607,7 @@ export function IntegrationTestPage() {
     // Wait for the preference type tests started in phase 1, then the final count
     prefTests.current!.then(() => {
       phase.current = 'done';
-      setResults(prev => {
-        const passed = prev.filter(r => r.pass).length;
-        console.log(`INTEGRATION_TEST:COMPLETE:${passed}/${prev.length} passed`);
-        return prev;
-      });
+      setDone(true);
     });
   }, [phase.current === 'geofence-test' ? 'run' : '']);
 
@@ -613,21 +616,27 @@ export function IntegrationTestPage() {
 
   const failed = total - passed;
 
+  // Logged from the render that shows the final count, so it covers every result
+  // added before setDone, including the preference tests'.
+  useEffect(() => {
+    if (done) console.log(`INTEGRATION_TEST:COMPLETE:${passed}/${total} passed`);
+  }, [done]);
+
   return (
     <div>
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '10px 12px', marginBottom: 12, borderRadius: 8,
-        background: phase.current === 'done'
+        background: done
           ? (failed === 0 ? '#1a3a2a' : '#3a1a1a')
           : '#16213e',
       }}>
         <span style={{ color: '#edf2f4', fontSize: 14, fontWeight: 600 }}>
-          {phase.current === 'done' ? (failed === 0 ? 'All Passed' : `${failed} Failed`) : 'Running...'}
+          {done ? (failed === 0 ? 'All Passed' : `${failed} Failed`) : 'Running...'}
         </span>
         <span style={{
           fontSize: 20, fontWeight: 700,
-          color: phase.current !== 'done' ? '#8d99ae'
+          color: !done ? '#8d99ae'
             : failed === 0 ? '#4ade80' : '#f87171',
         }}>
           {passed}/{total}
@@ -643,7 +652,7 @@ export function IntegrationTestPage() {
           {r.pass ? 'PASS' : 'FAIL'}: {r.name}{r.detail ? ` — ${r.detail}` : ''}
         </div>
       ))}
-      {phase.current !== 'done' && phase.current !== 'setup' && (
+      {!done && phase.current !== 'setup' && (
         <div style={{ color: '#555', padding: '8px 0', fontSize: 12 }}>
           Phase: {phase.current}...
         </div>
