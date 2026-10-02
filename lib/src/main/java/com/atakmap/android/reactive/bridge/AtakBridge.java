@@ -174,7 +174,12 @@ public class AtakBridge {
         try {
             AtakPreferences prefs = AtakPreferences.getInstance(
                     mapView.getContext());
-            return prefs.get(key, null);
+            // getAll() rather than the String getter: a boolean or numeric
+            // preference would otherwise throw and read back as null.
+            String value = PreferenceValues.toBridgeString(prefs.getAll().get(key));
+            // A Java null crosses @JavascriptInterface as undefined, which the
+            // SDK does not map to null; "null" is what it expects for absent.
+            return value == null ? "null" : value;
         } catch (Exception e) {
             Log.e(TAG, "Error getting preference: " + key, e);
             return "null";

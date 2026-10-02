@@ -59,12 +59,22 @@ android {
         main {
             java.srcDirs = ["${rootDir}/src/main/java"]
         }
+        test {
+            java.srcDirs = ["${rootDir}/src/test/java"]
+        }
     }
 }
 
 dependencies {
     compileOnly files(project.findProperty("atakSdkPath") ? "${rootDir}/${project.findProperty('atakSdkPath')}" : "${rootDir}/sdks/5.6.0/main.jar")
     compileOnly 'androidx.webkit:webkit:1.12.1'
+
+    testImplementation 'junit:junit:4.13.2'
+    // android.jar ships org.json as stubs that throw "not mocked" in local unit
+    // tests. The real library stands in for them; do not reach for
+    // unitTests.returnDefaultValues instead, which would make every JSON call
+    // silently return null and the tests pass for the wrong reason.
+    testImplementation 'org.json:json:20250517'
 }
 
 mavenPublishing {

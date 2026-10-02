@@ -48,6 +48,7 @@ import {
   createGeofence,
   removeGeofence,
 } from '@atak-reactive/sdk';
+import { runPreferenceTypeTests } from './preferenceTypes';
 
 interface TestResult {
   name: string;
@@ -80,12 +81,13 @@ export function IntegrationTestPage() {
   const testCircleUid = useRef<string | null>(null);
   const testRouteUid = useRef<string | null>(null);
   const testGeofenceShapeUid = useRef<string | null>(null);
+  const prefTests = useRef<Promise<void> | null>(null);
   const phase = useRef<
     | 'setup' | 'verify-stream' | 'verify-update' | 'verify-meta' | 'verify-remove'
     | 'shape-create' | 'shape-verify-stream' | 'shape-update' | 'shape-verify-update' | 'shape-remove' | 'shape-verify-remove'
     | 'circle-create' | 'circle-verify-stream' | 'circle-remove' | 'circle-verify-remove'
     | 'route-create' | 'route-verify-stream' | 'route-update' | 'route-waypoint' | 'route-remove' | 'route-verify-remove'
-    | 'contacts-test' | 'chat-test' | 'geofence-test'
+    | 'contacts-test' | 'chat-test' | 'geofence-test' | 'prefs-test'
     | 'done'
   >('setup');
 
@@ -98,6 +100,12 @@ export function IntegrationTestPage() {
   useEffect(() => {
     if (phase.current !== 'setup') return;
     phase.current = 'verify-stream';
+
+    // --- Preference types (#65) ---
+    // Independent of the map-item chain below, so it runs alongside it and
+    // still reports if that chain stalls.
+    prefTests.current = runPreferenceTypeTests()
+      .then(rs => rs.forEach(addResult));
 
     // --- Bridge basics ---
     const native = isNative();
@@ -135,8 +143,12 @@ export function IntegrationTestPage() {
     log(typeof coordFormat === 'string' && coordFormat.length > 0, 'useCoordinateFormat', coordFormat);
 
     // --- Preferences ---
-    const pref = getPreference('coordinateFormat');
-    log(pref !== null, 'getPreference', pref ?? 'null');
+    // The callsign is always set. coordinateFormat is not until the user changes
+    // it, and this check only passed on it because an absent key read back as
+    // undefined rather than null.
+    const pref = getPreference('locationCallsign');
+    const prefOk = typeof pref === 'string' && pref.length > 0;
+    log(prefOk, 'getPreference', pref ?? 'null');
 
     // --- Map groups ---
     log(Array.isArray(groups), 'useMapGroups returns array', `${groups.length} groups`);
@@ -222,7 +234,7 @@ export function IntegrationTestPage() {
       { name: 'formatCoordinate', pass: fmt.length > 0, detail: fmt },
       { name: 'distanceTo', pass: dist !== null && dist!.distance > 0, detail: dist ? `${Math.round(dist.distance)}m` : 'null' },
       { name: 'useCoordinateFormat', pass: coordFormat.length > 0, detail: coordFormat },
-      { name: 'getPreference', pass: pref !== null, detail: pref ?? 'null' },
+      { name: 'getPreference', pass: prefOk, detail: pref ?? 'null' },
       { name: 'useMapGroups', pass: Array.isArray(groups), detail: `${groups.length} groups` },
       { name: 'useSelfLocation', pass: true, detail: location ? `${location.lat.toFixed(4)}` : 'null' },
       { name: 'sendCot internal', pass: cotResult === true },
@@ -538,10 +550,10 @@ export function IntegrationTestPage() {
     }
   }, [phase.current === 'chat-test' ? 'run' : '']);
 
-  // Phase 15: Geofence tests → done
+  // Phase 15: Geofence tests → preference types → done
   useEffect(() => {
     if (phase.current !== 'geofence-test') return;
-    phase.current = 'done';
+    phase.current = 'prefs-test';
 
     // useGeofenceAlerts returns array (empty — no active fences in test)
     addResult({
@@ -585,11 +597,14 @@ export function IntegrationTestPage() {
       addResult({ name: 'createGeofence no crash', pass: false, detail: 'could not create test circle' });
     }
 
-    // Final count
-    setResults(prev => {
-      const passed = prev.filter(r => r.pass).length;
-      console.log(`INTEGRATION_TEST:COMPLETE:${passed}/${prev.length} passed`);
-      return prev;
+    // Wait for the preference type tests started in phase 1, then the final count
+    prefTests.current!.then(() => {
+      phase.current = 'done';
+      setResults(prev => {
+        const passed = prev.filter(r => r.pass).length;
+        console.log(`INTEGRATION_TEST:COMPLETE:${passed}/${prev.length} passed`);
+        return prev;
+      });
     });
   }, [phase.current === 'geofence-test' ? 'run' : '']);
 

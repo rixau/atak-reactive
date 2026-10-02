@@ -84,6 +84,13 @@ jobs:
             -PatakSdkPath=sdks/${{ matrix.atak-version }}/main.jar \
             -PatakVersion=${{ matrix.atak-version }}
 
+      - name: Unit-test bridge
+        run: |
+          cd lib
+          ./gradlew :bridge:testReleaseUnitTest \
+            -PatakSdkPath=sdks/${{ matrix.atak-version }}/main.jar \
+            -PatakVersion=${{ matrix.atak-version }}
+
       # getBridgeVersion() was a hardcoded "0.0.0" for every release up to 0.2.0,
       # so the SDK's mismatch check was noise and a real mismatch was invisible.
       # No JS test can catch a regression here — under vitest SDK_VERSION falls
