@@ -1,4 +1,5 @@
 import { useSelfLocation, useMapEvent, sendBroadcast } from '@atak-reactive/sdk';
+import { TOUCH_TARGET } from '../touch';
 
 export function HomePage() {
   const location = useSelfLocation();
@@ -15,7 +16,7 @@ export function HomePage() {
         <p style={{ color: '#8d99ae', fontSize: 13, marginBottom: 8 }}>
           Open a native tabbed dropdown with one React tab via ReactiveWebView.
         </p>
-        <button onClick={openMixedDemo} style={{ width: '100%', padding: '10px 0', border: 'none', borderRadius: 6, background: '#4cc9f0', color: '#0f0f23', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+        <button onClick={openMixedDemo} style={{ width: '100%', minHeight: TOUCH_TARGET, border: 'none', borderRadius: 6, background: '#4cc9f0', color: '#0f0f23', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
           Open Mixed Demo
         </button>
       </Section>
