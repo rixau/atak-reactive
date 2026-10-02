@@ -92,8 +92,46 @@ public class PreferenceValuesTest {
         // Nothing that terminates a JS string or statement survives unescaped.
         assertFalse(json.contains("\n"));
         assertFalse(json.contains("\r"));
+        // These two cannot fail here: the JVM org.json escapes U+2028/U+2029
+        // by itself. Android's does not, so on a device escapeLineSeparators is
+        // the only thing that removes them - see the tests below.
         assertFalse(json.contains(" "));
         assertFalse(json.contains(" "));
         assertFalse(json.contains("\u0000"));
+    }
+
+    // --- escapeLineSeparators, tested directly ---
+    //
+    // The JVM and Android ship different org.json implementations. The one these
+    // tests run against (org.json:json) escapes U+2000-U+20FF on its own, so a
+    // check on changedPayload's output passes even with escapeLineSeparators
+    // deleted. Android's built-in org.json leaves U+2028/U+2029 raw, and an older
+    // WebView (minSdk is 21) treats them as line terminators: the script fails to
+    // parse and the event is dropped silently. Only a direct test of the helper
+    // can catch a regression in it.
+
+    @Test
+    public void escapesLineSeparator() throws Exception {
+        assertEquals("\"a\\u2028b\"",
+                PreferenceValues.escapeLineSeparators("\"a\u2028b\""));
+    }
+
+    @Test
+    public void escapesParagraphSeparator() throws Exception {
+        assertEquals("\"a\\u2029b\"",
+                PreferenceValues.escapeLineSeparators("\"a\u2029b\""));
+    }
+
+    @Test
+    public void escapesEveryOccurrence() throws Exception {
+        assertEquals("\\u2028\\u2029\\u2028",
+                PreferenceValues.escapeLineSeparators("\u2028\u2029\u2028"));
+    }
+
+    @Test
+    public void leavesOtherTextAlone() throws Exception {
+        // Already-escaped separators and ordinary escapes pass through as they are.
+        String json = "{\"key\":\"k\",\"value\":\"a\\u2028 \\n\\\"\"}";
+        assertEquals(json, PreferenceValues.escapeLineSeparators(json));
     }
 }
