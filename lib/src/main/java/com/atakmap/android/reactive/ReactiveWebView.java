@@ -20,6 +20,7 @@ import androidx.webkit.WebViewAssetLoader;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.reactive.bridge.AtakBridge;
 import com.atakmap.android.reactive.bridge.BridgeEventEmitter;
+import com.atakmap.android.reactive.bridge.PreferenceValues;
 import com.atakmap.coremap.log.Log;
 
 import android.content.SharedPreferences;
@@ -411,13 +412,11 @@ public class ReactiveWebView extends FrameLayout {
                     mapView.getContext());
             prefListener = (sp, key) -> {
                 if (key == null || eventEmitter == null) return;
-                String value = prefs.get(key, (String) null);
-                String payload = "{\"key\":\"" + key.replace("\"", "\\\"")
-                        + "\",\"value\":"
-                        + (value == null ? "null"
-                                : "\"" + value.replace("\"", "\\\"") + "\"")
-                        + "}";
-                eventEmitter.emit("preferenceChanged", payload);
+                // Read the stored value as-is rather than through the String
+                // getter: this fires for every ATAK preference, and many of them
+                // are booleans and numbers.
+                eventEmitter.emit("preferenceChanged",
+                        PreferenceValues.changedPayload(key, sp.getAll().get(key)));
             };
             prefs.registerListener(prefListener);
         } catch (Exception e) {

@@ -174,7 +174,9 @@ public class AtakBridge {
         try {
             AtakPreferences prefs = AtakPreferences.getInstance(
                     mapView.getContext());
-            return prefs.get(key, null);
+            // getAll() rather than the String getter: a boolean or numeric
+            // preference would otherwise throw and read back as null.
+            return PreferenceValues.toBridgeString(prefs.getAll().get(key));
         } catch (Exception e) {
             Log.e(TAG, "Error getting preference: " + key, e);
             return "null";

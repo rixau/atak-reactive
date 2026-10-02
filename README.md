@@ -275,7 +275,7 @@ without adding a button of your own.
 | `dropDownClose` | `{}` | Dropdown panel closed |
 | `dropDownSizeChanged` | `{ width, height }` | Dropdown panel resized |
 | `navVisible` | `boolean` | ATAK nav buttons shown/hidden |
-| `preferenceChanged` | `{ key, value }` | Any ATAK preference changed |
+| `preferenceChanged` | `{ key, value }` | Any ATAK preference changed. `value` is always a string (`"true"`, `"42"`, …) or `null` once removed |
 | `radialMenuChanged` | `{ open, item }` | Radial menu opened or closed on an item |
 | `navigationStateChanged` | `{ active, routeUid, currentWaypointIndex, gpsLost }` | Route navigation state changed |
 | `contactsChanged` | `ContactData[]` | Contact list updated (online/offline/changed) |
