@@ -163,9 +163,12 @@ public class MarkerManager {
     /**
      * Dispatches ITEM_REFRESH so MapItemEventRelay (and anything else on the
      * map event bus) sees changes that fire no item listener of their own.
-     * Must run on the UI thread.
+     * Must run on the UI thread. Skips a marker that is off the map, e.g.
+     * one removed by a removeMarker posted ahead of this update: refreshing
+     * it would report the removed marker as updated and bring it back in JS.
      */
     private void refresh(Marker marker) {
+        if (marker.getGroup() == null) return;
         marker.refresh(mapView.getMapEventDispatcher(), null, MarkerManager.class);
     }
 

@@ -14,12 +14,10 @@ import com.atakmap.android.maps.PointMapItem;
 import com.atakmap.android.maps.Shape;
 import com.atakmap.coremap.log.Log;
 
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.lang.ref.WeakReference;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -65,7 +63,7 @@ public class MapItemEventRelay {
      * JSONArray being appended to while it is serialized can throw.
      */
     private final Object pendingLock = new Object();
-    private PendingUpdate pending = new PendingUpdate();
+    private PendingMapItemBatch pending = new PendingMapItemBatch();
     /** When the oldest un-flushed change landed, or 0 if nothing is pending. */
     private long oldestPendingAt = 0;
 
@@ -146,7 +144,7 @@ public class MapItemEventRelay {
 
         synchronized (pendingLock) {
             debounceHandler.removeCallbacksAndMessages(null);
-            pending = new PendingUpdate();
+            pending = new PendingMapItemBatch();
             oldestPendingAt = 0;
         }
 
@@ -157,7 +155,7 @@ public class MapItemEventRelay {
         try {
             JSONObject serialized = MapItemSerializer.serialize(item);
             synchronized (pendingLock) {
-                pending.added.put(serialized);
+                pending.add(item.getUID(), serialized);
                 scheduleFlush();
             }
 
@@ -194,16 +192,19 @@ public class MapItemEventRelay {
         }
 
         synchronized (pendingLock) {
-            pending.removed.put(uid);
+            pending.remove(uid);
             scheduleFlush();
         }
     }
 
     private void onItemUpdated(MapItem item) {
+        // An item that is off the map has been removed, or is about to be.
+        // Reporting it as updated would make the store re-create it.
+        if (item.getGroup() == null) return;
         try {
             JSONObject serialized = MapItemSerializer.serialize(item);
             synchronized (pendingLock) {
-                pending.addUpdated(item.getUID(), serialized);
+                pending.update(item.getUID(), serialized);
                 scheduleFlush();
             }
         } catch (JSONException e) {
@@ -305,46 +306,28 @@ public class MapItemEventRelay {
     }
 
     private void flush() {
-        PendingUpdate update;
+        PendingMapItemBatch update;
         synchronized (pendingLock) {
             debounceHandler.removeCallbacks(flushRunnable);
             debounceHandler.removeCallbacks(deadlineRunnable);
             update = pending;
-            pending = new PendingUpdate();
+            pending = new PendingMapItemBatch();
             oldestPendingAt = 0;
         }
         // Serialize and emit outside the lock: nothing else can reach this
         // batch any more, and the listeners should not wait on the WebView.
 
-        if (update.added.length() == 0 && update.removed.length() == 0
-                && update.updatedArray().length() == 0) {
+        if (update.isEmpty()) {
             return;
         }
 
-        emitter.emitMapItemsChanged(update.added, update.removed, update.updatedArray());
+        emitter.emitMapItemsChanged(
+                update.addedArray(), update.removedArray(), update.updatedArray());
     }
 
     public void dispose() {
         refCount = 0;
         stopListening();
         removeAllPointListeners();
-    }
-
-    private static class PendingUpdate {
-        final JSONArray added = new JSONArray();
-        final JSONArray removed = new JSONArray();
-        private final Map<String, JSONObject> updated = new LinkedHashMap<>();
-
-        void addUpdated(String uid, JSONObject data) {
-            updated.put(uid, data);
-        }
-
-        JSONArray updatedArray() {
-            JSONArray arr = new JSONArray();
-            for (JSONObject obj : updated.values()) {
-                arr.put(obj);
-            }
-            return arr;
-        }
     }
 }
