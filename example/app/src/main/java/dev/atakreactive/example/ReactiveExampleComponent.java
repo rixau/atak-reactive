@@ -20,6 +20,7 @@ public class ReactiveExampleComponent extends DropDownMapComponent {
     private NativeChurnReceiver churnReceiver;
     private NativeListReceiver nativeListReceiver;
     private BenchReceiver benchReceiver;
+    private PrefTestReceiver prefTestReceiver;
 
     @Override
     public void onCreate(final Context context, Intent intent,
@@ -51,6 +52,11 @@ public class ReactiveExampleComponent extends DropDownMapComponent {
         benchReceiver = new BenchReceiver();
         benchReceiver.register(view.getContext().getApplicationContext());
 
+        // Integration-test only: writes non-string preferences for the Test
+        // page, which cannot write them itself. See PrefTestReceiver.
+        prefTestReceiver = new PrefTestReceiver(view.getContext());
+        prefTestReceiver.register();
+
         Log.d(TAG, "Reactive example component initialized");
     }
 
@@ -61,6 +67,9 @@ public class ReactiveExampleComponent extends DropDownMapComponent {
         }
         if (benchReceiver != null) {
             benchReceiver.unregister(view.getContext().getApplicationContext());
+        }
+        if (prefTestReceiver != null) {
+            prefTestReceiver.unregister();
         }
         super.onDestroyImpl(context, view);
     }

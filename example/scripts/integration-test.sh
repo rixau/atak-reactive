@@ -44,6 +44,17 @@ echo "--- Results ---"
 adb logcat -d | grep "INTEGRATION_TEST" | sed 's/.*INTEGRATION_TEST/  /' || true
 echo ""
 
+# The preference tests write booleans and numbers. Reading those through the
+# String getter (#65) logs this from inside ATAK while still delivering
+# something to JS, so the log is checked as well as the results. Checked
+# before the timeout so a stalled run still reports it.
+PREF_ERRORS=$(adb logcat -d | grep -c "Failed to get preference string" || true)
+if [ "$PREF_ERRORS" != "0" ]; then
+    echo "FAILED: ${PREF_ERRORS} 'Failed to get preference string' errors in logcat"
+    adb logcat -d | grep -A2 "Failed to get preference string" | head -9
+    exit 1
+fi
+
 COMPLETE=$(adb logcat -d | grep "INTEGRATION_TEST:COMPLETE" | head -1 || true)
 if [ -z "$COMPLETE" ]; then
     echo "TIMEOUT: Tests did not complete within ${TIMEOUT}s"
