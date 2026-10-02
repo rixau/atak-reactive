@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMapItems, useSelfLocation, addMarker, removeMarker, sendBroadcast } from '@atak-reactive/sdk';
+import { TOUCH_GAP, TOUCH_TARGET } from '../touch';
 
 /**
  * Embedded React tab — runs inside a ReactiveWebView within a native tabbed layout.
@@ -53,7 +54,7 @@ export function EmbeddedPage() {
           Drop Marker at My Location
         </button>
         {lastDropped && (
-          <div style={styles.row}>
+          <div style={{ ...styles.row, marginTop: TOUCH_GAP }}>
             <span style={styles.dim}>Last dropped</span>
             <button onClick={() => { removeMarker(lastDropped); setLastDropped(null); }} style={styles.removeBtn}>
               Remove
@@ -78,7 +79,7 @@ const styles: Record<string, React.CSSProperties> = {
   itemType: { color: '#8d99ae', fontSize: 11, fontFamily: 'monospace' },
   more: { color: '#8d99ae', fontSize: 12, fontStyle: 'italic', marginTop: 4 },
   dim: { color: '#8d99ae', fontSize: 12 },
-  button: { width: '100%', padding: '10px 0', border: 'none', borderRadius: 6, background: '#4cc9f0', color: '#0f0f23', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 8 },
-  buttonOutline: { width: '100%', padding: '10px 0', border: '1px solid #4cc9f0', borderRadius: 6, background: 'transparent', color: '#4cc9f0', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 8 },
-  removeBtn: { background: 'none', border: '1px solid #8d99ae', borderRadius: 4, color: '#8d99ae', fontSize: 11, padding: '2px 8px', cursor: 'pointer' },
+  button: { width: '100%', minHeight: TOUCH_TARGET, border: 'none', borderRadius: 6, background: '#4cc9f0', color: '#0f0f23', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: TOUCH_GAP },
+  buttonOutline: { width: '100%', minHeight: TOUCH_TARGET, border: '1px solid #4cc9f0', borderRadius: 6, background: 'transparent', color: '#4cc9f0', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: TOUCH_GAP },
+  removeBtn: { minHeight: TOUCH_TARGET, minWidth: 84, background: 'none', border: '1px solid #8d99ae', borderRadius: 6, color: '#8d99ae', fontSize: 13, padding: '0 14px', cursor: 'pointer' },
 };

@@ -1,5 +1,6 @@
 import { isNative, getPreference } from '@atak-reactive/sdk';
 import { useState } from 'react';
+import { TOUCH_TARGET } from '../touch';
 
 export function SettingsPage() {
   const [prefKey, setPrefKey] = useState('');
@@ -30,15 +31,15 @@ export function SettingsPage() {
             onChange={e => setPrefKey(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && lookupPref()}
             style={{
-              flex: 1, padding: '6px 10px', background: '#0f0f23', color: '#edf2f4',
+              flex: 1, minWidth: 0, minHeight: TOUCH_TARGET, padding: '0 10px', background: '#0f0f23', color: '#edf2f4',
               border: '1px solid #1a4a7a', borderRadius: 6, fontSize: 13, fontFamily: 'monospace',
             }}
           />
           <button
             onClick={lookupPref}
             style={{
-              padding: '6px 14px', background: '#0f3460', color: '#e0e0e0',
-              border: '1px solid #1a4a7a', borderRadius: 6, cursor: 'pointer', fontSize: 12,
+              minHeight: TOUCH_TARGET, padding: '0 16px', background: '#0f3460', color: '#e0e0e0',
+              border: '1px solid #1a4a7a', borderRadius: 6, cursor: 'pointer', fontSize: 13,
             }}
           >
             Lookup

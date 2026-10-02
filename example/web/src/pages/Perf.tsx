@@ -9,6 +9,7 @@ import {
   isNative,
 } from '@atak-reactive/sdk';
 import type { MapItemData, MapItemsChangedEvent } from '@atak-reactive/sdk';
+import { TOUCH_TARGET } from '../touch';
 
 /**
  * Resource-usage stress scenario. Drives the bridge through a fixed sequence
@@ -253,7 +254,7 @@ export function PerfPage() {
         disabled={phase !== 'ready' && phase !== 'done'}
         onChange={e => setCfg({ ...cfg, [key]: Number(e.target.value) })}
         style={{
-          width: 72, padding: '4px 6px', borderRadius: 4, fontSize: 13,
+          width: 72, minHeight: TOUCH_TARGET, padding: '0 6px', borderRadius: 4, fontSize: 13,
           background: '#0f0f23', color: '#edf2f4', border: '1px solid #1a2744',
         }}
       />
@@ -271,7 +272,7 @@ export function PerfPage() {
           onClick={run}
           disabled={phase !== 'ready' && phase !== 'done'}
           style={{
-            padding: '8px 16px', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600,
+            minHeight: TOUCH_TARGET, padding: '0 20px', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600,
             background: phase === 'ready' || phase === 'done' ? '#4cc9f0' : '#1a2744',
             color: phase === 'ready' || phase === 'done' ? '#0f0f23' : '#555',
           }}

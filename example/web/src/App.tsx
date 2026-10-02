@@ -7,6 +7,7 @@ import { IntegrationTestPage } from './pages/IntegrationTest';
 import { EmbeddedPage } from './pages/Embedded';
 import { PerfPage } from './pages/Perf';
 import { useLocation } from 'react-router-dom';
+import { TOUCH_TARGET } from './touch';
 
 // The Perf tab is a build-time option: `VITE_PERF_TAB=true npm run build`
 // (then assemble the APK as usual). Vite substitutes the value when bundling,
@@ -65,8 +66,10 @@ function Tab({ to, label }: { to: string; label: string }) {
       to={to}
       style={({ isActive }) => ({
         flex: 1,
-        padding: '10px 0',
-        textAlign: 'center' as const,
+        minHeight: TOUCH_TARGET,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         fontSize: 12,
         fontWeight: 600,
         textDecoration: 'none',
