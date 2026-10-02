@@ -74,8 +74,12 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
     private final java.util.List<Object> pendingBridges = new java.util.ArrayList<>();
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener;
-    private double currentWidth = HALF_WIDTH;
-    private double currentHeight = FULL_HEIGHT;
+    /**
+     * The panel's size as {width, height} fractions. One array, replaced whole, so a
+     * read on the JavaBridge thread never pairs one write's width with another's
+     * height.
+     */
+    private volatile double[] currentSize = {HALF_WIDTH, FULL_HEIGHT};
 
     /**
      * Create a reactive dropdown.
@@ -507,8 +511,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
     @Override
     public void onDropDownSizeChanged(double width, double height) {
-        currentWidth = width;
-        currentHeight = height;
+        currentSize = new double[] {width, height};
         if (eventEmitter != null) {
             eventEmitter.emit("dropDownSizeChanged",
                     "{\"width\":" + width + ",\"height\":" + height + "}");
@@ -561,11 +564,26 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     // --- Dropdown dimension accessors for AtakBridge ---
 
     public double getDropDownWidth() {
-        return currentWidth;
+        return currentSize[0];
     }
 
     public double getDropDownHeight() {
-        return currentHeight;
+        return currentSize[1];
+    }
+
+    /** Width and height as one {width, height} pair, read together. */
+    public double[] getDropDownSize() {
+        return currentSize.clone();
+    }
+
+    /**
+     * Record a size that has been requested but not applied yet, so a read straight
+     * after setDropdownSize sees it (#70). The resize itself is queued on the UI
+     * thread; when ATAK applies it, onDropDownSizeChanged overwrites this with the
+     * size it actually used.
+     */
+    public void recordRequestedSize(double width, double height) {
+        currentSize = new double[] {width, height};
     }
 
     @Override
