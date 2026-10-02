@@ -48,6 +48,7 @@ import {
   createGeofence,
   removeGeofence,
 } from '@atak-reactive/sdk';
+import { on, off } from '@atak-reactive/sdk';
 import { runPreferenceTypeTests } from './preferenceTypes';
 
 interface TestResult {
@@ -196,13 +197,35 @@ export function IntegrationTestPage() {
     log(afterRemove === null, 'getPreference returns null after remove', afterRemove ?? 'null');
 
     // --- Dropdown sizing ---
+    // The resize itself is queued on the UI thread (#70). getDropdownSize() must
+    // reflect the request straight away, and ATAK must then confirm it with a
+    // dropDownSizeChanged event. The size is only restored once that has arrived,
+    // so the restore cannot overtake the resize being checked.
     try {
+      const isFull = (s: { width: number; height: number }) =>
+        s.width === 1.0 && s.height === 1.0;
+      const restore = () => setDropdownSize('half', 'full');
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const onResized = (s: { width: number; height: number }) => {
+        if (!isFull(s)) return;
+        clearTimeout(timer);
+        off('dropDownSizeChanged', onResized);
+        log(true, 'dropDownSizeChanged after setDropdownSize', `${s.width}x${s.height}`);
+        const after = getDropdownSize();
+        log(isFull(after), 'getDropdownSize after dropDownSizeChanged',
+          `${after.width}x${after.height}`);
+        restore();
+      };
+      on('dropDownSizeChanged', onResized);
+      timer = setTimeout(() => {
+        off('dropDownSizeChanged', onResized);
+        log(false, 'dropDownSizeChanged after setDropdownSize', 'no event within 2s');
+        restore();
+      }, 2000);
+
       setDropdownSize('full', 'full');
       const size = getDropdownSize();
-      log(size.width === 1.0 && size.height === 1.0, 'setDropdownSize + getDropdownSize',
-        `${size.width}x${size.height}`);
-      // Restore default
-      setDropdownSize('half', 'full');
+      log(isFull(size), 'setDropdownSize + getDropdownSize', `${size.width}x${size.height}`);
     } catch (e) {
       log(false, 'dropdown sizing', String(e));
     }

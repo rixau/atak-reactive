@@ -220,6 +220,11 @@ public class AtakBridge {
         double w = parseSizeFraction(width);
         double h = parseSizeFraction(height);
         if (w < 0 || h < 0) return;
+        // The resize runs later on the UI thread, so record the request now: a
+        // getDropdownSize() in the same JS tick would otherwise read the old size.
+        // ATAK calls onDropDownSizeChanged from inside callResize, which then
+        // replaces this with the size it applied and emits dropDownSizeChanged.
+        dropDown.recordRequestedSize(w, h);
         mapView.post(() -> dropDown.callResize(w, h));
     }
 
@@ -227,9 +232,10 @@ public class AtakBridge {
     public String getDropdownSize() {
         if (dropDown == null) return "{\"width\":0.5,\"height\":1.0}";
         try {
+            double[] size = dropDown.getDropDownSize();
             JSONObject json = new JSONObject();
-            json.put("width", dropDown.getDropDownWidth());
-            json.put("height", dropDown.getDropDownHeight());
+            json.put("width", size[0]);
+            json.put("height", size[1]);
             return json.toString();
         } catch (JSONException e) {
             return "{\"width\":0.5,\"height\":1.0}";
