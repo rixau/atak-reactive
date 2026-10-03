@@ -78,7 +78,7 @@ public class ReactiveWebView extends FrameLayout {
     /** False until the first onAttachedToWindow(), so the first attach is not a re-attach. */
     private boolean everAttached = false;
     /**
-     * Set when the app URL is loaded; the next time it finishes loading, history is
+     * Set when the app URL is loaded; once that load commits, history is
      * cleared, so back from the app's first page never lands on about:blank or the
      * dev loading screen. UI thread only.
      */
@@ -306,7 +306,8 @@ public class ReactiveWebView extends FrameLayout {
     /**
      * Offer a back press to the page: a mounted useBackHandler first, then router
      * history. Call from the host receiver's own onBackButtonPressed(), on the UI
-     * thread, while this view is the one on screen:
+     * thread. Returns false while the view is not on screen (e.g. a React tab that
+     * is not selected), so a hidden page never swallows the press:
      * <pre>
      *   protected boolean onBackButtonPressed() {
      *       return reactTab.handleBack();
@@ -317,7 +318,7 @@ public class ReactiveWebView extends FrameLayout {
      *         back to, so the host can go back itself or let ATAK close the panel
      */
     public boolean handleBack() {
-        if (destroyed) return false;
+        if (destroyed || !isShown()) return false;
         return BackPress.handle(webView, bridge, eventEmitter, prodUrl, devUrl);
     }
 
@@ -679,13 +680,22 @@ public class ReactiveWebView extends FrameLayout {
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             Log.d(TAG, "Loading: " + url);
-            // A new document has no back handlers mounted. The old one's unmount
-            // never runs on a reload, so its flag would otherwise outlive it and
-            // swallow every back press.
-            if (bridge != null) {
-                bridge.setBackHandlerEnabled(false);
-            }
             super.onPageStarted(view, url, favicon);
+        }
+
+        /**
+         * Runs when the app URL commits, before the page's scripts can push a
+         * route. onPageFinished waits for every resource to load, so on a slow
+         * load it could wipe routes the user had already navigated to.
+         * Gated on the flag, not just the URL: route changes report here too.
+         */
+        @Override
+        public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+            if (clearHistoryOnLoad && BackPress.isAppUrl(url, prodUrl, devUrl)) {
+                clearHistoryOnLoad = false;
+                view.clearHistory();
+            }
+            super.doUpdateVisitedHistory(view, url, isReload);
         }
 
         @Override
@@ -694,12 +704,6 @@ public class ReactiveWebView extends FrameLayout {
             if (url.equals(prodUrl) || url.startsWith(devUrl)) {
                 devFallbackTriggered = false;
                 devErrorShowing = false;
-            }
-            // Gated on the flag, not just the URL: hash-route changes can report
-            // onPageFinished too, and clearing then would wipe the router's history.
-            if (clearHistoryOnLoad && BackPress.isAppUrl(url, prodUrl, devUrl)) {
-                clearHistoryOnLoad = false;
-                view.clearHistory();
             }
             super.onPageFinished(view, url);
         }

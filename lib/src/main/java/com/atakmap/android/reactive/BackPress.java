@@ -25,12 +25,14 @@ final class BackPress {
         if (webView == null) return false;
         // The dev loading and error screens are not the app. Nothing on them can
         // use a back press, and history behind them leads nowhere useful.
-        if (!isAppUrl(webView.getUrl(), prodUrl, devUrl)) return false;
+        if (isPlaceholder(webView.getUrl())) return false;
 
         if (bridge != null && emitter != null && bridge.isBackHandlerEnabled()) {
             emitter.emit("backPressed", "{}");
             return true;
         }
+        // Covers an external page the app navigated to as well: back returns to
+        // the app rather than closing the panel.
         if (webView.canGoBack()) {
             webView.goBack();
             return true;
@@ -38,7 +40,12 @@ final class BackPress {
         return false;
     }
 
-    /** Whether the URL is the app itself rather than about:blank or a data: screen. */
+    /** about:blank before the first load, or one of the data: loading/error screens. */
+    static boolean isPlaceholder(String url) {
+        return url == null || url.equals("about:blank") || url.startsWith("data:");
+    }
+
+    /** Whether the URL is the app itself, as loaded by the container. */
     static boolean isAppUrl(String url, String prodUrl, String devUrl) {
         if (url == null) return false;
         // A ReactiveWebView asset path may carry a hash route; the page may have
