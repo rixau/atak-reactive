@@ -29,6 +29,8 @@ public class ReactiveExampleComponent extends DropDownMapComponent {
         super.onCreate(context, intent, view);
 
         reactiveDropDown = new ReactiveDropDown(view, context, "web/index.html");
+        // window._example, checked by the Test page.
+        reactiveDropDown.addBridge("example", new ExampleBridge(reactiveDropDown));
         DocumentedIntentFilter filter = new DocumentedIntentFilter();
         filter.addAction(SHOW_REACT, "React example screen");
         registerDropDownReceiver(reactiveDropDown, filter);
