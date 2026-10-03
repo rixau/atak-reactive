@@ -239,6 +239,16 @@ public class MixedExampleReceiver extends DropDownReceiver implements OnStateLis
     @Override
     public void onDropDownSelectionRemoved() {}
 
+    /**
+     * Give back to the React tab first (a dialog, then its route history).
+     * handleBack() returns false while that tab is hidden or has nowhere to go
+     * back to, so on the native tabs ATAK closes the panel as usual.
+     */
+    @Override
+    protected boolean onBackButtonPressed() {
+        return reactTab != null && reactTab.handleBack();
+    }
+
     @Override
     public void onDropDownSizeChanged(double w, double h) {}
 
