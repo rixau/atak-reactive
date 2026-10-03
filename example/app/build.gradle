@@ -12,7 +12,10 @@ buildscript {
     // the published surface, so its releases are its own — bumping example/version.txt
     // is what publishes it to Arsenal C2 (.github/workflows/publish-example.yml),
     // and a library release no longer drags the example along with it.
-    ext.PLUGIN_VERSION = file("${rootDir}/version.txt").text.trim()
+    // -PversionSuffix marks a pull request's preview build (e.g. "-pr78"), so it
+    // reads as the PR it came from rather than as the version it is based on.
+    ext.PLUGIN_VERSION = file("${rootDir}/version.txt").text.trim() +
+            (project.findProperty('versionSuffix') ?: '')
     // atak-reactive: the example is published once per ATAK version CI supports,
     // each APK a separate artifact of the same release (publish-example.yml).
     // -PatakVersion picks the SDK to build against; the default is the newest.

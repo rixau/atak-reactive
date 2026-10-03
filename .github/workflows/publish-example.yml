@@ -10,13 +10,19 @@ name: Publish example
 # longer ships the example, and the example can ship a fix of its own without
 # forcing a library release.
 #
-# A pull request that bumps example/version.txt publishes a preview of that
-# version to the rc channel, so the bump can be installed and tried from Arsenal
-# C2 before it merges. Every push to the PR publishes again: takdev takes the
-# versionCode from the head commit's timestamp, so each push is a newer rc build
-# and devices on rc follow the PR. Merging publishes the same version to release.
-# Fork PRs never publish — they get no secrets, and the build needs the private
-# ATAK SDK.
+# Every pull request that touches the example, the bridge or the SDK publishes a
+# preview build, so the change can be installed and tried from Arsenal C2 before
+# it merges. The example builds the bridge and the SDK from source, so the
+# preview carries the PR's own code.
+#   - A PR that bumps example/version.txt is a release candidate: it publishes
+#     that version as-is to the rc channel, and merging publishes the same
+#     version to release.
+#   - Any other PR publishes to the alpha channel as the example's version plus
+#     "-pr<number>"; takdev adds the head commit's short hash, so it reads as
+#     "0.3.5-pr78 (0fd87e3a) - [5.6.0]".
+# Every push to the PR publishes again: takdev takes the versionCode from the
+# head commit's timestamp, so each push is a newer build. Fork and Dependabot PRs
+# never publish — they get no secrets, and the build needs the private ATAK SDK.
 #
 # Can also be run by hand, which publishes whatever example/version.txt says on
 # the default branch — the way to re-publish a version whose build failed, or to
@@ -29,7 +35,13 @@ on:
     branches: [main]
     paths: ['example/version.txt']
   pull_request:
-    paths: ['example/version.txt']
+    paths:
+      - 'example/**'
+      - 'lib/**'
+      - 'sdk/**'
+      - 'scripts/build-example.sh'
+      - 'scripts/publish-example.sh'
+      - '.github/workflows/publish-example.yml'
   workflow_dispatch:
     inputs:
       channel:
@@ -68,6 +80,8 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     outputs:
       version: ${{ steps.check.outputs.version }}
+      suffix: ${{ steps.check.outputs.suffix }}
+      channel: ${{ steps.check.outputs.channel }}
       publish: ${{ steps.check.outputs.publish }}
     steps:
       - uses: actions/checkout@v7
@@ -79,8 +93,8 @@ jobs:
         id: check
         env:
           ARSENAL_TOKEN: ${{ secrets.ARSENAL_TOKEN }}
-          # For a PR, the base it would merge into; a bump is a version that
-          # differs from it.
+          # The push's base, or the base a PR would merge into; a bump is a
+          # version that differs from it.
           BEFORE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           VERSION=$(tr -d '[:space:]' < example/version.txt)
@@ -94,19 +108,38 @@ jobs:
           fi
 
           # A hand-run publish is deliberate and always goes ahead — that is what
-          # makes it the re-publish escape hatch. Only a push or a PR has to prove
-          # the version moved.
+          # makes it the re-publish escape hatch.
           if [ "${{ github.event_name }}" = 'workflow_dispatch' ]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Compare against the push's (or the PR's) base, not HEAD~1: a push
-          # that carries the bump plus a follow-up commit would read as unchanged
-          # at HEAD~1 and silently skip. The shallow clone above does not contain the base, so
-          # fetch just that commit.
+          # The shallow clone above does not contain the base, so fetch just
+          # that commit.
           git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null || true
 
+          # A PR always publishes. One that bumps the version is a release
+          # candidate and goes to rc as that version; any other is a preview,
+          # and the suffix keeps it from passing for the release it is based on.
+          if [ "${{ github.event_name }}" = 'pull_request' ]; then
+            BASE_VERSION=$(git show "$BEFORE":example/version.txt 2>/dev/null | tr -d '[:space:]')
+            if [ -n "$BASE_VERSION" ] && [ "$VERSION" != "$BASE_VERSION" ]; then
+              echo "channel=rc" >> "$GITHUB_OUTPUT"
+              echo "Publishing release candidate $VERSION (base: $BASE_VERSION)"
+            else
+              SUFFIX="-pr${{ github.event.pull_request.number }}"
+              echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
+              echo "channel=alpha" >> "$GITHUB_OUTPUT"
+              echo "Publishing preview $VERSION$SUFFIX"
+            fi
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Only a push to main has to prove the version moved. Compare against
+          # the push's base, not HEAD~1: a push that carries the bump plus a
+          # follow-up commit would read as unchanged at HEAD~1 and silently skip.
+          #
           # Three outcomes, and collapsing them is what makes this subtle. A base
           # that cannot be resolved at all (a force push, a new branch) publishes:
           # something moved and we cannot see what, and Arsenal C2 rejects a
@@ -173,6 +206,7 @@ jobs:
           echo "apk=${apk}" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.CI_SDK_TOKEN }}
+          EXAMPLE_VERSION_SUFFIX: ${{ needs.check-version.outputs.suffix }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -204,14 +238,15 @@ jobs:
           for v in 5.4.0 5.5.0 5.5.1 5.6.0; do
             apk="$(find "apks/example-${v}" -name '*.apk' | head -1)"
             [ -n "${apk}" ] || { echo "::error::no APK was built for ATAK ${v}"; exit 1; }
-            ARSENAL_NOTES="atak-reactive example v${{ needs.check-version.outputs.version }}${PREVIEW_NOTE}" \
+            ARSENAL_NOTES="atak-reactive example v${{ needs.check-version.outputs.version }}${{ needs.check-version.outputs.suffix }}${PREVIEW_NOTE}" \
               ./scripts/publish-example.sh "${apk}" ${DRY_RUN}
           done
         env:
           ARSENAL_TOKEN: ${{ secrets.ARSENAL_TOKEN }}
           ARSENAL_ORG: ${{ vars.ARSENAL_ORG || 'user_rixau' }}
-          # A PR preview always goes to rc; only main publishes to release.
-          ARSENAL_CHANNEL: ${{ github.event_name == 'pull_request' && 'rc' || inputs.channel || 'release' }}
+          # A PR goes to rc (version bump) or alpha (preview); only main
+          # publishes to release.
+          ARSENAL_CHANNEL: ${{ needs.check-version.outputs.channel || inputs.channel || 'release' }}
           # Quoted: unquoted, YAML reads the ` #` below as the start of a comment.
           PREVIEW_NOTE: "${{ github.event_name == 'pull_request' && format(' (preview of #{0}, {1})', github.event.pull_request.number, github.event.pull_request.head.sha) || '' }}"
           DRY_RUN: ${{ inputs.dry-run && '--dry-run' || '' }}
