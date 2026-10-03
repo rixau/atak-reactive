@@ -77,6 +77,12 @@ public class ReactiveWebView extends FrameLayout {
     private boolean hostResumed = false;
     /** False until the first onAttachedToWindow(), so the first attach is not a re-attach. */
     private boolean everAttached = false;
+    /**
+     * Set when the app URL is loaded; the next time it finishes loading, history is
+     * cleared, so back from the app's first page never lands on about:blank or the
+     * dev loading screen. UI thread only.
+     */
+    private boolean clearHistoryOnLoad = false;
 
     /**
      * Create a reactive web view.
@@ -130,7 +136,8 @@ public class ReactiveWebView extends FrameLayout {
 
         eventEmitter = new BridgeEventEmitter(webView);
         bridge = new AtakBridge(mapView, eventEmitter);
-        // No setDropDown() — dropdown sizing hooks will no-op/return defaults
+        // No setDropDown() — dropdown sizing hooks and closeDropdown() will
+        // no-op/return defaults
         webView.addJavascriptInterface(bridge, "_atak");
 
         for (Object extra : pendingBridges) {
@@ -297,6 +304,24 @@ public class ReactiveWebView extends FrameLayout {
     }
 
     /**
+     * Offer a back press to the page: a mounted useBackHandler first, then router
+     * history. Call from the host receiver's own onBackButtonPressed(), on the UI
+     * thread, while this view is the one on screen:
+     * <pre>
+     *   protected boolean onBackButtonPressed() {
+     *       return reactTab.handleBack();
+     *   }
+     * </pre>
+     *
+     * @return true if the page used the press; false when it has nowhere left to go
+     *         back to, so the host can go back itself or let ATAK close the panel
+     */
+    public boolean handleBack() {
+        if (destroyed) return false;
+        return BackPress.handle(webView, bridge, eventEmitter, prodUrl, devUrl);
+    }
+
+    /**
      * Returns the AtakBridge for direct access if needed.
      */
     public AtakBridge getBridge() {
@@ -374,6 +399,7 @@ public class ReactiveWebView extends FrameLayout {
                         Log.d(TAG, "Dev server reachable, loading from " + devUrl);
                         stopDevRetry();
                         devErrorShowing = false;
+                        clearHistoryOnLoad = true;
                         webView.loadUrl(devUrlForAsset());
                     } else {
                         Log.w(TAG, "Dev server not running — run: npx @atak-reactive/cli dev");
@@ -384,6 +410,7 @@ public class ReactiveWebView extends FrameLayout {
                 });
             }).start();
         } else {
+            clearHistoryOnLoad = true;
             webView.loadUrl(prodUrl);
         }
     }
@@ -549,6 +576,7 @@ public class ReactiveWebView extends FrameLayout {
                             // devUrlForAsset, not devUrl, so the hash route survives.
                             String url = devUrlForAsset();
                             Log.d(TAG, "Dev server came back — reloading " + url);
+                            clearHistoryOnLoad = true;
                             wv.loadUrl(url);
                         });
                     }
@@ -651,6 +679,12 @@ public class ReactiveWebView extends FrameLayout {
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             Log.d(TAG, "Loading: " + url);
+            // A new document has no back handlers mounted. The old one's unmount
+            // never runs on a reload, so its flag would otherwise outlive it and
+            // swallow every back press.
+            if (bridge != null) {
+                bridge.setBackHandlerEnabled(false);
+            }
             super.onPageStarted(view, url, favicon);
         }
 
@@ -660,6 +694,12 @@ public class ReactiveWebView extends FrameLayout {
             if (url.equals(prodUrl) || url.startsWith(devUrl)) {
                 devFallbackTriggered = false;
                 devErrorShowing = false;
+            }
+            // Gated on the flag, not just the URL: hash-route changes can report
+            // onPageFinished too, and clearing then would wipe the router's history.
+            if (clearHistoryOnLoad && BackPress.isAppUrl(url, prodUrl, devUrl)) {
+                clearHistoryOnLoad = false;
+                view.clearHistory();
             }
             super.onPageFinished(view, url);
         }
