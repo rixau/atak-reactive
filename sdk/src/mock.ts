@@ -194,6 +194,14 @@ export const mockBridge: NativeBridge = {
     return 'true';
   },
 
+  closeDropdown() {
+    console.log('[atak mock] closeDropdown');
+  },
+
+  setBackHandlerEnabled(enabled: boolean) {
+    console.log('[atak mock] setBackHandlerEnabled:', enabled);
+  },
+
   setMarkerIcon(uid: string, optionsJson: string) {
     console.log('[atak mock] setMarkerIcon:', uid, JSON.parse(optionsJson));
     return 'true';

@@ -126,3 +126,13 @@ describe('useNavVisible', () => {
     expect(result.current[0]).toBe(false);
   });
 });
+
+describe('closeDropdown', () => {
+  it('calls bridge closeDropdown', async () => {
+    const spy = vi.fn();
+    window._atak = createMockBridge({ closeDropdown: spy });
+    const { closeDropdown } = await import('../bridge/dropdown');
+    closeDropdown();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});

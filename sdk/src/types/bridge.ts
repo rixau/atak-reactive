@@ -41,6 +41,8 @@ export interface NativeBridge {
   getDropdownSize(): string;
   setNavVisible(visible: boolean): void;
   getNavVisible(): string;
+  closeDropdown(): void;
+  setBackHandlerEnabled(enabled: boolean): void;
   setMarkerIcon(uid: string, optionsJson: string): string;
   createMapGroup(name: string, parentName: string): string;
   removeMapGroup(name: string): string;

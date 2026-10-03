@@ -74,6 +74,7 @@ export {
   getDropdownSize,
   setNavVisible,
   getNavVisible,
+  closeDropdown,
   type DropdownDimension,
 } from './dropdown';
 

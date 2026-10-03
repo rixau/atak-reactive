@@ -254,6 +254,13 @@ export function IntegrationTestPage() {
       log(false, 'nav visibility', String(e));
     }
 
+    // --- Back button ---
+    // A page can't send itself a real back press, and calling closeDropdown()
+    // would close the panel mid-run, so only check the bridge has both methods.
+    log(typeof window._atak?.closeDropdown === 'function', 'bridge has closeDropdown');
+    log(typeof window._atak?.setBackHandlerEnabled === 'function',
+      'bridge has setBackHandlerEnabled');
+
     setResults([
       { name: 'isNative', pass: native, detail: String(native) },
       { name: 'addMarker returns uid', pass: !!uid, detail: uid ?? 'null' },
