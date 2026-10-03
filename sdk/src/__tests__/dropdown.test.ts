@@ -135,4 +135,12 @@ describe('closeDropdown', () => {
     closeDropdown();
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  it('does not throw on a bridge without closeDropdown', async () => {
+    const bridge = createMockBridge();
+    delete bridge.closeDropdown;
+    window._atak = bridge;
+    const { closeDropdown } = await import('../bridge/dropdown');
+    expect(() => closeDropdown()).not.toThrow();
+  });
 });

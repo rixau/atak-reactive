@@ -29,10 +29,11 @@ export function getNavVisible(): boolean {
 
 /** Close the panel. A no-op inside a ReactiveWebView, whose host owns the panel. */
 export function closeDropdown(): void {
-  getBridge().closeDropdown();
+  // Optional: absent on bridges at or below 0.4.0.
+  getBridge().closeDropdown?.();
 }
 
 /** Internal: tells Java whether back presses should go to useBackHandler. */
 export function setBackHandlerEnabled(enabled: boolean): void {
-  getBridge().setBackHandlerEnabled(enabled);
+  getBridge().setBackHandlerEnabled?.(enabled);
 }

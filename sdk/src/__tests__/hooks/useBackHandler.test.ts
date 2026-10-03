@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+import { render, renderHook } from '@testing-library/react';
 import { createMockBridge } from '../setup';
 import { emitFromNative } from '../helpers';
 
@@ -114,5 +115,88 @@ describe('useBackHandler', () => {
     expect(handler).toHaveBeenCalledTimes(1);
 
     unmount();
+  });
+
+  it('runs a child before a parent mounted in the same commit', async () => {
+    window._atak = createMockBridge();
+    const { useBackHandler } = await loadModules();
+    const parent = vi.fn();
+    const child = vi.fn();
+
+    // Effects run child-first, so registration order alone would rank the parent on top.
+    function Child() {
+      useBackHandler(child);
+      return null;
+    }
+    function Parent({ children }: { children?: ReactNode }) {
+      useBackHandler(parent);
+      return children;
+    }
+
+    const { unmount } = render(createElement(Parent, null, createElement(Child)));
+    emitFromNative('backPressed', {});
+    expect(child).toHaveBeenCalledTimes(1);
+    expect(parent).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it('keeps an open child on top when the parent handler is toggled', async () => {
+    window._atak = createMockBridge();
+    const { useBackHandler } = await loadModules();
+    const parent = vi.fn();
+    const child = vi.fn();
+
+    function Child() {
+      useBackHandler(child);
+      return null;
+    }
+    function Parent({ enabled, showChild }: { enabled: boolean; showChild: boolean }) {
+      useBackHandler(parent, enabled);
+      return showChild ? createElement(Child) : null;
+    }
+
+    const { rerender, unmount } = render(
+      createElement(Parent, { enabled: true, showChild: false }),
+    );
+    rerender(createElement(Parent, { enabled: true, showChild: true }));
+    rerender(createElement(Parent, { enabled: false, showChild: true }));
+    rerender(createElement(Parent, { enabled: true, showChild: true }));
+
+    emitFromNative('backPressed', {});
+    expect(child).toHaveBeenCalledTimes(1);
+    expect(parent).not.toHaveBeenCalled();
+
+    // Closing the child hands back presses to the parent again.
+    rerender(createElement(Parent, { enabled: true, showChild: false }));
+    emitFromNative('backPressed', {});
+    expect(parent).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it('does not throw on a bridge without setBackHandlerEnabled', async () => {
+    const bridge = createMockBridge();
+    delete bridge.setBackHandlerEnabled;
+    window._atak = bridge;
+    const { useBackHandler } = await loadModules();
+    const handler = vi.fn();
+
+    const { unmount } = renderHook(() => useBackHandler(handler));
+    emitFromNative('backPressed', {});
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(() => unmount()).not.toThrow();
+  });
+});
+
+describe('useBackHandler module load', () => {
+  it('clears a flag left set by the previous page before any handler mounts', async () => {
+    // A reload skips the old page's unmount cleanup, so Java may still hold the
+    // flag. Loading the SDK must clear it.
+    vi.resetModules();
+    const spy = vi.fn();
+    window._atak = createMockBridge({ setBackHandlerEnabled: spy });
+    await import('../../hooks/useBackHandler');
+    expect(spy).toHaveBeenCalledWith(false);
   });
 });
