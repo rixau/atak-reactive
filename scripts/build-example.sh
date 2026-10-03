@@ -6,6 +6,9 @@ set -euo pipefail
 #
 # atak-version defaults to the one in example/app/build.gradle.
 #
+# EXAMPLE_VERSION_SUFFIX, when set, is appended to the version name (e.g. "-pr78"
+# for a pull request's preview build).
+#
 # Prints the APK path on the last line of stdout.
 #
 # Requires: gh authenticated for rixau/atak-ci-resources (CI: secrets.CI_SDK_TOKEN),
@@ -60,7 +63,8 @@ rm -rf example/app/build/outputs/apk
 (cd example && ./gradlew --no-daemon assembleCivRelease \
     -PatakVersion="${ATAK_VERSION}" \
     -Psdk.path="${SDK}" \
-    -Ptakdev.plugin="${SDK}/atak-gradle-takdev.jar") >&2
+    -Ptakdev.plugin="${SDK}/atak-gradle-takdev.jar" \
+    -PversionSuffix="${EXAMPLE_VERSION_SUFFIX:-}") >&2
 
 APK="$(find example/app/build/outputs/apk/civ/release -name '*.apk' | head -1)"
 [ -n "${APK}" ] || { echo "error: the build produced no APK" >&2; exit 1; }
