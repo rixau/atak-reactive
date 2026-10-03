@@ -73,6 +73,13 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private BridgeEventEmitter eventEmitter;
 
     private final java.util.List<Object> pendingBridges = new java.util.ArrayList<>();
+    /**
+     * Set when the app URL is loaded; once that load commits, history is
+     * cleared. Without this, back from the app's first page lands on about:blank or
+     * the dev loading screen, and every panel open stacks up another entry. UI
+     * thread only.
+     */
+    private boolean clearHistoryOnLoad = false;
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener;
     /**
      * The panel's size as {width, height} fractions. One array, replaced whole, so a
@@ -393,6 +400,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                     if (reachable) {
                         Log.d(TAG, "Dev server reachable, loading from " + devUrl);
                         stopDevRetry();
+                        clearHistoryOnLoad = true;
                         webView.loadUrl(devUrl);
                     } else {
                         Log.w(TAG, "Dev server not running — run: npx @atak-reactive/cli dev");
@@ -402,6 +410,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                 });
             }).start();
         } else {
+            clearHistoryOnLoad = true;
             webView.loadUrl(prodUrl);
         }
 
@@ -450,6 +459,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                             // dispatch; loading a destroyed WebView crashes.
                             if (disposed || generation != devRetryGeneration) return;
                             Log.d(TAG, "Dev server came back — reloading " + devUrl);
+                            clearHistoryOnLoad = true;
                             wv.loadUrl(devUrl);
                         });
                     }
@@ -507,6 +517,16 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
     @Override
     public void onDropDownSelectionRemoved() {
+    }
+
+    /**
+     * ATAK closes the panel when this returns false. Offer the press to the page
+     * first — a mounted useBackHandler, then router history — and close only once
+     * there is nowhere left to go back to.
+     */
+    @Override
+    protected boolean onBackButtonPressed() {
+        return BackPress.handle(webView, bridge, eventEmitter, prodUrl, devUrl);
     }
 
     @Override
@@ -635,6 +655,21 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             Log.d(TAG, "Loading: " + url);
             super.onPageStarted(view, url, favicon);
+        }
+
+        /**
+         * Runs when the app URL commits, before the page's scripts can push a
+         * route. onPageFinished waits for every resource to load, so on a slow
+         * load it could wipe routes the user had already navigated to.
+         * Gated on the flag, not just the URL: route changes report here too.
+         */
+        @Override
+        public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+            if (clearHistoryOnLoad && BackPress.isAppUrl(url, prodUrl, devUrl)) {
+                clearHistoryOnLoad = false;
+                view.clearHistory();
+            }
+            super.doUpdateVisitedHistory(view, url, isReload);
         }
 
         @Override

@@ -242,6 +242,37 @@ public class AtakBridge {
         }
     }
 
+    /**
+     * Close the panel from JS. A no-op in a ReactiveWebView, which has no dropdown
+     * of its own — the host owns that panel.
+     */
+    @JavascriptInterface
+    public void closeDropdown() {
+        final ReactiveDropDown dd = dropDown;
+        if (dd == null) return;
+        mapView.post(() -> {
+            if (!dd.isClosed()) dd.closeDropDown();
+        });
+    }
+
+    // --- Back button ---
+
+    /**
+     * True while the page has at least one useBackHandler mounted. Written from the
+     * JavaBridge thread, read on the UI thread when ATAK delivers a back press:
+     * that call must answer immediately, so it cannot ask the page and wait.
+     */
+    private volatile boolean backHandlerEnabled = false;
+
+    @JavascriptInterface
+    public void setBackHandlerEnabled(boolean enabled) {
+        backHandlerEnabled = enabled;
+    }
+
+    public boolean isBackHandlerEnabled() {
+        return backHandlerEnabled;
+    }
+
     // --- Nav visibility ---
 
     @JavascriptInterface

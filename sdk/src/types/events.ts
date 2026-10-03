@@ -32,6 +32,7 @@ export type AtakEventMap = {
   dropDownVisible: boolean;
   dropDownClose: Record<string, never>;
   dropDownSizeChanged: { width: number; height: number };
+  backPressed: Record<string, never>;
   navVisible: boolean;
   preferenceChanged: { key: string; value: string | null };
   radialMenuChanged: RadialMenuEvent;

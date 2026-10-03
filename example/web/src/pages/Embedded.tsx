@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMapItems, useSelfLocation, addMarker, removeMarker, sendBroadcast } from '@atak-reactive/sdk';
 import { TOUCH_GAP, TOUCH_TARGET } from '../touch';
+import { BackButtonDemo } from '../BackButtonDemo';
 
 /**
  * Embedded React tab — runs inside a ReactiveWebView within a native tabbed layout.
@@ -61,6 +62,11 @@ export function EmbeddedPage() {
             </button>
           </div>
         )}
+      </div>
+
+      <div style={styles.card}>
+        <h2 style={styles.sectionTitle}>BACK BUTTON</h2>
+        <BackButtonDemo showClosePanel={false} />
       </div>
     </div>
   );

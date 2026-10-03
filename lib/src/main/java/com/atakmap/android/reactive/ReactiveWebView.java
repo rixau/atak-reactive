@@ -77,6 +77,12 @@ public class ReactiveWebView extends FrameLayout {
     private boolean hostResumed = false;
     /** False until the first onAttachedToWindow(), so the first attach is not a re-attach. */
     private boolean everAttached = false;
+    /**
+     * Set when the app URL is loaded; once that load commits, history is
+     * cleared, so back from the app's first page never lands on about:blank or the
+     * dev loading screen. UI thread only.
+     */
+    private boolean clearHistoryOnLoad = false;
 
     /**
      * Create a reactive web view.
@@ -130,7 +136,8 @@ public class ReactiveWebView extends FrameLayout {
 
         eventEmitter = new BridgeEventEmitter(webView);
         bridge = new AtakBridge(mapView, eventEmitter);
-        // No setDropDown() — dropdown sizing hooks will no-op/return defaults
+        // No setDropDown() — dropdown sizing hooks and closeDropdown() will
+        // no-op/return defaults
         webView.addJavascriptInterface(bridge, "_atak");
 
         for (Object extra : pendingBridges) {
@@ -297,6 +304,25 @@ public class ReactiveWebView extends FrameLayout {
     }
 
     /**
+     * Offer a back press to the page: a mounted useBackHandler first, then router
+     * history. Call from the host receiver's own onBackButtonPressed(), on the UI
+     * thread. Returns false while the view is not on screen (e.g. a React tab that
+     * is not selected), so a hidden page never swallows the press:
+     * <pre>
+     *   protected boolean onBackButtonPressed() {
+     *       return reactTab.handleBack();
+     *   }
+     * </pre>
+     *
+     * @return true if the page used the press; false when it has nowhere left to go
+     *         back to, so the host can go back itself or let ATAK close the panel
+     */
+    public boolean handleBack() {
+        if (destroyed || !isShown()) return false;
+        return BackPress.handle(webView, bridge, eventEmitter, prodUrl, devUrl);
+    }
+
+    /**
      * Returns the AtakBridge for direct access if needed.
      */
     public AtakBridge getBridge() {
@@ -374,6 +400,7 @@ public class ReactiveWebView extends FrameLayout {
                         Log.d(TAG, "Dev server reachable, loading from " + devUrl);
                         stopDevRetry();
                         devErrorShowing = false;
+                        clearHistoryOnLoad = true;
                         webView.loadUrl(devUrlForAsset());
                     } else {
                         Log.w(TAG, "Dev server not running — run: npx @atak-reactive/cli dev");
@@ -384,6 +411,7 @@ public class ReactiveWebView extends FrameLayout {
                 });
             }).start();
         } else {
+            clearHistoryOnLoad = true;
             webView.loadUrl(prodUrl);
         }
     }
@@ -549,6 +577,7 @@ public class ReactiveWebView extends FrameLayout {
                             // devUrlForAsset, not devUrl, so the hash route survives.
                             String url = devUrlForAsset();
                             Log.d(TAG, "Dev server came back — reloading " + url);
+                            clearHistoryOnLoad = true;
                             wv.loadUrl(url);
                         });
                     }
@@ -652,6 +681,21 @@ public class ReactiveWebView extends FrameLayout {
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             Log.d(TAG, "Loading: " + url);
             super.onPageStarted(view, url, favicon);
+        }
+
+        /**
+         * Runs when the app URL commits, before the page's scripts can push a
+         * route. onPageFinished waits for every resource to load, so on a slow
+         * load it could wipe routes the user had already navigated to.
+         * Gated on the flag, not just the URL: route changes report here too.
+         */
+        @Override
+        public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+            if (clearHistoryOnLoad && BackPress.isAppUrl(url, prodUrl, devUrl)) {
+                clearHistoryOnLoad = false;
+                view.clearHistory();
+            }
+            super.doUpdateVisitedHistory(view, url, isReload);
         }
 
         @Override

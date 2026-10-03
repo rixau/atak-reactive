@@ -143,6 +143,7 @@ Renaming the Java package fixes both. Changing only `applicationId` does not —
 | `useDropdownVisible()` | `boolean` | Whether the dropdown panel is currently visible. Use to pause work when backgrounded. |
 | `useDropdownSize()` | `{ width, height }` | Current dropdown dimensions as screen fractions. Updates on resize. |
 | `useNavVisible()` | `[boolean, setter]` | ATAK nav button visibility + setter. Reactive to changes from any source. |
+| `useBackHandler(cb, enabled?)` | `void` | Take the Android back button while mounted (e.g. to close a modal). The innermost, most recently opened handler wins (a modal over its page). See [The back button](#the-back-button). |
 | `useRadialMenu()` | `MapItemData \| null` | The item whose radial menu last opened, or `null` after it closes. Observes only — never suppresses ATAK's menu. Map-point menus (long-press on empty map) are invisible to ATAK's listener, so treat this as "last item menu", not proof one is open. |
 | `useNavigationState()` | `NavigationState` | Route navigation state: `active`, `routeUid`, `currentWaypointIndex`, `gpsLost`. Updates reactively as navigation progresses. |
 | `useContacts(filter?)` | `ContactData[]` | Live contact list. Filter by `team`, `role`, `status`, `type`. Updates on contact online/offline/change. |
@@ -168,6 +169,7 @@ Renaming the Java package fixes both. Changing only `applicationId` does not —
 | `getDropdownSize()` | Current dropdown dimensions as `{ width, height }` fractions. |
 | `setNavVisible(visible)` | Show or hide ATAK's nav buttons. |
 | `getNavVisible()` | Whether ATAK's nav buttons are visible. |
+| `closeDropdown()` | Close the dropdown panel. No-op in a `ReactiveWebView`. |
 | `setItemMeta(uid, key, value)` | Write string metadata on any map item. Triggers reactive update. |
 | `setItemMetaDouble(uid, key, value)` | Write double metadata. |
 | `setItemMetaBool(uid, key, value)` | Write boolean metadata. |
@@ -260,6 +262,35 @@ function FlaggedItem() {
 Use `useRadialMenu()` when you only need to know *which item* the user opened the menu on,
 without adding a button of your own.
 
+### The back button
+
+The Android back button goes back inside the React app before it closes the panel, like a
+native plugin. With no setup, back follows the WebView's history, so router navigation
+(e.g. `HashRouter`) steps back a page; on the first page, back closes the panel.
+
+For anything that isn't a history entry — a modal, a multi-step form — use
+`useBackHandler`. While it is mounted, back calls it instead, and the panel stays open:
+
+```tsx
+import { useBackHandler, closeDropdown } from '@atak-reactive/sdk';
+
+function EditDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  // Only while the dialog is open; otherwise back falls through to the router.
+  useBackHandler(onClose, open);
+  if (!open) return null;
+  return (
+    <div className="dialog">
+      ...
+      <button onClick={closeDropdown}>Done</button>
+    </div>
+  );
+}
+```
+
+ATAK needs the answer to a back press immediately, so the bridge cannot ask the page
+whether it handled it. Mounting a handler is the answer given ahead of time: keep it
+mounted (or `enabled`) only while there is something to go back from.
+
 ## Events
 
 | Event | Payload | Description |
@@ -274,6 +305,7 @@ without adding a button of your own.
 | `dropDownVisible` | `boolean` | Dropdown panel shown/hidden |
 | `dropDownClose` | `{}` | Dropdown panel closed |
 | `dropDownSizeChanged` | `{ width, height }` | Dropdown panel resized |
+| `backPressed` | `{}` | Android back pressed while a `useBackHandler` is mounted |
 | `navVisible` | `boolean` | ATAK nav buttons shown/hidden |
 | `preferenceChanged` | `{ key, value }` | Any ATAK preference changed. `value` is always a string (`"true"`, `"42"`, …) or `null` once removed |
 | `radialMenuChanged` | `{ open, item }` | Radial menu opened or closed on an item |
@@ -427,6 +459,15 @@ Custom bridges work the same way:
 ```java
 ReactiveWebView view = new ReactiveWebView(mapView, ctx, "web/index.html");
 view.addBridge(new PlatformSimBridge(simulator, emitter));
+```
+
+**Back button:** ATAK delivers back presses to your receiver, not the view. Hand them to the view so it can go back in router history or run a `useBackHandler`. It returns `false` when it has nowhere to go back to, or when it isn't on screen (a React tab that isn't selected), and ATAK then closes the panel:
+
+```java
+@Override
+protected boolean onBackButtonPressed() {
+    return reactTab != null && reactTab.handleBack();
+}
 ```
 
 **Lifecycle:** Call `onResume()` when the view becomes visible, `onPause()` when hidden, and `destroy()` once you are done with the view — from `onDropDownClose()` if you rebuild it on each open (as above), otherwise from `disposeImpl()`. Teardown is yours to drive: detaching the view only pauses it and unhooks its listeners, because ATAK detaches and re-attaches a retained panel's view on its own, and the view restores itself when it comes back. `useDropdownSize()` and `useDropdownVisible()` return defaults in embedded views — they only update inside `ReactiveDropDown`.

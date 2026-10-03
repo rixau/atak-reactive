@@ -13,6 +13,7 @@ export {
   useDropdownSize,
   useNavVisible,
 } from './useDropdown';
+export { useBackHandler } from './useBackHandler';
 export { usePreference } from './usePreference';
 export { useRadialMenu } from './useRadialMenu';
 export { useNavigationState } from './useNavigationState';
