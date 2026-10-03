@@ -11,14 +11,18 @@ name: Publish example
 # forcing a library release.
 #
 # Every pull request that touches the example, the bridge or the SDK publishes a
-# preview build to the alpha channel, so the change can be installed and tried
-# from Arsenal C2 before it merges. The example builds the bridge and the SDK from
-# source, so the preview carries the PR's own code. Its version name is the
-# example's version plus "-pr<number>", and takdev adds the head commit's short
-# hash: "0.3.5-pr78 (0fd87e3a) - [5.6.0]". Every push to the PR publishes again:
-# takdev takes the versionCode from the head commit's timestamp, so each push is
-# a newer alpha build. Fork and Dependabot PRs never publish — they get no
-# secrets, and the build needs the private ATAK SDK.
+# preview build, so the change can be installed and tried from Arsenal C2 before
+# it merges. The example builds the bridge and the SDK from source, so the
+# preview carries the PR's own code.
+#   - A PR that bumps example/version.txt is a release candidate: it publishes
+#     that version as-is to the rc channel, and merging publishes the same
+#     version to release.
+#   - Any other PR publishes to the alpha channel as the example's version plus
+#     "-pr<number>"; takdev adds the head commit's short hash, so it reads as
+#     "0.3.5-pr78 (0fd87e3a) - [5.6.0]".
+# Every push to the PR publishes again: takdev takes the versionCode from the
+# head commit's timestamp, so each push is a newer build. Fork and Dependabot PRs
+# never publish — they get no secrets, and the build needs the private ATAK SDK.
 #
 # Can also be run by hand, which publishes whatever example/version.txt says on
 # the default branch — the way to re-publish a version whose build failed, or to
@@ -77,6 +81,7 @@ jobs:
     outputs:
       version: ${{ steps.check.outputs.version }}
       suffix: ${{ steps.check.outputs.suffix }}
+      channel: ${{ steps.check.outputs.channel }}
       publish: ${{ steps.check.outputs.publish }}
     steps:
       - uses: actions/checkout@v7
@@ -88,8 +93,9 @@ jobs:
         id: check
         env:
           ARSENAL_TOKEN: ${{ secrets.ARSENAL_TOKEN }}
-          # The push's base; a bump is a version that differs from it.
-          BEFORE: ${{ github.event.before }}
+          # The push's base, or the base a PR would merge into; a bump is a
+          # version that differs from it.
+          BEFORE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           VERSION=$(tr -d '[:space:]' < example/version.txt)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -108,23 +114,32 @@ jobs:
             exit 0
           fi
 
-          # A PR always publishes its preview. The suffix keeps it from passing
-          # for the release it is based on.
+          # The shallow clone above does not contain the base, so fetch just
+          # that commit.
+          git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null || true
+
+          # A PR always publishes. One that bumps the version is a release
+          # candidate and goes to rc as that version; any other is a preview,
+          # and the suffix keeps it from passing for the release it is based on.
           if [ "${{ github.event_name }}" = 'pull_request' ]; then
-            SUFFIX="-pr${{ github.event.pull_request.number }}"
-            echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
+            BASE_VERSION=$(git show "$BEFORE":example/version.txt 2>/dev/null | tr -d '[:space:]')
+            if [ -n "$BASE_VERSION" ] && [ "$VERSION" != "$BASE_VERSION" ]; then
+              echo "channel=rc" >> "$GITHUB_OUTPUT"
+              echo "Publishing release candidate $VERSION (base: $BASE_VERSION)"
+            else
+              SUFFIX="-pr${{ github.event.pull_request.number }}"
+              echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
+              echo "channel=alpha" >> "$GITHUB_OUTPUT"
+              echo "Publishing preview $VERSION$SUFFIX"
+            fi
             echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "Publishing preview $VERSION$SUFFIX"
             exit 0
           fi
 
           # Only a push to main has to prove the version moved. Compare against
           # the push's base, not HEAD~1: a push that carries the bump plus a
           # follow-up commit would read as unchanged at HEAD~1 and silently skip.
-          # The shallow clone above does not contain the base, so fetch just that
-          # commit.
-          git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null || true
-
+          #
           # Three outcomes, and collapsing them is what makes this subtle. A base
           # that cannot be resolved at all (a force push, a new branch) publishes:
           # something moved and we cannot see what, and Arsenal C2 rejects a
@@ -229,8 +244,9 @@ jobs:
         env:
           ARSENAL_TOKEN: ${{ secrets.ARSENAL_TOKEN }}
           ARSENAL_ORG: ${{ vars.ARSENAL_ORG || 'user_rixau' }}
-          # A PR preview always goes to alpha; only main publishes to release.
-          ARSENAL_CHANNEL: ${{ github.event_name == 'pull_request' && 'alpha' || inputs.channel || 'release' }}
+          # A PR goes to rc (version bump) or alpha (preview); only main
+          # publishes to release.
+          ARSENAL_CHANNEL: ${{ needs.check-version.outputs.channel || inputs.channel || 'release' }}
           # Quoted: unquoted, YAML reads the ` #` below as the start of a comment.
           PREVIEW_NOTE: "${{ github.event_name == 'pull_request' && format(' (preview of #{0}, {1})', github.event.pull_request.number, github.event.pull_request.head.sha) || '' }}"
           DRY_RUN: ${{ inputs.dry-run && '--dry-run' || '' }}
