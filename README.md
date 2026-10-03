@@ -325,7 +325,12 @@ Java side — expose your domain logic:
 ```java
 public class PlatformSimBridge {
     private final PlatformSimulator simulator;
-    private final BridgeEventEmitter emitter;
+    private final ReactiveDropDown view;
+
+    public PlatformSimBridge(PlatformSimulator simulator, ReactiveDropDown view) {
+        this.simulator = simulator;
+        this.view = view;
+    }
 
     @JavascriptInterface
     public String getActivePlatforms() {
@@ -342,19 +347,26 @@ public class PlatformSimBridge {
         simulator.stop(platformId);
     }
 
-    // Called by simulator when platform state changes
+    // Called by simulator when platform state changes. Safe from any thread.
     public void onPlatformUpdated(Platform p) {
-        emitter.emit("platformUpdated", serializePlatform(p));
+        view.emit("platformUpdated", serializePlatform(p));
     }
 }
 ```
 
-Register it alongside the built-in bridge (works with both `ReactiveDropDown` and `ReactiveWebView`):
+Register it alongside the built-in bridge, under an explicit name (works with both `ReactiveDropDown` and `ReactiveWebView`):
 
 ```java
 ReactiveDropDown view = new ReactiveDropDown(mapView, ctx, "web/index.html");
-view.addBridge(new PlatformSimBridge(simulator, emitter));
+view.addBridge("platformSim", new PlatformSimBridge(simulator, view));
 ```
+
+JS reaches it as `window._platformSim`: the name you pass, with a leading underscore.
+
+- **The name is explicit.** The old `addBridge(bridge)` named a bridge after its class, which ignores the package (`com.a.Bridge` and `com.b.Bridge` both became `_bridge`) and changes in release builds, where ProGuard renames the class and `_myBridge` turns into something like `_ck`. It still works but is deprecated.
+- **Names must be unique per view.** A generic name like `bridge` is easy to collide on, so pick something specific. Registering a name that another bridge on the same view already has throws `IllegalArgumentException`, as does `atak`, which is the built-in bridge. Names are letters, digits and underscores, starting with a letter.
+- **Add bridges before the page loads**, i.e. before the panel is first shown (or before the first `onResume()` of a `ReactiveWebView`). WebView only exposes a bridge to pages loaded after it was added, so a later `addBridge` takes effect on the next page load, not the current one.
+- **Emit through the view.** Hold the view and call `view.emit(event, json)` rather than keeping a `BridgeEventEmitter`: the emitter is replaced when the WebView is rebuilt after a renderer crash, and events sent to the old one are lost.
 
 React side — same reactive pattern as built-in hooks:
 
@@ -365,7 +377,7 @@ function usePlatforms(): SimPlatform[] {
   const [platforms, setPlatforms] = useState<SimPlatform[]>([]);
 
   useEffect(() => {
-    setPlatforms(JSON.parse(window._platformSimBridge.getActivePlatforms()));
+    setPlatforms(JSON.parse(window._platformSim.getActivePlatforms()));
     const handler = (p: SimPlatform) =>
       setPlatforms(prev => prev.map(x => x.uid === p.uid ? p : x));
     on('platformUpdated', handler);
@@ -379,7 +391,7 @@ function PlatformSimulator() {
   const platforms = usePlatforms();
 
   const launch = () => {
-    window._platformSimBridge.startSimulation(JSON.stringify({
+    window._platformSim.startSimulation(JSON.stringify({
       lat: 38.89, lng: -77.03, altitude: 5000,
       orbit: 'racetrack', speed: 120,
     }));
@@ -454,11 +466,11 @@ ReactiveWebView tab2 = new ReactiveWebView(mapView, ctx, "web/index.html#/sensor
 // Each has its own WebView, own bridge instance, own React tree
 ```
 
-Custom bridges work the same way:
+Custom bridges work the same way, with an explicit name, added before the first `onResume()` (the bridge would take a `ReactiveWebView` and call its `emit`):
 
 ```java
 ReactiveWebView view = new ReactiveWebView(mapView, ctx, "web/index.html");
-view.addBridge(new PlatformSimBridge(simulator, emitter));
+view.addBridge("platformSim", new PlatformSimBridge(simulator, view));
 ```
 
 **Back button:** ATAK delivers back presses to your receiver, not the view. Hand them to the view so it can go back in router history or run a `useBackHandler`. It returns `false` when it has nowhere to go back to, or when it isn't on screen (a React tab that isn't selected), and ATAK then closes the panel:

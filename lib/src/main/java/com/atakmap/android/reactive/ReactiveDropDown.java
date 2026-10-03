@@ -62,7 +62,6 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private final LinearLayout container;
     private final boolean devMode;
     private final Context pluginContext;
-    private final Object[] additionalBridges;
 
     /** Set by disposeImpl(); the WebView is destroyed and must not be loaded again. */
     private volatile boolean disposed = false;
@@ -70,9 +69,16 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     private WebView webView;
     private WebViewAssetLoader assetLoader;
     private AtakBridge bridge;
-    private BridgeEventEmitter eventEmitter;
+    /** Volatile so {@link #emit} can read it from any thread. */
+    private volatile BridgeEventEmitter eventEmitter;
 
-    private final java.util.List<Object> pendingBridges = new java.util.ArrayList<>();
+    /** Custom bridges, re-registered on every WebView this view builds. */
+    private final BridgeRegistry customBridges = new BridgeRegistry();
+    /**
+     * Set once the app URL has been loaded into the current WebView. A bridge
+     * added after that is only visible to JS from the next page load. UI thread.
+     */
+    private boolean appPageLoaded = false;
     /**
      * Set when the app URL is loaded; once that load commits, history is
      * cleared. Without this, back from the app's first page lands on about:blank or
@@ -166,28 +172,104 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
     }
 
     /**
-     * Add a custom bridge that will be accessible from JS as window._className.
-     * Call before the dropdown is first shown.
+     * Add a custom bridge, reachable from JS as {@code window._<name>}: a bridge
+     * added as {@code addBridge("platformSim", ...)} is
+     * {@code window._platformSim}.
      *
+     * Add bridges before the dropdown is first shown. WebView only exposes a
+     * bridge to pages loaded after it is added, so one added once the page has
+     * loaded shows up on the next page load, not the current one.
+     *
+     * To send events to JS, have the bridge hold this view and call
+     * {@link #emit}; see its notes on why not to keep a BridgeEventEmitter.
+     *
+     * @param name   letters, digits and underscores, starting with a letter.
+     *               Must not be {@code "atak"}, which is the built-in bridge, or
+     *               a name already used by another bridge on this view.
      * @param bridge object with @JavascriptInterface methods
      * @return this, for chaining
+     * @throws IllegalArgumentException if the name is invalid, reserved or
+     *         already taken, or the bridge is null
      */
-    public ReactiveDropDown addBridge(Object bridge) {
-        pendingBridges.add(bridge);
-        // If WebView is already created, register immediately
-        if (webView != null) {
-            String name = bridgeName(bridge);
-            webView.addJavascriptInterface(bridge, name);
-            Log.d(TAG, "Registered bridge: " + name);
-        }
+    public ReactiveDropDown addBridge(String name, Object bridge) {
+        register(name, bridge);
         return this;
     }
 
-    private static String bridgeName(Object bridge) {
-        String simple = bridge.getClass().getSimpleName();
-        return "_" + simple.substring(0, 1).toLowerCase() + simple.substring(1);
+    /**
+     * Add a custom bridge named after its class: {@code window._className}, the
+     * simple name with its first letter lower-cased.
+     *
+     * @deprecated The derived name ignores the package, so two classes with the
+     *             same simple name collide, and it is NOT stable under
+     *             minification: in a release build the class is renamed and so
+     *             is the JS global. Use {@link #addBridge(String, Object)}.
+     * @param bridge object with @JavascriptInterface methods
+     * @return this, for chaining
+     * @throws IllegalArgumentException if the derived name is reserved or
+     *         already taken
+     */
+    @Deprecated
+    public ReactiveDropDown addBridge(Object bridge) {
+        registerDerived(bridge);
+        return this;
     }
 
+    private void registerDerived(Object bridge) {
+        String name = BridgeRegistry.derivedName(bridge);
+        Log.w(TAG, "Bridge " + bridge.getClass().getName() + " registered under the name "
+                + "derived from its class, " + BridgeRegistry.jsName(name) + ". That name "
+                + "ignores the package and changes when a release build renames the class; "
+                + "use addBridge(String, Object) instead.");
+        register(name, bridge);
+    }
+
+    private void register(String name, Object bridge) {
+        String jsName = customBridges.add(name, bridge);
+        // Once the WebView exists, register straight away. It is only seen by
+        // pages loaded from now on.
+        if (webView != null && !disposed) {
+            webView.addJavascriptInterface(bridge, jsName);
+            Log.d(TAG, "Registered bridge: " + jsName);
+            if (appPageLoaded) {
+                Log.w(TAG, "Bridge " + jsName + " was added after the page loaded; JS will "
+                        + "only see it from the next page load. Add bridges before the "
+                        + "dropdown is first shown.");
+            }
+        }
+    }
+
+    /**
+     * Send an event to JS through the current WebView, delivered to listeners
+     * registered with the SDK's {@code on(eventName, ...)}. Safe to call from any
+     * thread.
+     *
+     * Custom bridges should hold this view and call this rather than keep a
+     * BridgeEventEmitter: the emitter is replaced when the WebView is rebuilt
+     * after a renderer death, and one kept from before sends into the destroyed
+     * WebView, where events silently vanish. While there is no WebView (mid
+     * rebuild, or after dispose) the event is dropped.
+     *
+     * @param eventName   the event name JS listens for
+     * @param jsonPayload a JSON value (object, array, string literal, number...),
+     *                    inserted into a script as-is, so it must be valid JSON
+     */
+    public void emit(String eventName, String jsonPayload) {
+        BridgeEventEmitter emitter = eventEmitter;
+        if (emitter == null || disposed) {
+            Log.d(TAG, "emit(" + eventName + ") dropped: no WebView");
+            return;
+        }
+        emitter.emit(eventName, jsonPayload);
+    }
+
+    /**
+     * @param additionalBridges custom bridges, each named after its class as by
+     *        the deprecated {@link #addBridge(Object)}, with the same problems:
+     *        prefer {@link #addBridge(String, Object)}.
+     * @throws IllegalArgumentException if two bridges derive the same name, or one
+     *         derives the reserved {@code atak}
+     */
     public ReactiveDropDown(MapView mapView, Context pluginContext,
             String assetPath, boolean devMode, Object... additionalBridges) {
         super(mapView);
@@ -198,7 +280,11 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         this.devPort = resolveDevPort(pluginContext);
         this.devUrl = "http://" + devHost + ":" + devPort;
         this.pluginContext = pluginContext;
-        this.additionalBridges = additionalBridges;
+        if (additionalBridges != null) {
+            for (Object extra : additionalBridges) {
+                registerDerived(extra);
+            }
+        }
 
         container = new LinearLayout(pluginContext);
         container.setLayoutParams(new LayoutParams(
@@ -238,18 +324,13 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         bridge.setDropDown(this);
         webView.addJavascriptInterface(bridge, "_atak");
 
-        // Register bridges passed via constructor varargs (legacy)
-        for (Object extra : additionalBridges) {
-            String name = bridgeName(extra);
-            webView.addJavascriptInterface(extra, name);
-            Log.d(TAG, "Registered bridge: " + name);
-        }
-
-        // Register bridges added via addBridge()
-        for (Object extra : pendingBridges) {
-            String name = bridgeName(extra);
-            webView.addJavascriptInterface(extra, name);
-            Log.d(TAG, "Registered bridge: " + name);
+        // Custom bridges (constructor varargs and addBridge), one per name, in
+        // the order they were added. The registry has already refused _atak and
+        // duplicates, so none of these replaces another.
+        appPageLoaded = false;
+        for (java.util.Map.Entry<String, Object> extra : customBridges.entries().entrySet()) {
+            webView.addJavascriptInterface(extra.getValue(), extra.getKey());
+            Log.d(TAG, "Registered bridge: " + extra.getKey());
         }
 
         webView.setWebViewClient(new ReactiveWebViewClient());
@@ -322,6 +403,11 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
     /**
      * Returns the BridgeEventEmitter for subclasses to use.
+     *
+     * The emitter belongs to the current WebView and is replaced when the
+     * WebView is rebuilt after a renderer death, and it is null until the
+     * WebView is first built. Do not hand it to a custom bridge to keep; have
+     * the bridge call {@link #emit} on this view instead.
      */
     protected BridgeEventEmitter getEventEmitter() {
         return eventEmitter;
@@ -401,6 +487,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                         Log.d(TAG, "Dev server reachable, loading from " + devUrl);
                         stopDevRetry();
                         clearHistoryOnLoad = true;
+                        appPageLoaded = true;
                         webView.loadUrl(devUrl);
                     } else {
                         Log.w(TAG, "Dev server not running — run: npx @atak-reactive/cli dev");
@@ -411,6 +498,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
             }).start();
         } else {
             clearHistoryOnLoad = true;
+            appPageLoaded = true;
             webView.loadUrl(prodUrl);
         }
 
@@ -460,6 +548,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
                             if (disposed || generation != devRetryGeneration) return;
                             Log.d(TAG, "Dev server came back — reloading " + devUrl);
                             clearHistoryOnLoad = true;
+                            appPageLoaded = true;
                             wv.loadUrl(devUrl);
                         });
                     }
