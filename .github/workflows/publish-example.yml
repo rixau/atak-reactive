@@ -239,13 +239,13 @@ jobs:
         # channel gets the bare version. Every other push is a pre-release of it,
         # named by channel and then the head commit's timestamp (the same one
         # takdev takes the versionCode from), so later pushes sort higher across
-        # PRs as well as within one: 0.3.6-alpha.1759589429.pr85, 0.3.7-rc.1759590000.
+        # PRs as well as within one: 0.3.6-alpha.1759589429.pr.85, 0.3.7-rc.1759590000.
         # Every push of one commit gets the same name, so a re-run joins the
         # release it already started instead of creating another.
         run: |
           RELEASE_NAME="${{ needs.check-version.outputs.version }}"
           if [ "${ARSENAL_CHANNEL}" != release ]; then
-            RELEASE_NAME="${RELEASE_NAME}-${ARSENAL_CHANNEL}.$(git log -1 --format=%ct)${PR_NUMBER:+.pr${PR_NUMBER}}"
+            RELEASE_NAME="${RELEASE_NAME}-${ARSENAL_CHANNEL}.$(git log -1 --format=%ct)${PR_NUMBER:+.pr.${PR_NUMBER}}"
           fi
           export ARSENAL_RELEASE_NAME="${RELEASE_NAME}"
           echo "release name: ${ARSENAL_RELEASE_NAME}"
