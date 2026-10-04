@@ -8,12 +8,17 @@ set -euo pipefail
 #   ARSENAL_TOKEN     API token with the publish scope. Required.
 #   ARSENAL_ORG       namespace to publish into. Required.
 #   ARSENAL_CHANNEL   alpha | beta | rc | release (default: release)
+#   ARSENAL_RELEASE_NAME  semver name of the release this APK belongs to. Required.
 #   ARSENAL_NOTES     release notes (optional)
 #   ARSENAL_URL       registry base URL (default: https://arsenalc2.com/api)
 #
 # This is the HTTP call `arsenal push` makes, without the CLI, which is not on npm.
 # The registry reads the package name, versionCode, versionName, flavor and signer
-# off the APK, so the request is only the artifact and a channel.
+# off the APK, so the request is only the artifact, a channel and a release name.
+#
+# The release name is what the registry orders releases by (semver precedence),
+# and every new release needs one. Pushes that carry the same name join one
+# release, which is how the per-ATAK-version APKs end up together.
 #
 # Keep the /api suffix on ARSENAL_URL: the bare origin serves the portal, and
 # every request to it 200s with index.html.
@@ -27,6 +32,7 @@ case "${DRY_RUN}" in
 esac
 : "${ARSENAL_TOKEN:?ARSENAL_TOKEN is not set}"
 : "${ARSENAL_ORG:?ARSENAL_ORG is not set}"
+: "${ARSENAL_RELEASE_NAME:?ARSENAL_RELEASE_NAME is not set}"
 CHANNEL="${ARSENAL_CHANNEL:-release}"
 URL="${ARSENAL_URL:-https://arsenalc2.com/api}"
 
@@ -38,18 +44,36 @@ QUERY="org=${ARSENAL_ORG}"
 BODY="$(mktemp)"
 trap 'rm -f "${BODY}"' EXIT
 
-echo "$([ -n "${DRY_RUN}" ] && echo checking || echo pushing) $(basename "${APK}") -> ${ARSENAL_ORG} (${CHANNEL})"
-STATUS="$(curl -sS -o "${BODY}" -w '%{http_code}' -X POST "${URL}/upload?${QUERY}" \
-    -H "Authorization: Bearer ${ARSENAL_TOKEN}" \
-    -F "channel=${CHANNEL}" \
-    ${ARSENAL_NOTES:+-F "releaseNotes=${ARSENAL_NOTES}"} \
-    -F "artifact=@${APK}")"
+# push [promote=false]
+push() {
+    curl -sS -o "${BODY}" -w '%{http_code}' -X POST "${URL}/upload?${QUERY}" \
+        -H "Authorization: Bearer ${ARSENAL_TOKEN}" \
+        -F "channel=${CHANNEL}" \
+        -F "releaseName=${ARSENAL_RELEASE_NAME}" \
+        ${ARSENAL_NOTES:+-F "releaseNotes=${ARSENAL_NOTES}"} \
+        ${1:+-F "promote=${1}"} \
+        -F "artifact=@${APK}"
+}
+error_code() { jq -r '.error? // empty' "${BODY}" 2>/dev/null; }
+
+echo "$([ -n "${DRY_RUN}" ] && echo checking || echo pushing) $(basename "${APK}") -> ${ARSENAL_ORG} (${CHANNEL}, release ${ARSENAL_RELEASE_NAME})"
+STATUS="$(push)"
+
+# The registry refuses to move a channel's head back to a lower release name. On
+# a pre-release channel that happens when a PR based on an older example version
+# publishes after one based on a newer version. The preview is still worth having,
+# so store it without making it the head; on release, an older build is a mistake
+# and stays refused.
+if [ "${STATUS}" = 409 ] && [ "$(error_code)" = head_is_newer ] && [ "${CHANNEL}" != release ]; then
+    echo "::notice title=not the ${CHANNEL} head::${ARSENAL_RELEASE_NAME} is older than the ${CHANNEL} channel's current release, so it is published without becoming the head."
+    STATUS="$(push false)"
+fi
 
 # The example ships one APK per ATAK version, pushed one at a time into the same
 # release. If a push fails partway, re-running the workflow re-pushes the builds
 # that already landed, and those are refused as duplicates. That refusal means
 # the build is already published, so it is not an error here.
-if [ "${STATUS}" = 409 ] && [ "$(jq -r '.error? // empty' "${BODY}" 2>/dev/null)" = artifact_already_exists ]; then
+if [ "${STATUS}" = 409 ] && [ "$(error_code)" = artifact_already_exists ]; then
     echo "::notice title=already published::$(basename "${APK}") is already in the registry; skipping it."
     exit 0
 fi

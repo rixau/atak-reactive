@@ -15,8 +15,8 @@ name: Publish example
 # it merges. The example builds the bridge and the SDK from source, so the
 # preview carries the PR's own code.
 #   - A PR that bumps example/version.txt is a release candidate: it publishes
-#     that version as-is to the rc channel, and merging publishes the same
-#     version to release.
+#     that version to the rc channel (as release 0.3.7-rc.<timestamp>), and
+#     merging publishes it to release as 0.3.7.
 #   - Any other PR publishes to the alpha channel as the example's version plus
 #     "-pr<number>"; takdev adds the head commit's short hash, so it reads as
 #     "0.3.5-pr78 (0fd87e3a) - [5.6.0]".
@@ -234,7 +234,21 @@ jobs:
 
       - name: Publish to Arsenal C2
         shell: bash
+        # Arsenal C2 orders releases by their semver name and refuses a push that
+        # would move a channel's head back to a lower one. Only the release
+        # channel gets the bare version. Every other push is a pre-release of it,
+        # named by channel and then the head commit's timestamp (the same one
+        # takdev takes the versionCode from), so later pushes sort higher across
+        # PRs as well as within one: 0.3.6-alpha.1759589429.pr.85, 0.3.7-rc.1759590000.
+        # Every push of one commit gets the same name, so a re-run joins the
+        # release it already started instead of creating another.
         run: |
+          RELEASE_NAME="${{ needs.check-version.outputs.version }}"
+          if [ "${ARSENAL_CHANNEL}" != release ]; then
+            RELEASE_NAME="${RELEASE_NAME}-${ARSENAL_CHANNEL}.$(git log -1 --format=%ct)${PR_NUMBER:+.pr.${PR_NUMBER}}"
+          fi
+          export ARSENAL_RELEASE_NAME="${RELEASE_NAME}"
+          echo "release name: ${ARSENAL_RELEASE_NAME}"
           for v in 5.4.0 5.5.0 5.5.1 5.6.0; do
             apk="$(find "apks/example-${v}" -name '*.apk' | head -1)"
             [ -n "${apk}" ] || { echo "::error::no APK was built for ATAK ${v}"; exit 1; }
@@ -250,3 +264,4 @@ jobs:
           # Quoted: unquoted, YAML reads the ` #` below as the start of a comment.
           PREVIEW_NOTE: "${{ github.event_name == 'pull_request' && format(' (preview of #{0}, {1})', github.event.pull_request.number, github.event.pull_request.head.sha) || '' }}"
           DRY_RUN: ${{ inputs.dry-run && '--dry-run' || '' }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
