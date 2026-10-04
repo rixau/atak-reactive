@@ -51,7 +51,7 @@ export function EmbeddedPage() {
         <button onClick={() => sendBroadcast('dev.atakreactive.example.SHOW_REACT')} style={styles.buttonOutline}>
           Open Full React Dropdown
         </button>
-        <button onClick={dropMarker} disabled={!location} style={styles.button}>
+        <button onClick={dropMarker} disabled={!location} style={{ ...styles.button, ...(!location && styles.disabled) }}>
           Drop Marker at My Location
         </button>
         {lastDropped && (
@@ -86,6 +86,7 @@ const styles: Record<string, React.CSSProperties> = {
   more: { color: '#8d99ae', fontSize: 12, fontStyle: 'italic', marginTop: 4 },
   dim: { color: '#8d99ae', fontSize: 12 },
   button: { width: '100%', minHeight: TOUCH_TARGET, border: 'none', borderRadius: 6, background: '#4cc9f0', color: '#0f0f23', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: TOUCH_GAP },
+  disabled: { opacity: 0.4, cursor: 'not-allowed' },
   buttonOutline: { width: '100%', minHeight: TOUCH_TARGET, border: '1px solid #4cc9f0', borderRadius: 6, background: 'transparent', color: '#4cc9f0', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: TOUCH_GAP },
   removeBtn: { minHeight: TOUCH_TARGET, minWidth: 84, background: 'none', border: '1px solid #8d99ae', borderRadius: 6, color: '#8d99ae', fontSize: 13, padding: '0 14px', cursor: 'pointer' },
 };
