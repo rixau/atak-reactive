@@ -50,6 +50,7 @@ import {
 } from '@atak-reactive/sdk';
 import { on, off } from '@atak-reactive/sdk';
 import { runPreferenceTypeTests } from './preferenceTypes';
+import { runCustomBridgeTests } from './customBridge';
 
 interface TestResult {
   name: string;
@@ -83,6 +84,7 @@ export function IntegrationTestPage() {
   const testRouteUid = useRef<string | null>(null);
   const testGeofenceShapeUid = useRef<string | null>(null);
   const prefTests = useRef<Promise<void> | null>(null);
+  const bridgeTests = useRef<Promise<void> | null>(null);
   // Drives the banner and the COMPLETE line. phase.current is a ref, so setting
   // it to 'done' alone does not re-render.
   const [done, setDone] = useState(false);
@@ -114,6 +116,12 @@ export function IntegrationTestPage() {
     prefTests.current = runPreferenceTypeTests()
       .then(rs => rs.forEach(addResult))
       .catch(e => addResult({ name: 'preference type tests ran', pass: false, detail: String(e) }));
+
+    // --- Custom bridge (#81) ---
+    // Also independent, and also awaited by the final phase.
+    bridgeTests.current = runCustomBridgeTests()
+      .then(rs => rs.forEach(addResult))
+      .catch(e => addResult({ name: 'custom bridge tests ran', pass: false, detail: String(e) }));
 
     // --- Bridge basics ---
     const native = isNative();
@@ -634,8 +642,9 @@ export function IntegrationTestPage() {
       addResult({ name: 'createGeofence no crash', pass: false, detail: 'could not create test circle' });
     }
 
-    // Wait for the preference type tests started in phase 1, then the final count
-    prefTests.current!.then(() => {
+    // Wait for the preference type and custom bridge tests started in phase 1,
+    // then the final count
+    Promise.all([prefTests.current!, bridgeTests.current!]).then(() => {
       phase.current = 'done';
       setDone(true);
     });
