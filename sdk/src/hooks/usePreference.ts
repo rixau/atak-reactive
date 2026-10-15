@@ -23,8 +23,16 @@ export function usePreference(
         setValue(data.value);
       }
     };
+    // preferenceChanged is dropped while the panel's view is detached (for
+    // example a retained panel covered by another drop-down), so re-read when
+    // it comes back.
+    const resync = () => setValue(getPreference(key));
     on('preferenceChanged', handler);
-    return () => off('preferenceChanged', handler);
+    on('bridgeResumed', resync);
+    return () => {
+      off('preferenceChanged', handler);
+      off('bridgeResumed', resync);
+    };
   }, [key]);
 
   const setter = useCallback(

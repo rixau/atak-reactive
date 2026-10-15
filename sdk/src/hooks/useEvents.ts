@@ -15,8 +15,15 @@ export function useSelfLocation(): SelfLocation | null {
     setLocation(loc);
 
     const handler = (data: SelfLocation) => setLocation(data);
+    // selfLocationChanged is dropped while the panel's view is detached, so
+    // re-read when it comes back.
+    const resync = () => setLocation(bridgeGetSelfLocation());
     on('selfLocationChanged', handler);
-    return () => off('selfLocationChanged', handler);
+    on('bridgeResumed', resync);
+    return () => {
+      off('selfLocationChanged', handler);
+      off('bridgeResumed', resync);
+    };
   }, []);
 
   return location;

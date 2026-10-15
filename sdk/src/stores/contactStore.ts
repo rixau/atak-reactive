@@ -57,6 +57,9 @@ class ContactStore {
     return this.contacts.get(uid);
   }
 
+  // No bridgeResumed handler needed: when the panel comes back, the native
+  // contact bridge restarts and sends the full list as contactsChanged, and
+  // handleEvent replaces the store's contents with it.
   private ensureStream() {
     if (this.streamActive) return;
     this.streamActive = true;

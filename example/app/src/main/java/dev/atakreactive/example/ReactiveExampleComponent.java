@@ -49,7 +49,7 @@ public class ReactiveExampleComponent extends DropDownMapComponent {
         DocumentedIntentFilter nativeFilter = new DocumentedIntentFilter();
         nativeFilter.addAction(NativeListReceiver.SHOW, "Benchmark: plain native list");
         registerDropDownReceiver(nativeListReceiver, nativeFilter);
-        benchReceiver = new BenchReceiver();
+        benchReceiver = new BenchReceiver(reactiveDropDown, nativeListReceiver);
         benchReceiver.register(view.getContext().getApplicationContext());
 
         // Integration-test only: writes non-string preferences for the Test

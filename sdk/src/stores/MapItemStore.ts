@@ -83,6 +83,7 @@ class MapItemStore {
 
     // Listen for push events
     on('mapItemsChanged', this.handleEvent);
+    on('bridgeResumed', this.handleResumed);
   }
 
   private maybeStopStream() {
@@ -90,6 +91,7 @@ class MapItemStore {
 
     this.streamActive = false;
     off('mapItemsChanged', this.handleEvent);
+    off('bridgeResumed', this.handleResumed);
     this.getBridge()?.stopMapItemStream();
   }
 
@@ -104,6 +106,22 @@ class MapItemStore {
       this.items.set(item.uid, item);
     }
   }
+
+  /**
+   * The panel was detached, so the native stream was paused and every change in
+   * the meantime was dropped rather than queued. Re-seed from a fresh snapshot,
+   * which drops anything removed while paused, and tell every subscriber. The
+   * stream is already running again, so later changes arrive as diffs.
+   */
+  private handleResumed = () => {
+    this.seed();
+    for (const sub of this.subscribers.values()) {
+      sub.callback(this.getFiltered(sub.filter));
+    }
+    for (const sub of this.structuralSubscribers.values()) {
+      sub.callback();
+    }
+  };
 
   private handleEvent = (event: MapItemsChangedEvent) => {
     let hasStructuralChange = false;
@@ -142,6 +160,7 @@ class MapItemStore {
   reset() {
     if (this.streamActive) {
       off('mapItemsChanged', this.handleEvent);
+      off('bridgeResumed', this.handleResumed);
       this.getBridge()?.stopMapItemStream();
       this.streamActive = false;
     }

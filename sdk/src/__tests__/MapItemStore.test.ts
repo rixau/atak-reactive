@@ -160,4 +160,74 @@ describe('MapItemStore', () => {
     });
     expect(structCb).toHaveBeenCalledTimes(1);
   });
+
+  describe('bridgeResumed (panel re-attached after #88 pause)', () => {
+    it('replaces the store with a fresh snapshot and notifies subscribers', async () => {
+      // Closed with a, b, c on the map. While paused nothing was delivered:
+      // b was removed, c moved, d was added.
+      let snapshot = [
+        makeMapItem({ uid: 'a' }),
+        makeMapItem({ uid: 'b' }),
+        makeMapItem({ uid: 'c', lat: 1 }),
+      ];
+      window._atak = createMockBridge({
+        getMapItemsSnapshot: () => JSON.stringify(snapshot),
+      });
+
+      const { mapItemStore } = await loadModules();
+      const cb = vi.fn();
+      const structCb = vi.fn();
+      mapItemStore.subscribe(undefined, cb);
+      mapItemStore.subscribeStructural(structCb);
+      expect(cb.mock.lastCall![0]).toHaveLength(3);
+
+      snapshot = [
+        makeMapItem({ uid: 'a' }),
+        makeMapItem({ uid: 'c', lat: 2 }),
+        makeMapItem({ uid: 'd' }),
+      ];
+      emitFromNative('bridgeResumed', {});
+
+      const items = cb.mock.lastCall![0] as MapItemData[];
+      expect(items.map((i) => i.uid).sort()).toEqual(['a', 'c', 'd']);
+      expect(items.find((i) => i.uid === 'c')!.lat).toBe(2);
+      expect(mapItemStore.getByUid('b')).toBeUndefined();
+      expect(structCb).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps applying diffs after the re-sync', async () => {
+      let snapshot = [makeMapItem({ uid: 'a' })];
+      window._atak = createMockBridge({
+        getMapItemsSnapshot: () => JSON.stringify(snapshot),
+      });
+
+      const { mapItemStore } = await loadModules();
+      const cb = vi.fn();
+      mapItemStore.subscribe(undefined, cb);
+
+      snapshot = [];
+      emitFromNative('bridgeResumed', {});
+      expect(cb.mock.lastCall![0]).toHaveLength(0);
+
+      emitFromNative('mapItemsChanged', {
+        added: [makeMapItem({ uid: 'z' })],
+        removed: [],
+        updated: [],
+      });
+      expect((cb.mock.lastCall![0] as MapItemData[]).map((i) => i.uid)).toEqual(['z']);
+    });
+
+    it('does not re-fetch once the stream has stopped', async () => {
+      const snapshotFn = vi.fn(() => '[]');
+      window._atak = createMockBridge({ getMapItemsSnapshot: snapshotFn });
+
+      const { mapItemStore } = await loadModules();
+      const unsub = mapItemStore.subscribe(undefined, vi.fn());
+      expect(snapshotFn).toHaveBeenCalledTimes(1);
+      unsub();
+
+      emitFromNative('bridgeResumed', {});
+      expect(snapshotFn).toHaveBeenCalledTimes(1);
+    });
+  });
 });

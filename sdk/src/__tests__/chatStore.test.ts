@@ -122,4 +122,44 @@ describe('ChatStore', () => {
 
     expect(callback.mock.calls.length).toBe(callsAfterSub);
   });
+
+  describe('bridgeResumed (panel re-attached after #88 pause)', () => {
+    it('re-reads history for loaded conversations and notifies subscribers', async () => {
+      let history = [makeChatMessage({ conversationId: 'conv-1', messageId: 'h1' })];
+      const getChatHistory = vi.fn(() => JSON.stringify(history));
+      window._atak = createMockBridge({ getChatHistory });
+      const { chatStore } = await loadModules();
+      const callback = vi.fn();
+      chatStore.subscribe('conv-1', callback);
+
+      // A message arrived while the panel was detached; no chatMessage event
+      // reached the page.
+      history = [
+        makeChatMessage({ conversationId: 'conv-1', messageId: 'h1' }),
+        makeChatMessage({ conversationId: 'conv-1', messageId: 'h2' }),
+      ];
+      emitFromNative('bridgeResumed', {});
+
+      expect(getChatHistory).toHaveBeenLastCalledWith('conv-1', 100);
+      const latest = callback.mock.lastCall![0] as { messageId: string }[];
+      expect(latest.map((m) => m.messageId)).toEqual(['h1', 'h2']);
+    });
+
+    it('keeps a live message newer than the re-read history', async () => {
+      const h1 = makeChatMessage({ conversationId: 'conv-1', messageId: 'h1', timeReceived: 1000 });
+      window._atak = createMockBridge({ getChatHistory: () => JSON.stringify([h1]) });
+      const { chatStore } = await loadModules();
+      const callback = vi.fn();
+      chatStore.subscribe('conv-1', callback);
+
+      emitFromNative(
+        'chatMessage',
+        makeChatMessage({ conversationId: 'conv-1', messageId: 'live', timeReceived: 2000 }),
+      );
+      emitFromNative('bridgeResumed', {});
+
+      const latest = callback.mock.lastCall![0] as { messageId: string }[];
+      expect(latest.map((m) => m.messageId)).toEqual(['h1', 'live']);
+    });
+  });
 });

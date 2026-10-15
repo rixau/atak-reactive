@@ -33,9 +33,17 @@ public class CotBridge {
     private final Handler debounceHandler = new Handler(Looper.getMainLooper());
     private final Map<String, JSONObject> pendingCot = new ConcurrentHashMap<>();
 
+    /**
+     * Guards {@link #cotService} and {@link #cotListener} against the connect
+     * callback. Separate from {@code this} because the callback can arrive on
+     * ATAK's fireConnect thread while it holds CotServiceRemote's static lock,
+     * and connect() takes that same lock while {@code this} is held.
+     */
+    private final Object listenerLock = new Object();
     private CotServiceRemote cotService;
     private CotServiceRemote.CotEventListener cotListener;
-    private int refCount = 0;
+    /** Page demand and host pause. Guarded by {@code this}. */
+    private final ListenerState state = new ListenerState();
     private boolean streaming = false;
 
     public CotBridge(BridgeEventEmitter emitter) {
@@ -43,19 +51,40 @@ public class CotBridge {
     }
 
     @JavascriptInterface
-    public void startCotStream() {
-        refCount++;
-        if (refCount == 1) {
-            startListening();
-        }
+    public synchronized void startCotStream() {
+        apply(state.acquire());
     }
 
     @JavascriptInterface
-    public void stopCotStream() {
-        refCount--;
-        if (refCount <= 0) {
-            refCount = 0;
-            stopListening();
+    public synchronized void stopCotStream() {
+        apply(state.release());
+    }
+
+    /**
+     * Stop listening while the host is detached, keeping the page's stream
+     * requests. CoT received while paused is not delivered later: these are
+     * discrete events with no snapshot to re-sync from. Markers it created or
+     * moved still reach the page through the map-items snapshot.
+     */
+    public synchronized void pause() {
+        apply(state.pause());
+    }
+
+    /** Listen again if the page still wants the stream. */
+    public synchronized void resume() {
+        apply(state.resume());
+    }
+
+    private void apply(ListenerState.Change change) {
+        switch (change) {
+            case START:
+                startListening();
+                break;
+            case STOP:
+                stopListening();
+                break;
+            default:
+                break;
         }
     }
 
@@ -126,14 +155,24 @@ public class CotBridge {
         if (streaming) return;
         streaming = true;
 
-        cotService = new CotServiceRemote();
-        cotService.connect(new CotServiceRemote.ConnectionListener() {
+        final CotServiceRemote remote = new CotServiceRemote();
+        synchronized (listenerLock) {
+            cotService = remote;
+        }
+        remote.connect(new CotServiceRemote.ConnectionListener() {
             @Override
             public void onCotServiceConnected(Bundle fullServiceState) {
-                cotListener = (event, extra) -> {
-                    onCotReceived(event);
-                };
-                cotService.setCotEventListener(cotListener);
+                // The connection can complete later, after a pause or stop has
+                // already let this remote go (and nulled the field). Installing
+                // the listener then would leave it registered with nothing to
+                // remove it.
+                synchronized (listenerLock) {
+                    if (cotService != remote) return;
+                    cotListener = (event, extra) -> {
+                        onCotReceived(event);
+                    };
+                    remote.setCotEventListener(cotListener);
+                }
                 Log.d(TAG, "CoT stream started");
             }
 
@@ -148,11 +187,13 @@ public class CotBridge {
         if (!streaming) return;
         streaming = false;
 
-        if (cotService != null) {
-            cotService.setCotEventListener(null);
-            cotService = null;
+        synchronized (listenerLock) {
+            if (cotService != null) {
+                cotService.setCotEventListener(null);
+                cotService = null;
+            }
+            cotListener = null;
         }
-        cotListener = null;
 
         debounceHandler.removeCallbacksAndMessages(null);
         pendingCot.clear();
@@ -322,8 +363,8 @@ public class CotBridge {
         return event;
     }
 
-    public void dispose() {
-        refCount = 0;
+    public synchronized void dispose() {
+        state.dispose();
         stopListening();
     }
 }

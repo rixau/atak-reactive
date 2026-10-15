@@ -3,6 +3,8 @@ import { on, off } from '../events';
 
 type ChatCallback = (messages: ChatMessageData[]) => void;
 
+const HISTORY_LIMIT = 100;
+
 class ChatStore {
   private conversations = new Map<string, ChatMessageData[]>();
   private subscribers = new Map<string, Set<ChatCallback>>();
@@ -12,15 +14,18 @@ class ChatStore {
     return window._atak;
   }
 
+  private fetchHistory(conversationId: string): ChatMessageData[] {
+    const raw = this.getBridge()?.getChatHistory(conversationId, HISTORY_LIMIT);
+    return raw ? JSON.parse(raw) as ChatMessageData[] : [];
+  }
+
   subscribe(
     conversationId: string,
     callback: ChatCallback,
   ): () => void {
     // Load history on first subscribe to this conversation
     if (!this.conversations.has(conversationId)) {
-      const raw = this.getBridge()?.getChatHistory(conversationId, 100);
-      const history = raw ? JSON.parse(raw) as ChatMessageData[] : [];
-      this.conversations.set(conversationId, history);
+      this.conversations.set(conversationId, this.fetchHistory(conversationId));
     }
 
     let subs = this.subscribers.get(conversationId);
@@ -45,6 +50,7 @@ class ChatStore {
     if (this.streamActive) return;
     this.streamActive = true;
     on('chatMessage', this.handleEvent);
+    on('bridgeResumed', this.handleResumed);
     this.getBridge()?.subscribeChat();
   }
 
@@ -57,8 +63,34 @@ class ChatStore {
 
     this.streamActive = false;
     off('chatMessage', this.handleEvent);
+    off('bridgeResumed', this.handleResumed);
     this.getBridge()?.unsubscribeChat();
   }
+
+  /**
+   * The panel was detached, so messages that arrived meantime were never
+   * delivered. Re-read the history of every loaded conversation. A message
+   * held here that the re-read does not include and that is newer than all of
+   * it (one that came in live between the resume and this read) is kept.
+   */
+  private handleResumed = () => {
+    for (const conversationId of [...this.conversations.keys()]) {
+      const fresh = this.fetchHistory(conversationId);
+      const known = new Set(fresh.map(m => m.messageId));
+      const newest = fresh.reduce((t, m) => Math.max(t, m.timeReceived), 0);
+      const held = this.conversations.get(conversationId) ?? [];
+      const merged = [
+        ...fresh,
+        ...held.filter(m => !known.has(m.messageId) && m.timeReceived > newest),
+      ];
+      this.conversations.set(conversationId, merged);
+      const subs = this.subscribers.get(conversationId);
+      if (subs) {
+        const snapshot = [...merged];
+        for (const cb of subs) cb(snapshot);
+      }
+    }
+  };
 
   private handleEvent = (msg: ChatMessageData) => {
     const msgs = this.conversations.get(msg.conversationId) ?? [];
@@ -77,6 +109,7 @@ class ChatStore {
   reset() {
     if (this.streamActive) {
       off('chatMessage', this.handleEvent);
+      off('bridgeResumed', this.handleResumed);
       this.getBridge()?.unsubscribeChat();
       this.streamActive = false;
     }

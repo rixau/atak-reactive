@@ -95,6 +95,27 @@ describe('useDropdownSize', () => {
 });
 
 describe('useNavVisible', () => {
+  it('re-reads on bridgeResumed and stops after unmount', async () => {
+    let navVisible = 'true';
+    const getNavVisible = vi.fn(() => navVisible);
+    window._atak = createMockBridge({ getNavVisible });
+    const { useNavVisible } = await import('../hooks/useDropdown');
+    const { result, unmount } = renderHook(() => useNavVisible());
+    expect(result.current[0]).toBe(true);
+
+    // Toggled while covered: the navVisible event was dropped.
+    navVisible = 'false';
+    act(() => {
+      emitFromNative('bridgeResumed', {});
+    });
+    expect(result.current[0]).toBe(false);
+
+    unmount();
+    getNavVisible.mockClear();
+    emitFromNative('bridgeResumed', {});
+    expect(getNavVisible).not.toHaveBeenCalled();
+  });
+
   it('seeds from getNavVisible on mount', async () => {
     window._atak = createMockBridge({ getNavVisible: () => 'false' });
     const { useNavVisible } = await import('../hooks/useDropdown');
