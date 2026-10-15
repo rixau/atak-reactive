@@ -32,6 +32,44 @@ describe('removePreference', () => {
 });
 
 describe('usePreference', () => {
+  it('re-reads on bridgeResumed (changes made while the panel was detached)', async () => {
+    let stored = 'meters';
+    window._atak = createMockBridge({ getPreference: () => stored });
+    const { usePreference } = await import('../hooks/usePreference');
+    const { result } = renderHook(() => usePreference('unit'));
+    expect(result.current[0]).toBe('meters');
+
+    // Changed while covered: the preferenceChanged event was dropped.
+    stored = 'feet';
+    act(() => {
+      emitFromNative('bridgeResumed', {});
+    });
+    expect(result.current[0]).toBe('feet');
+  });
+
+  it('re-reads the current key on bridgeResumed and stops after unmount', async () => {
+    const getPreference = vi.fn((key: string) => `${key}-value`);
+    window._atak = createMockBridge({ getPreference });
+    const { usePreference } = await import('../hooks/usePreference');
+    const { result, rerender, unmount } = renderHook(
+      ({ k }: { k: string }) => usePreference(k),
+      { initialProps: { k: 'a' } },
+    );
+    rerender({ k: 'b' });
+    getPreference.mockClear();
+
+    act(() => {
+      emitFromNative('bridgeResumed', {});
+    });
+    expect(getPreference.mock.calls.map((c) => c[0])).toEqual(['b']);
+    expect(result.current[0]).toBe('b-value');
+
+    unmount();
+    getPreference.mockClear();
+    emitFromNative('bridgeResumed', {});
+    expect(getPreference).not.toHaveBeenCalled();
+  });
+
   it('reads initial value from getPreference', async () => {
     window._atak = createMockBridge({
       getPreference: (key: string) => key === 'unit' ? 'meters' : 'null',

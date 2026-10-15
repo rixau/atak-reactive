@@ -43,8 +43,15 @@ export function useNavVisible(): [boolean, (visible: boolean) => void] {
 
   useEffect(() => {
     const handler = (v: boolean) => setVisible(v);
+    // navVisible is dropped while the panel's view is detached, so re-read
+    // when it comes back.
+    const resync = () => setVisible(getNavVisible());
     on('navVisible', handler);
-    return () => off('navVisible', handler);
+    on('bridgeResumed', resync);
+    return () => {
+      off('navVisible', handler);
+      off('bridgeResumed', resync);
+    };
   }, []);
 
   const setter = useCallback((v: boolean) => {

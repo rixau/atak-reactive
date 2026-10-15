@@ -330,10 +330,12 @@ When the view is attached again, the producers the page still has subscribed res
 | `useContacts()` | The full contact list is sent again. |
 | `useNavigationState()` | The current navigation state is sent again. |
 | `useChat()` | History is re-read for every loaded conversation. |
+| `usePreference()`, `useNavVisible()`, `useSelfLocation()` | The current value is re-read. |
+| `useDropdownVisible()`, `useDropdownSize()` | The panel's current visibility and size are sent again. |
 | `useCotStream()`, `useCotEvent()` | Not re-synced: CoT received while detached is lost. Markers it created or moved still arrive through `useMapItems()`. |
 | `useIntent()`, `useIntentCallback()` | Not re-synced: broadcasts received while detached are lost, as they would be for a native panel whose receivers are unregistered on close. |
 
-Other events (`mapClick`, `preferenceChanged`, `selfLocationChanged`, …) are also dropped while detached; re-read anything you cache from them on `bridgeResumed`. Events a custom bridge sends through the `BridgeEventEmitter` are dropped the same way; such a bridge can pause its own listeners with `emitter.addHostStateListener(...)`. Receiving events while a panel is closed is not supported.
+Other events (`mapClick`, `itemSelected`, `radialMenuChanged`, …) are also dropped while detached; re-read anything you cache from them on `bridgeResumed`. `useRadialMenu()` has no getter to re-read, so it keeps its last value until the next show/hide. Events a custom bridge sends through the `BridgeEventEmitter` are dropped the same way; such a bridge can pause its own listeners with `emitter.addHostStateListener(...)`. Receiving events while a panel is closed is not supported.
 
 ## Custom Bridges
 
