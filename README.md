@@ -313,6 +313,27 @@ mounted (or `enabled`) only while there is something to go back from.
 | `contactsChanged` | `ContactData[]` | Contact list updated (online/offline/changed) |
 | `chatMessage` | `ChatMessageData` | New chat message received |
 | `geofenceAlert` | `GeofenceAlertData` | Geofence entry/exit detected |
+| `bridgeResumed` | `{}` | The panel's view is back on screen after being detached; re-fetch any state you keep yourself |
+
+### While a panel is closed or detached
+
+Closing a panel does not unmount the page: its hooks stay mounted and their subscriptions stay registered. What stops is the native side. Whenever the panel's WebView leaves the window — the dropdown is closed, a retained dropdown is covered by another one, or ATAK parks an embedded `ReactiveWebView` — the bridge:
+
+- **drops every event** instead of queueing it. Nothing is held for the page and nothing is replayed when it comes back.
+- **pauses its producers**: the ATAK listeners behind map items, CoT, contacts, chat, intents and navigation state are unregistered, so a closed panel does no work.
+
+When the view is attached again, the producers the page still has subscribed restart and the page receives `bridgeResumed`. The built-in stores re-sync from current ATAK state rather than catching up on missed events:
+
+| Data | On reattach |
+|------|-------------|
+| `useMapItems()`, `useMapItem()` | Re-fetched from a fresh snapshot. Items added, moved or removed while detached are correct. |
+| `useContacts()` | The full contact list is sent again. |
+| `useNavigationState()` | The current navigation state is sent again. |
+| `useChat()` | History is re-read for every loaded conversation. |
+| `useCotStream()`, `useCotEvent()` | Not re-synced: CoT received while detached is lost. Markers it created or moved still arrive through `useMapItems()`. |
+| `useIntent()`, `useIntentCallback()` | Not re-synced: broadcasts received while detached are lost, as they would be for a native panel whose receivers are unregistered on close. |
+
+Other events (`mapClick`, `preferenceChanged`, `selfLocationChanged`, …) are also dropped while detached; re-read anything you cache from them on `bridgeResumed`. Events a custom bridge sends through the `BridgeEventEmitter` are dropped the same way; such a bridge can pause its own listeners with `emitter.addHostStateListener(...)`. Receiving events while a panel is closed is not supported.
 
 ## Custom Bridges
 
@@ -470,7 +491,7 @@ protected boolean onBackButtonPressed() {
 }
 ```
 
-**Lifecycle:** Call `onResume()` when the view becomes visible, `onPause()` when hidden, and `destroy()` once you are done with the view — from `onDropDownClose()` if you rebuild it on each open (as above), otherwise from `disposeImpl()`. Teardown is yours to drive: detaching the view only pauses it and unhooks its listeners, because ATAK detaches and re-attaches a retained panel's view on its own, and the view restores itself when it comes back. `useDropdownSize()` and `useDropdownVisible()` return defaults in embedded views — they only update inside `ReactiveDropDown`.
+**Lifecycle:** Call `onResume()` when the view becomes visible, `onPause()` when hidden, and `destroy()` once you are done with the view — from `onDropDownClose()` if you rebuild it on each open (as above), otherwise from `disposeImpl()`. Teardown is yours to drive: detaching the view only pauses it and unhooks its listeners, because ATAK detaches and re-attaches a retained panel's view on its own, and the view restores itself when it comes back — events are dropped while it is detached and the stores re-sync on reattach (see [While a panel is closed or detached](#while-a-panel-is-closed-or-detached)). `useDropdownSize()` and `useDropdownVisible()` return defaults in embedded views — they only update inside `ReactiveDropDown`.
 
 ## Architecture
 

@@ -28,15 +28,52 @@ public class ContactBridge implements Contacts.OnContactsChangedListener {
 
     private final BridgeEventEmitter emitter;
     private final Handler debounceHandler = new Handler(Looper.getMainLooper());
-    private boolean listening = false;
+    /** Page demand and host pause. Guarded by {@code this}. */
+    private final ListenerState state = new ListenerState();
+    /** Read on ATAK's threads by scheduleEmit(); written under {@code this}. */
+    private volatile boolean listening = false;
     private final Runnable debounceRunnable = this::emitAll;
 
     public ContactBridge(BridgeEventEmitter emitter) {
         this.emitter = emitter;
     }
 
-    public void start() {
-        if (listening) return;
+    /** Start listening and send the full list. A repeat call does nothing. */
+    public synchronized void start() {
+        apply(state.setWanted(true));
+    }
+
+    public synchronized void stop() {
+        apply(state.setWanted(false));
+    }
+
+    /** Stop listening while the host is detached, keeping the page's subscription. */
+    public synchronized void pause() {
+        apply(state.pause());
+    }
+
+    /**
+     * Listen again if the page is still subscribed. Starting sends the full
+     * list, so the page's contacts converge on whatever changed while paused.
+     */
+    public synchronized void resume() {
+        apply(state.resume());
+    }
+
+    private void apply(ListenerState.Change change) {
+        switch (change) {
+            case START:
+                startListening();
+                break;
+            case STOP:
+                stopListening();
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void startListening() {
         listening = true;
         try {
             Contacts contacts = Contacts.getInstance();
@@ -49,7 +86,7 @@ public class ContactBridge implements Contacts.OnContactsChangedListener {
         }
     }
 
-    public void stop() {
+    private void stopListening() {
         listening = false;
         debounceHandler.removeCallbacksAndMessages(null);
         try {
@@ -152,7 +189,8 @@ public class ContactBridge implements Contacts.OnContactsChangedListener {
         return json;
     }
 
-    public void dispose() {
-        stop();
+    public synchronized void dispose() {
+        state.dispose();
+        stopListening();
     }
 }

@@ -1,5 +1,7 @@
 package com.atakmap.android.reactive.bridge;
 
+import android.os.SystemClock;
+import android.view.View;
 import android.webkit.WebView;
 
 import com.atakmap.android.maps.MapEvent;
@@ -18,15 +20,36 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class BridgeEventEmitter {
 
     private static final String TAG = "BridgeEventEmitter";
 
+    /**
+     * Told when the WebView is detached from its window and attached again.
+     * Called on the main thread. {@link AtakBridge} uses it to pause its
+     * producers; a custom bridge with its own ATAK listeners can do the same.
+     */
+    public interface HostStateListener {
+        /**
+         * @param attached false when the view has left its window (panel closed,
+         *                 or covered by another drop-down); true when it is back
+         */
+        void onHostAttachChanged(boolean attached);
+    }
+
     private final WebView webView;
     private final Set<String> subscriptions = ConcurrentHashMap.newKeySet();
+    /** Open while the WebView is attached to a window. See DeliveryGate. */
+    private final DeliveryGate gate;
+    private final List<HostStateListener> hostStateListeners = new CopyOnWriteArrayList<>();
+    /** When the view last detached, for the drop summary logged on reattach. Main thread only. */
+    private long detachedAt = 0;
 
     private MapEventDispatcher.MapEventDispatchListener mapClickListener;
     private MapEventDispatcher.MapEventDispatchListener mapLongPressListener;
@@ -39,8 +62,71 @@ public class BridgeEventEmitter {
 
     private boolean listening = false;
 
+    /**
+     * Must be called on the main thread: it reads and then watches the view's
+     * attach state.
+     */
     public BridgeEventEmitter(WebView webView) {
         this.webView = webView;
+        // Both hosts are covered by watching the WebView itself: it leaves the
+        // window whenever its host does — a ReactiveDropDown closing, a retained
+        // drop-down covered by another one, an embedded ReactiveWebView parked by
+        // ATAK — and a new view starts out detached.
+        this.gate = new DeliveryGate(webView.isAttachedToWindow());
+        if (!gate.isOpen()) detachedAt = SystemClock.uptimeMillis();
+        webView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+                onHostAttachChanged(true);
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+                onHostAttachChanged(false);
+            }
+        });
+    }
+
+    /**
+     * Whether the WebView is attached to a window, and so whether {@link #emit}
+     * delivers anything. Safe from any thread.
+     */
+    public boolean isHostAttached() {
+        return gate.isOpen();
+    }
+
+    /** See {@link HostStateListener}. Listeners are called in registration order. */
+    public void addHostStateListener(HostStateListener listener) {
+        hostStateListeners.add(listener);
+    }
+
+    public void removeHostStateListener(HostStateListener listener) {
+        hostStateListeners.remove(listener);
+    }
+
+    /**
+     * The gate changes first, then listeners run: on detach nothing more can be
+     * queued on the view by the time producers are paused, and on attach the
+     * gate is already open when producers resume and send their current state.
+     */
+    private void onHostAttachChanged(boolean attached) {
+        if (!gate.setOpen(attached)) return;
+        if (attached) {
+            Map<String, Integer> dropped = gate.takeDropped();
+            long away = detachedAt == 0 ? 0 : SystemClock.uptimeMillis() - detachedAt;
+            Log.d(TAG, "Host attached after " + away + " ms detached; dropped while detached: "
+                    + (dropped.isEmpty() ? "nothing" : dropped.toString()));
+        } else {
+            detachedAt = SystemClock.uptimeMillis();
+            Log.d(TAG, "Host detached; events are dropped until it is attached again");
+        }
+        for (HostStateListener l : hostStateListeners) {
+            try {
+                l.onHostAttachChanged(attached);
+            } catch (Exception e) {
+                Log.e(TAG, "Error in host state listener", e);
+            }
+        }
     }
 
     public void subscribe(String eventName) {
@@ -298,9 +384,21 @@ public class BridgeEventEmitter {
         }
     }
 
+    /**
+     * Send an event to the page. Safe from any thread.
+     *
+     * While the WebView is detached from its window the event is dropped, not
+     * queued: View.post() on a detached view holds the runnable until the next
+     * attach, which let events pile up without bound while a panel was closed
+     * and replay in one burst on reopen (#88). The page is told it may have
+     * missed something by a {@code bridgeResumed} event when the view comes
+     * back, and the SDK's stores re-sync on it.
+     */
     public void emit(String eventName, String jsonPayload) {
-        String js = "window.__atakBridge && window.__atakBridge.emit('"
-                + eventName + "', " + jsonPayload + ")";
-        webView.post(() -> webView.evaluateJavascript(js, null));
+        gate.deliver(eventName, () -> {
+            String js = "window.__atakBridge && window.__atakBridge.emit('"
+                    + eventName + "', " + jsonPayload + ")";
+            webView.post(() -> webView.evaluateJavascript(js, null));
+        });
     }
 }

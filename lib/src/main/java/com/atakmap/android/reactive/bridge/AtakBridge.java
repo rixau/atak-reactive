@@ -45,6 +45,21 @@ public class AtakBridge {
     private final GeofenceBridge geofenceBridge;
     private ReactiveDropDown dropDown;
 
+    /**
+     * Pause state for the producers, driven by the WebView's attach state.
+     * Guarded by {@link #lifecycleLock}.
+     */
+    private final Object lifecycleLock = new Object();
+    private boolean paused = false;
+    private boolean disposed = false;
+    private final BridgeEventEmitter.HostStateListener hostStateListener = attached -> {
+        if (attached) {
+            resume();
+        } else {
+            pause();
+        }
+    };
+
     public AtakBridge(MapView mapView, BridgeEventEmitter emitter) {
         this.mapView = mapView;
         this.emitter = emitter;
@@ -59,6 +74,16 @@ public class AtakBridge {
         this.contactBridge = new ContactBridge(emitter);
         this.chatBridge = new ChatBridge(mapView, emitter);
         this.geofenceBridge = new GeofenceBridge(mapView, emitter);
+
+        // Paused exactly while the WebView is off-window. A new WebView starts
+        // out detached, so the bridge starts paused and the first attach is a
+        // resume like any other: producers start then, and the page gets
+        // bridgeResumed. Anything the page did before that — a page can load
+        // while its view is detached — is covered by the re-sync.
+        emitter.addHostStateListener(hostStateListener);
+        if (!emitter.isHostAttached()) {
+            pause();
+        }
         this.navigationRelay.start();
 
         // Name the loaded bridge and where its class came from. An APK can contain
@@ -863,13 +888,69 @@ public class AtakBridge {
         return BridgeInfo.ATAK_VERSION;
     }
 
+    /**
+     * Stop every producer's ATAK listeners while the host view is detached from
+     * its window (panel closed, or a retained panel covered by another
+     * drop-down). The page's subscriptions stay registered and nothing is sent
+     * to it. Called on the main thread when the WebView detaches; idempotent,
+     * and a no-op after {@link #dispose()}.
+     */
+    public void pause() {
+        synchronized (lifecycleLock) {
+            if (disposed || paused) return;
+            paused = true;
+            relay.pause();
+            cotBridge.pause();
+            contactBridge.pause();
+            chatBridge.pause();
+            intentBridge.pause();
+            navigationRelay.pause();
+        }
+        Log.d(TAG, "Producers paused (host detached)");
+    }
+
+    /**
+     * Restart whatever the page still has subscribed, then tell it with
+     * {@code bridgeResumed} so its stores re-fetch current state. Producers
+     * come first so nothing that changes during the re-fetch is missed;
+     * duplicates are harmless, gaps are not. Contacts and navigation state
+     * are sent by their producers as they start. Called on the main thread
+     * when the WebView attaches; idempotent, and a no-op after
+     * {@link #dispose()}.
+     */
+    public void resume() {
+        synchronized (lifecycleLock) {
+            if (disposed || !paused) return;
+            paused = false;
+            relay.resume();
+            cotBridge.resume();
+            contactBridge.resume();
+            chatBridge.resume();
+            intentBridge.resume();
+            navigationRelay.resume();
+        }
+        Log.d(TAG, "Producers resumed (host attached)");
+        emitter.emit("bridgeResumed", "{}");
+    }
+
+    /** True while the producers are paused because the host is detached. */
+    public boolean isPaused() {
+        synchronized (lifecycleLock) {
+            return paused;
+        }
+    }
+
     public void dispose() {
+        synchronized (lifecycleLock) {
+            disposed = true;
+        }
+        emitter.removeHostStateListener(hostStateListener);
         markerManager.removeAll();
         shapeManager.removeAll();
         routeManager.removeAll();
-        navigationRelay.stop();
-        contactBridge.stop();
-        chatBridge.stop();
+        navigationRelay.dispose();
+        contactBridge.dispose();
+        chatBridge.dispose();
         geofenceBridge.stop();
         relay.dispose();
         cotBridge.dispose();

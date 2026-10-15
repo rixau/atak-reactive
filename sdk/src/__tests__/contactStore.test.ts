@@ -134,4 +134,24 @@ describe('ContactStore', () => {
     const lastCall = callback.mock.calls[callback.mock.calls.length - 1]![0];
     expect(lastCall).toHaveLength(2);
   });
+
+  it('converges on the full list the native side resends on resume', async () => {
+    // ContactBridge sends the whole list as contactsChanged when it restarts
+    // after a detach, so a contact that went away while paused disappears.
+    window._atak = createMockBridge();
+    const { contactStore } = await loadModules();
+    const callback = vi.fn();
+    contactStore.subscribe(undefined, callback);
+
+    emitFromNative('contactsChanged', [
+      makeContact({ uid: 'c1' }),
+      makeContact({ uid: 'c2' }),
+    ]);
+    emitFromNative('bridgeResumed', {});
+    emitFromNative('contactsChanged', [makeContact({ uid: 'c2' })]);
+
+    const latest = callback.mock.lastCall![0] as { uid: string }[];
+    expect(latest.map((c) => c.uid)).toEqual(['c2']);
+    expect(contactStore.getByUid('c1')).toBeUndefined();
+  });
 });

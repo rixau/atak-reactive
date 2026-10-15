@@ -34,25 +34,75 @@ public class NavigationRelay implements
         this.emitter = emitter;
     }
 
-    public void start() {
-        RouteNavigator nav = RouteNavigator.getInstance();
-        if (nav != null) {
-            nav.registerRouteNavigatorListener(this);
-            // If already navigating, sync state
-            if (nav.isNavigating()) {
-                Route route = nav.getRoute();
-                if (route != null) {
-                    active = true;
-                    currentRouteUid = route.getUID();
-                    registerManagerListener(nav);
-                    syncWaypointIndex(nav);
-                    emitState();
-                }
-            }
+    /** Wanted for the bridge's whole life; paused while the host is detached. Guarded by {@code this}. */
+    private final ListenerState state = new ListenerState();
+
+    public synchronized void start() {
+        apply(state.setWanted(true));
+    }
+
+    public synchronized void stop() {
+        apply(state.setWanted(false));
+    }
+
+    /**
+     * Unregister from RouteNavigator while the host is detached. Nothing is
+     * sent meanwhile; the state is re-read and sent on resume.
+     */
+    public synchronized void pause() {
+        apply(state.pause());
+    }
+
+    /**
+     * Re-read the navigation state, register again, and send it — whether or
+     * not it changed while paused, so the page converges on the current state
+     * without having to ask.
+     */
+    public synchronized void resume() {
+        apply(state.resume());
+    }
+
+    private void apply(ListenerState.Change change) {
+        switch (change) {
+            case START:
+                startListening();
+                break;
+            case STOP:
+                stopListening();
+                break;
+            default:
+                break;
         }
     }
 
-    public void stop() {
+    private void startListening() {
+        RouteNavigator nav = RouteNavigator.getInstance();
+        if (nav == null) return;
+        nav.registerRouteNavigatorListener(this);
+        // Navigation may have started, stopped, or moved on while nothing was
+        // listening, so the cached fields are rebuilt from RouteNavigator
+        // rather than trusted.
+        Route route = nav.isNavigating() ? nav.getRoute() : null;
+        if (route != null) {
+            boolean sameRoute = route.getUID().equals(currentRouteUid);
+            active = true;
+            currentRouteUid = route.getUID();
+            if (!sameRoute) {
+                currentWaypointIndex = 0;
+                gpsLost = false;
+            }
+            registerManagerListener(nav);
+            syncWaypointIndex(nav);
+        } else {
+            active = false;
+            currentRouteUid = null;
+            currentWaypointIndex = -1;
+            gpsLost = false;
+        }
+        emitState();
+    }
+
+    private void stopListening() {
         RouteNavigator nav = RouteNavigator.getInstance();
         if (nav != null) {
             unregisterManagerListener(nav);
@@ -221,8 +271,8 @@ public class NavigationRelay implements
         emitter.emit("navigationStateChanged", getNavigationState());
     }
 
-    public void dispose() {
-        stop();
+    public synchronized void dispose() {
+        apply(state.dispose());
         active = false;
         currentRouteUid = null;
     }

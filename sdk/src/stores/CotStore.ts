@@ -59,6 +59,10 @@ class CotStore {
     return all.filter(item => item.type === typeFilter);
   }
 
+  // No bridgeResumed re-sync: CoT received while the panel was detached is
+  // dropped, not replayed. These are discrete events with no snapshot to
+  // re-read; markers they created or moved still reach useMapItems() through
+  // the map-items snapshot.
   private ensureStream() {
     if (this.streamActive) return;
     this.streamActive = true;

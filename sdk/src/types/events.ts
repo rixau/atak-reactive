@@ -40,6 +40,14 @@ export type AtakEventMap = {
   contactsChanged: ContactData[];
   chatMessage: ChatMessageData;
   geofenceAlert: GeofenceAlertData;
+  /**
+   * The panel's view is back on screen after being detached (panel closed, or a
+   * retained panel covered by another drop-down). While detached, the bridge
+   * pauses its producers and drops every event, so anything that changed in the
+   * meantime was not delivered. The built-in stores re-sync on this; listen for
+   * it to re-fetch state you keep yourself.
+   */
+  bridgeResumed: Record<string, never>;
 };
 
 export type AtakEventName = keyof AtakEventMap;

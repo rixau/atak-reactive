@@ -29,23 +29,51 @@ public class ChatBridge implements ChatManagerMapComponent.ChatMessageListener {
 
     private final BridgeEventEmitter emitter;
     private final MapView mapView;
-    private boolean active = false;
+    /** Page demand and host pause. Guarded by {@code this}. */
+    private final ListenerState state = new ListenerState();
 
     public ChatBridge(MapView mapView, BridgeEventEmitter emitter) {
         this.mapView = mapView;
         this.emitter = emitter;
     }
 
-    public void start() {
-        if (active) return;
-        active = true;
-        ChatManagerMapComponent.getInstance().addChatMessageListener(this);
+    public synchronized void start() {
+        apply(state.setWanted(true));
     }
 
-    public void stop() {
-        if (!active) return;
-        active = false;
-        ChatManagerMapComponent.getInstance().removeChatMessageListener(this);
+    public synchronized void stop() {
+        apply(state.setWanted(false));
+    }
+
+    /**
+     * Stop listening while the host is detached, keeping the page's
+     * subscription. Messages received meanwhile are not delivered as events;
+     * the SDK's chat store re-reads history on bridgeResumed instead.
+     */
+    public synchronized void pause() {
+        apply(state.pause());
+    }
+
+    /** Listen again if the page is still subscribed. */
+    public synchronized void resume() {
+        apply(state.resume());
+    }
+
+    public synchronized void dispose() {
+        apply(state.dispose());
+    }
+
+    private void apply(ListenerState.Change change) {
+        switch (change) {
+            case START:
+                ChatManagerMapComponent.getInstance().addChatMessageListener(this);
+                break;
+            case STOP:
+                ChatManagerMapComponent.getInstance().removeChatMessageListener(this);
+                break;
+            default:
+                break;
+        }
     }
 
     @Override

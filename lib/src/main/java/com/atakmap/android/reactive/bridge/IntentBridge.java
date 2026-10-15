@@ -14,22 +14,63 @@ import com.atakmap.coremap.log.Log;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 public class IntentBridge {
 
     private static final String TAG = "IntentBridge";
 
     private final BridgeEventEmitter emitter;
-    private final Map<String, BroadcastReceiver> receivers = new ConcurrentHashMap<>();
+    /** Actions the page registered. Kept while paused. Guarded by {@code this}. */
+    private final Set<String> actions = new LinkedHashSet<>();
+    /** Receivers registered with ATAK right now. Guarded by {@code this}. */
+    private final Map<String, BroadcastReceiver> receivers = new HashMap<>();
+    private boolean paused = false;
+    private boolean disposed = false;
 
     public IntentBridge(BridgeEventEmitter emitter) {
         this.emitter = emitter;
     }
 
     @JavascriptInterface
-    public void registerAction(String action) {
+    public synchronized void registerAction(String action) {
+        if (disposed || !actions.add(action)) return;
+        if (!paused) registerReceiver(action);
+    }
+
+    @JavascriptInterface
+    public synchronized void unregisterAction(String action) {
+        actions.remove(action);
+        unregisterReceiver(action);
+    }
+
+    /**
+     * Unregister every receiver while the host is detached, keeping the actions
+     * the page registered. Broadcasts sent meanwhile are not delivered later:
+     * like a native panel's receivers, these are off while the panel is.
+     */
+    public synchronized void pause() {
+        if (disposed || paused) return;
+        paused = true;
+        for (String action : new ArrayList<>(receivers.keySet())) {
+            unregisterReceiver(action);
+        }
+    }
+
+    /** Register the page's actions again. */
+    public synchronized void resume() {
+        if (disposed || !paused) return;
+        paused = false;
+        for (String action : actions) {
+            registerReceiver(action);
+        }
+    }
+
+    private void registerReceiver(String action) {
         if (receivers.containsKey(action)) return;
 
         BroadcastReceiver receiver = new BroadcastReceiver() {
@@ -52,11 +93,14 @@ public class IntentBridge {
         receivers.put(action, receiver);
     }
 
-    @JavascriptInterface
-    public void unregisterAction(String action) {
+    private void unregisterReceiver(String action) {
         BroadcastReceiver receiver = receivers.remove(action);
         if (receiver != null) {
-            AtakBroadcast.getInstance().unregisterReceiver(receiver);
+            try {
+                AtakBroadcast.getInstance().unregisterReceiver(receiver);
+            } catch (Exception e) {
+                Log.e(TAG, "Error unregistering receiver: " + action, e);
+            }
         }
     }
 
@@ -89,15 +133,12 @@ public class IntentBridge {
         }
     }
 
-    public void dispose() {
-        for (Map.Entry<String, BroadcastReceiver> entry : receivers.entrySet()) {
-            try {
-                AtakBroadcast.getInstance().unregisterReceiver(entry.getValue());
-            } catch (Exception e) {
-                Log.e(TAG, "Error unregistering receiver: " + entry.getKey(), e);
-            }
+    public synchronized void dispose() {
+        disposed = true;
+        for (String action : new ArrayList<>(receivers.keySet())) {
+            unregisterReceiver(action);
         }
-        receivers.clear();
+        actions.clear();
     }
 
     private static JSONObject bundleToJson(Bundle bundle) throws JSONException {

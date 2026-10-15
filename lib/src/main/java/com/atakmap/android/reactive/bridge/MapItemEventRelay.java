@@ -71,7 +71,8 @@ public class MapItemEventRelay {
     private MapEventDispatcher.MapEventDispatchListener itemRemovedListener;
     private MapEventDispatcher.MapEventDispatchListener itemRefreshListener;
 
-    private int refCount = 0;
+    /** Page demand and host pause. Guarded by {@code this}. */
+    private final ListenerState state = new ListenerState();
     private boolean listening = false;
 
     public MapItemEventRelay(MapView mapView, BridgeEventEmitter emitter) {
@@ -80,19 +81,39 @@ public class MapItemEventRelay {
     }
 
     public synchronized void start() {
-        refCount++;
-        if (refCount == 1) {
-            startListening();
-            attachPointListenersForExisting();
-        }
+        apply(state.acquire());
     }
 
     public synchronized void stop() {
-        refCount--;
-        if (refCount <= 0) {
-            refCount = 0;
-            stopListening();
-            removeAllPointListeners();
+        apply(state.release());
+    }
+
+    /**
+     * Stop listening while the host is detached, keeping the page's stream
+     * requests. Nothing is sent while paused; the SDK re-fetches a snapshot on
+     * bridgeResumed, so changes made in the meantime are not replayed as diffs.
+     */
+    public synchronized void pause() {
+        apply(state.pause());
+    }
+
+    /** Listen again if the page still wants the stream. */
+    public synchronized void resume() {
+        apply(state.resume());
+    }
+
+    private void apply(ListenerState.Change change) {
+        switch (change) {
+            case START:
+                startListening();
+                attachPointListenersForExisting();
+                break;
+            case STOP:
+                stopListening();
+                removeAllPointListeners();
+                break;
+            default:
+                break;
         }
     }
 
@@ -325,8 +346,8 @@ public class MapItemEventRelay {
                 update.addedArray(), update.removedArray(), update.updatedArray());
     }
 
-    public void dispose() {
-        refCount = 0;
+    public synchronized void dispose() {
+        state.dispose();
         stopListening();
         removeAllPointListeners();
     }

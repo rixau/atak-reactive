@@ -87,6 +87,8 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
      * height.
      */
     private volatile double[] currentSize = {HALF_WIDTH, FULL_HEIGHT};
+    /** Last visibility ATAK reported, re-sent on attach. */
+    private volatile boolean lastVisible = false;
 
     /**
      * Create a reactive dropdown.
@@ -236,6 +238,18 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         eventEmitter = new BridgeEventEmitter(webView);
         bridge = new AtakBridge(mapView, eventEmitter);
         bridge.setDropDown(this);
+        // ATAK reports visibility and size around the attach, sometimes just
+        // before it, and the emitter drops anything sent while the view is
+        // detached. Re-send the panel's current state once it is attached, so
+        // useDropdownVisible() and useDropdownSize() never miss a reopen.
+        final BridgeEventEmitter emitter = eventEmitter;
+        emitter.addHostStateListener(attached -> {
+            if (!attached) return;
+            double[] size = currentSize;
+            emitter.emit("dropDownVisible", String.valueOf(lastVisible));
+            emitter.emit("dropDownSizeChanged",
+                    "{\"width\":" + size[0] + ",\"height\":" + size[1] + "}");
+        });
         webView.addJavascriptInterface(bridge, "_atak");
 
         // Register bridges passed via constructor varargs (legacy)
@@ -489,6 +503,7 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
 
     @Override
     public void onDropDownVisible(boolean visible) {
+        lastVisible = visible;
         if (webView != null) {
             if (visible) {
                 webView.onResume();
@@ -501,6 +516,12 @@ public class ReactiveDropDown extends DropDownReceiver implements OnStateListene
         }
     }
 
+    /**
+     * Only the emitter's own listeners stop here. The bridge's producers pause
+     * when the WebView leaves the window — which also happens when a retained
+     * panel is covered by another drop-down, with no close at all — and resume
+     * with a bridgeResumed re-sync when it comes back. See AtakBridge.pause().
+     */
     @Override
     public void onDropDownClose() {
         stopDevRetry();

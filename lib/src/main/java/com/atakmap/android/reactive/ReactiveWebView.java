@@ -380,6 +380,11 @@ public class ReactiveWebView extends FrameLayout {
         // listeners, or pushing evaluateJavascript into a WebView that is off-window.
         // onAttachedToWindow() replays onResume(), which registers them again — both
         // sides are idempotent, so the round trip is safe to repeat.
+        // The bridge's producers (map items, CoT, contacts, chat, intents,
+        // navigation) are not stopped here: the emitter watches the WebView's own
+        // attach state, drops events while it is off-window, and pauses them via
+        // AtakBridge.pause(); on re-attach they resume and the page is sent
+        // bridgeResumed to re-sync (#88).
         stopPreferenceListener();
         if (eventEmitter != null) {
             eventEmitter.stopListening();
