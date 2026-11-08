@@ -359,6 +359,24 @@ preBuild.dependsOn buildWebAssets
     expect(gradle).toContain("rootProject.file('web/dist-assets/web/index.html').exists()");
   });
 
+  it('still adds assets.srcDirs on a fresh project', () => {
+    // The web build task mentions dist-assets too, and is written first; the
+    // srcDirs step must not mistake it for an existing assets.srcDirs entry.
+    const fx = makeFixture({ gradleExtra: 'android {\n    sourceSets {\n        main {\n        }\n    }\n}\n' });
+    const r = runCli(fx, ['init']);
+    expect(gradleOf(fx)).toContain('assets.srcDirs += ["${rootDir}/web/dist-assets"]');
+    expect(r.out).not.toContain('assets.srcDirs already configured');
+  });
+
+  it('predicts the same under --dry-run', () => {
+    const fx = makeFixture({
+      withWeb: false,
+      gradleExtra: 'android {\n    sourceSets {\n        main {\n        }\n    }\n}\n',
+    });
+    const r = runCli(fx, ['init', '--dry-run']);
+    expect(r.out).toContain('+ Add assets.srcDirs');
+  });
+
   it('upgrades the task an earlier init wrote, in place', () => {
     const fx = makeFixture({ gradleExtra: LEGACY_TASK });
     const r = runCli(fx, ['init']);

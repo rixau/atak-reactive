@@ -78,6 +78,14 @@ tasks.matching { it.name ==~ /merge\\w*ReleaseAssets/ }.configureEach {
 }
 `;
 
+/**
+ * True when build.gradle already packages web/dist-assets. Looks for the
+ * assets.srcDirs entry itself: the web build task also mentions dist-assets.
+ */
+function hasAssetsSrcDir(gradle: string): boolean {
+  return /assets\.srcDirs?\s*(?:\+=|=)?\s*\[?[^\n]*dist-assets/.test(gradle);
+}
+
 /** True when gradle.properties turns the Gradle web build off (a committed bundle). */
 function usesPrebuiltWeb(root: string): boolean {
   const props = join(root, 'gradle.properties');
@@ -522,7 +530,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
 
     // Assets srcDir
-    if (gradleRaw.includes('dist-assets')) {
+    if (hasAssetsSrcDir(gradleRaw)) {
       log('  ✓ assets.srcDirs already configured');
     } else {
       log('  + Add assets.srcDirs for web build output to build.gradle');
@@ -659,7 +667,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
   // 6. Patch build.gradle — assets srcDir
   const assetsSrcDir = '            assets.srcDirs += ["${rootDir}/web/dist-assets"]';
   const gradleContent = readFileSync(buildGradle, 'utf-8');
-  if (gradleContent.includes('dist-assets')) {
+  if (hasAssetsSrcDir(gradleContent)) {
     log('assets.srcDirs already configured');
   } else {
     const mainBlockMatch = gradleContent.match(/sourceSets\s*\{[\s\S]*?main\s*\{/);
