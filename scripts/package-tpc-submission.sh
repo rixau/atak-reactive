@@ -31,10 +31,13 @@ if [ "${1:-}" = "--verify" ]; then
 fi
 
 VERSION="$(tr -d '[:space:]' < example/version.txt)"
-NAME="atak-reactive-example-${VERSION}"
+# TPC names every APK it builds after the zip's single root folder, and the
+# template's ProGuard config repackages classes under atakplugin.<that name>,
+# so it is a fixed Java identifier rather than something with a version in it.
+NAME="AtakReactiveExample"
 OUT="${ROOT}/example/build/tpc"
 STAGE="${OUT}/${NAME}"
-ZIP="${OUT}/${NAME}-src.zip"
+ZIP="${OUT}/${NAME}-${VERSION}-src.zip"
 
 rm -rf "${OUT}" && mkdir -p "${STAGE}"
 
