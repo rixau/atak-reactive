@@ -98,12 +98,23 @@ if [ -n "${VERIFY_SDK}" ]; then
     (cd "${VERIFY_DIR}" && unzip -q "${ZIP}")
     SDK_DIR_LINE="$(grep '^sdk.dir=' example/local.properties 2>/dev/null || true)"
     [ -n "${SDK_DIR_LINE}" ] && echo "${SDK_DIR_LINE}" > "${VERIFY_DIR}/${NAME}/local.properties"
-    # No node or npm on the PATH, as on the signing runner.
-    NODE_DIR="$(dirname "$(command -v node)")"
-    CLEAN_PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -vxF "${NODE_DIR}" | paste -sd:)"
-    (cd "${VERIFY_DIR}/${NAME}" && PATH="${CLEAN_PATH}" ./gradlew --no-daemon assembleCivRelease \
+    # The signing runner can't run JavaScript. Dropping node's directory from PATH
+    # isn't enough (/bin and /usr/bin are often the same directory), so put
+    # failing node/npm/npx stubs first on the PATH and record any call to them.
+    STUBS="${VERIFY_DIR}/no-node"
+    mkdir -p "${STUBS}"
+    for tool in node npm npx; do
+        printf '#!/bin/sh\necho "%s $*" >> "%s/calls"\nexit 1\n' "${tool}" "${STUBS}" > "${STUBS}/${tool}"
+        chmod +x "${STUBS}/${tool}"
+    done
+    (cd "${VERIFY_DIR}/${NAME}" && PATH="${STUBS}:${PATH}" ./gradlew --no-daemon assembleCivRelease \
         -Psdk.path="${VERIFY_SDK}" \
         -Ptakdev.plugin="${VERIFY_SDK}/atak-gradle-takdev.jar") >&2
+    if [ -s "${STUBS}/calls" ]; then
+        echo "error: the build tried to run JavaScript tooling:" >&2
+        cat "${STUBS}/calls" >&2
+        exit 1
+    fi
     APK="$(find "${VERIFY_DIR}/${NAME}/app/build/outputs/apk/civ/release" -name '*.apk' | head -1)"
     [ -n "${APK}" ] || { echo "error: the verify build produced no APK" >&2; exit 1; }
     # Not `unzip -l | grep -q`: grep exits at the first match and pipefail turns
@@ -122,7 +133,7 @@ if [ -n "${VERIFY_SDK}" ]; then
         }
     fi
     cp "${APK}" "${OUT}/"
-    echo "verified: $(basename "${APK}") built from the zip with no Node, and contains assets/web/index.html" >&2
+    echo "verified: $(basename "${APK}") built from the zip without calling node/npm/npx, and contains assets/web/index.html" >&2
 fi
 
 echo "${ZIP}"
