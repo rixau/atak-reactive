@@ -60,6 +60,12 @@ rsync -a \
     --exclude 'perf-results/' \
     example/ "${STAGE}/" >&2
 
+# takdev takes versionCode from the git commit time, and the zip has no .git, so
+# without this every TPC build is versionCode 1: it can't install over any earlier
+# build. Pin it to this commit's timestamp, the same value CI's builds get.
+printf '\n# Set by scripts/package-tpc-submission.sh: the source commit time, as CI uses.\ntakStaticVersion=%s\n' \
+    "$(git log -1 --format=%ct)" >> "${STAGE}/gradle.properties"
+
 # Bridge source, compiled in place of ../lib/src/main/java.
 mkdir -p "${STAGE}/app/src/reactive-bridge"
 cp -r lib/src/main/java "${STAGE}/app/src/reactive-bridge/java"
@@ -107,6 +113,14 @@ if [ -n "${VERIFY_SDK}" ]; then
         echo "error: the verify APK has no assets/web/index.html" >&2
         exit 1
     }
+    AAPT="$(ls -d "${ANDROID_HOME:-$HOME/Android/Sdk}"/build-tools/*/aapt 2>/dev/null | tail -1)"
+    if [ -n "${AAPT}" ]; then
+        VERSION_CODE="$("${AAPT}" dump badging "${APK}" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
+        [ "${VERSION_CODE}" -gt 1 ] || {
+            echo "error: the verify APK has versionCode ${VERSION_CODE}; takStaticVersion didn't apply" >&2
+            exit 1
+        }
+    fi
     cp "${APK}" "${OUT}/"
     echo "verified: $(basename "${APK}") built from the zip with no Node, and contains assets/web/index.html" >&2
 fi
