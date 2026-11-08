@@ -13,7 +13,7 @@
 #
 # Requires a build with the probe compiled in:
 #   cd web && VITE_PERF_TAB=true npm run build
-#   cd .. && ./gradlew assembleCivRelease && adb install -r app/build/outputs/apk/civ/release/*.apk
+#   cd .. && ./gradlew assembleCivRelease -Pbenchmarks=true && adb install -r app/build/outputs/apk/civ/release/*.apk
 #
 # On the emulator, redirect a host port to ATAK's CoT input first:
 #   TOKEN=$(cat ~/.emulator_console_auth_token)

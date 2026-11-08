@@ -39,9 +39,12 @@ public class ReactiveExampleComponent extends DropDownMapComponent {
         registerDropDownReceiver(mixedReceiver, mixedFilter);
 
         // Benchmark-only: lets scripts put a marker load on the map that does
-        // not depend on any panel being open. See NativeChurnReceiver.
-        churnReceiver = new NativeChurnReceiver(view);
-        churnReceiver.register(view.getContext().getApplicationContext());
+        // not depend on any panel being open. See NativeChurnReceiver. Built in
+        // only with -Pbenchmarks=true, since the receiver is system-exported.
+        if (BuildConfig.BENCHMARKS) {
+            churnReceiver = new NativeChurnReceiver(view);
+            churnReceiver.register(view.getContext().getApplicationContext());
+        }
 
         // Benchmark-only: the native counterpart of the Map Items page, and an
         // adb-reachable way to open either panel. See BenchReceiver.
@@ -49,8 +52,10 @@ public class ReactiveExampleComponent extends DropDownMapComponent {
         DocumentedIntentFilter nativeFilter = new DocumentedIntentFilter();
         nativeFilter.addAction(NativeListReceiver.SHOW, "Benchmark: plain native list");
         registerDropDownReceiver(nativeListReceiver, nativeFilter);
-        benchReceiver = new BenchReceiver();
-        benchReceiver.register(view.getContext().getApplicationContext());
+        if (BuildConfig.BENCHMARKS) {
+            benchReceiver = new BenchReceiver();
+            benchReceiver.register(view.getContext().getApplicationContext());
+        }
 
         // Integration-test only: writes non-string preferences for the Test
         // page, which cannot write them itself. See PrefTestReceiver.

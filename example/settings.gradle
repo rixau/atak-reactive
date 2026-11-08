@@ -14,4 +14,9 @@ dependencyResolutionManagement {
     }
 }
 
+// atak-reactive: pinned so the build doesn't take its name from whatever folder it is
+// unpacked into (e.g. the TPC submission zip): the APK's file name and ProGuard's
+// -repackageclasses atakplugin.<name> both use it.
+rootProject.name = 'example'
+
 include ':app'

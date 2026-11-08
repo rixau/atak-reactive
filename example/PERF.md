@@ -47,13 +47,17 @@ Reading the code, the cost splits into a fixed part and a variable part:
 
    ```bash
    cd example/web && VITE_PERF_TAB=true npm run build
-   cd .. && ./gradlew assembleCivRelease
+   cd .. && ./gradlew assembleCivRelease -Pbenchmarks=true
    adb install -r app/build/outputs/apk/civ/release/*.apk
    ```
 
    `VITE_PERF_TAB` is a Vite build-time flag: the tab and its page are only
    in the bundle when it is set, so a normal `npm run build` ships the four
    example tabs and nothing else. The dev server always shows it.
+
+   `-Pbenchmarks=true` builds in the adb-driven benchmark receivers
+   (`BenchReceiver`, `NativeChurnReceiver`) that the comparison scripts use.
+   They are system-exported, so builds for distribution leave the flag off.
 
    Release is the build worth measuring: it serves the minified bundle from
    `assets/`. A debug build loads the React dev bundle from the Vite dev server

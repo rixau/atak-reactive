@@ -286,6 +286,11 @@ android {
         minSdkVersion 21
         targetSdkVersion 34
 
+        // atak-reactive: the benchmark receivers (BenchReceiver, NativeChurnReceiver) are
+        // system-exported so adb can drive them, which also lets any app on the device put
+        // markers on the map. Off unless asked for: -Pbenchmarks=true (see PERF.md).
+        buildConfigField 'boolean', 'BENCHMARKS', (project.findProperty('benchmarks') == 'true').toString()
+
         def runTasks = gradle.startParameter.taskNames
         if(runTasks.toString().contains('bundle')) {
             ndk {
@@ -380,3 +385,15 @@ configurations.implementation {
 
 }       
 
+
+// atak-reactive: Gradle doesn't build the React UI; `atak-reactive build` (or a prebuilt,
+// checked-in web/dist-assets) provides it. Without this check a release build with no
+// bundle succeeds and signs an APK whose panel is blank on device.
+tasks.matching { it.name ==~ /merge\w*ReleaseAssets/ }.configureEach {
+    doFirst {
+        if (!rootProject.file('web/dist-assets/web/index.html').exists()) {
+            throw new GradleException("web/dist-assets/web/index.html is missing: build the web UI " +
+                    "(cd web && npm run build) before a release build, or the APK ships a blank panel.")
+        }
+    }
+}
