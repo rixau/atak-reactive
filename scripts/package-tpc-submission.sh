@@ -41,24 +41,25 @@ ZIP="${OUT}/${NAME}-${VERSION}-src.zip"
 
 rm -rf "${OUT}" && mkdir -p "${STAGE}"
 
+# Package what's committed, not the working tree: the versionCode below is
+# HEAD's commit time, and ignored local files (local.properties with tak.gov
+# credentials, example/.takdev/, keystores) must not ride along. So refuse
+# uncommitted changes, and copy only tracked files (below).
+DIRTY="$(git status --porcelain -- example lib/src/main/java sdk)"
+if [ -n "${DIRTY}" ]; then
+    echo "error: commit or stash these first; the zip is built from HEAD:" >&2
+    echo "${DIRTY}" >&2
+    exit 1
+fi
 # Build the SDK and pack it exactly as npm would publish it.
 (cd sdk && npm ci && npm run build) >&2
 mkdir -p "${STAGE}/web/vendor"
 SDK_TGZ="$(cd sdk && npm pack --silent --pack-destination "${STAGE}/web/vendor" | tail -1)"
 
-# Everything a reviewer or the runner needs from example/, and nothing local:
-# local.properties can hold tak.gov credentials.
-rsync -a \
-    --exclude 'local.properties' \
-    --exclude '.gradle/' \
-    --exclude 'build/' \
-    --exclude 'app/build/' \
-    --exclude 'node_modules/' \
-    --exclude 'web/dist/' \
-    --exclude 'web/dist-assets/' \
-    --exclude 'web/tsconfig.tsbuildinfo' \
-    --exclude 'perf-results/' \
-    example/ "${STAGE}/" >&2
+git ls-files -z example \
+    | sed -z 's|^example/||' \
+    | grep -zvx 'web/tsconfig.tsbuildinfo' \
+    | rsync -a --from0 --files-from=- example/ "${STAGE}/" >&2
 
 # takdev takes versionCode from the git commit time, and the zip has no .git, so
 # without this every TPC build is versionCode 1: it can't install over any earlier
@@ -67,8 +68,10 @@ printf '\n# Set by scripts/package-tpc-submission.sh: the source commit time, as
     "$(git log -1 --format=%ct)" >> "${STAGE}/gradle.properties"
 
 # Bridge source, compiled in place of ../lib/src/main/java.
-mkdir -p "${STAGE}/app/src/reactive-bridge"
-cp -r lib/src/main/java "${STAGE}/app/src/reactive-bridge/java"
+mkdir -p "${STAGE}/app/src/reactive-bridge/java"
+git ls-files -z lib/src/main/java \
+    | sed -z 's|^lib/src/main/java/||' \
+    | rsync -a --from0 --files-from=- lib/src/main/java/ "${STAGE}/app/src/reactive-bridge/java/" >&2
 OLD_SRC='java.srcDirs += ["${rootDir}/../lib/src/main/java"]'
 NEW_SRC='java.srcDirs += ["${rootDir}/app/src/reactive-bridge/java"]'
 grep -qF "${OLD_SRC}" "${STAGE}/app/build.gradle" || {
@@ -124,7 +127,9 @@ if [ -n "${VERIFY_SDK}" ]; then
         echo "error: the verify APK has no assets/web/index.html" >&2
         exit 1
     }
-    AAPT="$(ls -d "${ANDROID_HOME:-$HOME/Android/Sdk}"/build-tools/*/aapt 2>/dev/null | tail -1)"
+    # `|| true`: with no build-tools found, ls fails and pipefail + set -e would end
+    # the script silently, skipping the fallback below.
+    AAPT="$(ls -d "${ANDROID_HOME:-$HOME/Android/Sdk}"/build-tools/*/aapt 2>/dev/null | tail -1 || true)"
     if [ -n "${AAPT}" ]; then
         VERSION_CODE="$("${AAPT}" dump badging "${APK}" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
         [ "${VERSION_CODE}" -gt 1 ] || {
