@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# Packages the example plugin as a self-contained source zip for TAK Product
+# Center (TPC) signing.
+# Usage: ./scripts/package-tpc-submission.sh [--verify <sdk-dir>]
+#
+# In this repo the example isn't self-contained: it compiles the bridge from
+# ../lib/src/main/java, its web UI depends on file:../../sdk, and the built web
+# bundle (web/dist-assets) is gitignored. The signing runner builds from the zip
+# alone and can't run Node, so the zip has to carry all three:
+#   - the bridge source, copied to app/src/reactive-bridge/java
+#   - the web bundle, prebuilt into web/dist-assets
+#   - the SDK as an npm pack tarball in web/vendor, so web/ still rebuilds from source
+#
+# --verify <sdk-dir> unpacks the zip outside the repo and runs assembleCivRelease
+# on it with Node off the PATH, the way the runner will. <sdk-dir> holds main.jar,
+# android_keystore, proguard-release-keep.txt and atak-gradle-takdev.jar
+# (e.g. lib/sdks/5.6.0, filled by scripts/build-example.sh).
+#
+# Prints the zip path on the last line of stdout.
+#
+# Requires: Node 22, rsync, zip, and for --verify Java 17 and ANDROID_HOME (or
+# sdk.dir in example/local.properties).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "${ROOT}"
+
+VERIFY_SDK=""
+if [ "${1:-}" = "--verify" ]; then
+    VERIFY_SDK="$(cd "${2:?--verify needs an SDK directory}" && pwd)"
+fi
+
+VERSION="$(tr -d '[:space:]' < example/version.txt)"
+# TPC names every APK it builds after the zip's single root folder, and the
+# template's ProGuard config repackages classes under atakplugin.<that name>,
+# so it is a fixed Java identifier rather than something with a version in it.
+NAME="AtakReactiveExample"
+OUT="${ROOT}/example/build/tpc"
+STAGE="${OUT}/${NAME}"
+ZIP="${OUT}/${NAME}-${VERSION}-src.zip"
+
+rm -rf "${OUT}" && mkdir -p "${STAGE}"
+
+# Package what's committed, not the working tree: the versionCode below is
+# HEAD's commit time, and ignored local files (local.properties with tak.gov
+# credentials, example/.takdev/, keystores) must not ride along. So refuse
+# uncommitted changes, and copy only tracked files (below).
+DIRTY="$(git status --porcelain -- example lib/src/main/java sdk)"
+if [ -n "${DIRTY}" ]; then
+    echo "error: commit or stash these first; the zip is built from HEAD:" >&2
+    echo "${DIRTY}" >&2
+    exit 1
+fi
+# Build the SDK and pack it exactly as npm would publish it.
+(cd sdk && npm ci && npm run build) >&2
+mkdir -p "${STAGE}/web/vendor"
+SDK_TGZ="$(cd sdk && npm pack --silent --pack-destination "${STAGE}/web/vendor" | tail -1)"
+
+git ls-files -z example \
+    | sed -z 's|^example/||' \
+    | grep -zvx 'web/tsconfig.tsbuildinfo' \
+    | rsync -a --from0 --files-from=- example/ "${STAGE}/" >&2
+
+# takdev takes versionCode from the git commit time, and the zip has no .git, so
+# without this every TPC build is versionCode 1: it can't install over any earlier
+# build. Pin it to this commit's timestamp, the same value CI's builds get.
+printf '\n# Set by scripts/package-tpc-submission.sh: the source commit time, as CI uses.\ntakStaticVersion=%s\n' \
+    "$(git log -1 --format=%ct)" >> "${STAGE}/gradle.properties"
+
+# Bridge source, compiled in place of ../lib/src/main/java.
+mkdir -p "${STAGE}/app/src/reactive-bridge/java"
+git ls-files -z lib/src/main/java \
+    | sed -z 's|^lib/src/main/java/||' \
+    | rsync -a --from0 --files-from=- lib/src/main/java/ "${STAGE}/app/src/reactive-bridge/java/" >&2
+OLD_SRC='java.srcDirs += ["${rootDir}/../lib/src/main/java"]'
+NEW_SRC='java.srcDirs += ["${rootDir}/app/src/reactive-bridge/java"]'
+grep -qF "${OLD_SRC}" "${STAGE}/app/build.gradle" || {
+    echo "error: example/app/build.gradle no longer has: ${OLD_SRC}" >&2
+    exit 1
+}
+GRADLE_TEXT="$(cat "${STAGE}/app/build.gradle")"
+printf '%s\n' "${GRADLE_TEXT/"${OLD_SRC}"/"${NEW_SRC}"}" > "${STAGE}/app/build.gradle"
+
+# Point web/ at the vendored SDK tarball and rebuild the lockfile against it.
+(cd "${STAGE}/web" \
+    && npm pkg set "dependencies.@atak-reactive/sdk=file:vendor/${SDK_TGZ}" \
+    && rm -f package-lock.json \
+    && npm install --no-audit --no-fund \
+    && npm run build) >&2
+[ -f "${STAGE}/web/dist-assets/web/index.html" ] || {
+    echo "error: the web build produced no web/dist-assets/web/index.html" >&2
+    exit 1
+}
+rm -rf "${STAGE}/web/node_modules" "${STAGE}/web/tsconfig.tsbuildinfo"
+
+(cd "${OUT}" && zip -qr "${ZIP}" "${NAME}")
+
+if [ -n "${VERIFY_SDK}" ]; then
+    VERIFY_DIR="$(mktemp -d)"
+    trap 'rm -rf "${VERIFY_DIR}"' EXIT
+    (cd "${VERIFY_DIR}" && unzip -q "${ZIP}")
+    SDK_DIR_LINE="$(grep '^sdk.dir=' example/local.properties 2>/dev/null || true)"
+    [ -n "${SDK_DIR_LINE}" ] && echo "${SDK_DIR_LINE}" > "${VERIFY_DIR}/${NAME}/local.properties"
+    # The signing runner can't run JavaScript. Dropping node's directory from PATH
+    # isn't enough (/bin and /usr/bin are often the same directory), so put
+    # failing node/npm/npx stubs first on the PATH and record any call to them.
+    STUBS="${VERIFY_DIR}/no-node"
+    mkdir -p "${STUBS}"
+    for tool in node npm npx; do
+        printf '#!/bin/sh\necho "%s $*" >> "%s/calls"\nexit 1\n' "${tool}" "${STUBS}" > "${STUBS}/${tool}"
+        chmod +x "${STUBS}/${tool}"
+    done
+    (cd "${VERIFY_DIR}/${NAME}" && PATH="${STUBS}:${PATH}" ./gradlew --no-daemon assembleCivRelease \
+        -Psdk.path="${VERIFY_SDK}" \
+        -Ptakdev.plugin="${VERIFY_SDK}/atak-gradle-takdev.jar") >&2
+    if [ -s "${STUBS}/calls" ]; then
+        echo "error: the build tried to run JavaScript tooling:" >&2
+        cat "${STUBS}/calls" >&2
+        exit 1
+    fi
+    APK="$(find "${VERIFY_DIR}/${NAME}/app/build/outputs/apk/civ/release" -name '*.apk' | head -1)"
+    [ -n "${APK}" ] || { echo "error: the verify build produced no APK" >&2; exit 1; }
+    # Not `unzip -l | grep -q`: grep exits at the first match and pipefail turns
+    # unzip's SIGPIPE into a failure.
+    APK_LISTING="$(unzip -l "${APK}")"
+    grep -q 'assets/web/index.html' <<< "${APK_LISTING}" || {
+        echo "error: the verify APK has no assets/web/index.html" >&2
+        exit 1
+    }
+    # `|| true`: with no build-tools found, ls fails and pipefail + set -e would end
+    # the script silently, skipping the fallback below.
+    AAPT="$(ls -d "${ANDROID_HOME:-$HOME/Android/Sdk}"/build-tools/*/aapt 2>/dev/null | tail -1 || true)"
+    if [ -n "${AAPT}" ]; then
+        VERSION_CODE="$("${AAPT}" dump badging "${APK}" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
+        [ "${VERSION_CODE}" -gt 1 ] || {
+            echo "error: the verify APK has versionCode ${VERSION_CODE}; takStaticVersion didn't apply" >&2
+            exit 1
+        }
+    fi
+    cp "${APK}" "${OUT}/"
+    echo "verified: $(basename "${APK}") built from the zip without calling node/npm/npx, and contains assets/web/index.html" >&2
+fi
+
+echo "${ZIP}"

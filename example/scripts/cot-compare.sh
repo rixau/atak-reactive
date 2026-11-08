@@ -16,7 +16,7 @@
 #
 # On a device, point --host/--port at ATAK directly (cot-load.py --host).
 #
-# Requires the example plugin installed and loaded, the screen unlocked and
+# Requires the example plugin built with -Pbenchmarks=true, installed and loaded, the screen unlocked and
 # landscape 2400x1080 (the Overlay Manager taps are coordinates; the other two
 # panels open by broadcast through BenchReceiver). Each panel phase frame-diffs
 # two screenshots 5 s apart; a panel reported STATIC was not repainting and its

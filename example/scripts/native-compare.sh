@@ -12,7 +12,7 @@
 # Usage:
 #   cd example && ./scripts/native-compare.sh [--count 200] [--hz 1] [--secs 45]
 #
-# Requires the example plugin installed and loaded, and the screen unlocked —
+# Requires the example plugin built with -Pbenchmarks=true, installed and loaded, and the screen unlocked —
 # the script drives the UI with `adb shell input`, so the tap coordinates below
 # assume a 2400x1080 landscape device. Check them before trusting a run on
 # other hardware.
