@@ -29,6 +29,71 @@ import {
 /** Density buckets the icon template ships, see scripts/generate-icons.py. */
 const ICON_DENSITIES = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];
 
+/** Present in the current web build task and nowhere else; marks it as up to date. */
+const WEB_BUILD_SWITCH = 'atakReactive.buildWeb';
+
+/**
+ * The web build task init wrote before WEB_BUILD_SWITCH existed (the only version
+ * ever generated). Matched so a re-run can upgrade it; a task that doesn't match
+ * was hand-edited, and init leaves it alone.
+ */
+const LEGACY_WEB_BUILD_TASK =
+  /(?:\/\/ atak-reactive: build web assets before assembling APK\s*\n)?task buildWebAssets\(type: Exec\) \{\s*\n\s*workingDir "\$\{rootDir\}\/web"\s*\n\s*commandLine 'npm', 'run', 'build'\s*\n\}\s*\npreBuild\.dependsOn buildWebAssets[ \t]*\n?/;
+
+/**
+ * Builds web/ before every APK, unless gradle.properties sets
+ * atakReactive.buildWeb=false. That switch has to live in the project: a build
+ * server that can't run Node (TAK's third-party signing pipeline runs a plain
+ * `./gradlew assembleCivRelease`) can't be handed `-x buildWebAssets`, so such a
+ * plugin commits web/dist-assets and turns the npm step off.
+ *
+ * Inputs and outputs are declared so Gradle skips the task when nothing in web/
+ * changed. The release check stops a build with no bundle from signing an APK
+ * whose panel is blank.
+ */
+const WEB_BUILD_TASK = `
+// atak-reactive: build the React UI in web/ before assembling the APK.
+// To ship a prebuilt, committed web/dist-assets instead (e.g. for a build server
+// without Node), set atakReactive.buildWeb=false in gradle.properties.
+def atakReactiveBuildWeb = (findProperty('${WEB_BUILD_SWITCH}') ?: 'true').toString() != 'false'
+task buildWebAssets(type: Exec) {
+    onlyIf { atakReactiveBuildWeb }
+    workingDir "\${rootDir}/web"
+    commandLine 'npm', 'run', 'build'
+    inputs.files(fileTree("\${rootDir}/web") { exclude 'node_modules/**', 'dist-assets/**', 'dist/**' })
+    outputs.dir("\${rootDir}/web/dist-assets")
+}
+preBuild.dependsOn buildWebAssets
+
+// atak-reactive: a release build without the web bundle would sign an APK whose
+// panel is blank, so fail it instead.
+tasks.matching { it.name ==~ /merge\\w*ReleaseAssets/ }.configureEach {
+    doFirst {
+        if (!rootProject.file('web/dist-assets/web/index.html').exists()) {
+            throw new GradleException("web/dist-assets/web/index.html is missing, so the APK would show a blank panel. " +
+                    (atakReactiveBuildWeb ? "The web build produced no bundle; check the buildWebAssets output."
+                            : "${WEB_BUILD_SWITCH}=false: build web/ (npx @atak-reactive/cli build) and commit web/dist-assets."))
+        }
+    }
+}
+`;
+
+/**
+ * True when build.gradle already packages web/dist-assets. Looks for the
+ * assets.srcDirs entry itself: the web build task also mentions dist-assets.
+ */
+function hasAssetsSrcDir(gradle: string): boolean {
+  return /assets\.srcDirs?\s*(?:\+=|=)?\s*\[?[^\n]*dist-assets/.test(gradle);
+}
+
+/** True when gradle.properties turns the Gradle web build off (a committed bundle). */
+function usesPrebuiltWeb(root: string): boolean {
+  const props = join(root, 'gradle.properties');
+  if (!existsSync(props)) return false;
+  return new RegExp(`^\\s*${WEB_BUILD_SWITCH.replace('.', '\\.')}\\s*=\\s*false\\s*$`, 'm')
+    .test(readFileSync(props, 'utf-8'));
+}
+
 /**
  * Warn when the plugin still hands ATAK the template's implementation class.
  *
@@ -137,7 +202,11 @@ function ensureGitignore(root: string): void {
     writeFileSync(gitignore, '');
   }
   const added: string[] = [];
-  if (appendIfMissing(gitignore, 'dist-assets', '\n# atak-reactive build output\ndist-assets/\n')) {
+  // A plugin that ships a prebuilt bundle commits dist-assets, so don't re-ignore it.
+  if (
+    !usesPrebuiltWeb(root) &&
+    appendIfMissing(gitignore, 'dist-assets', '\n# atak-reactive build output\ndist-assets/\n')
+  ) {
     added.push('dist-assets/');
   }
   if (appendIfMissing(gitignore, 'node_modules', '\n# npm\nnode_modules/\n')) {
@@ -244,6 +313,29 @@ function applyAlwaysOnPatches(
     } else {
       log('Warning: Could not find buildTypes.debug block — add the dev server port resValue manually');
     }
+  }
+
+  // 8. Web build task. Here rather than with the one-time scaffold steps so that
+  // projects init set up earlier get the upgraded task too.
+  const gradleForWebTask = readFileSync(buildGradle, 'utf-8');
+  if (gradleForWebTask.includes(WEB_BUILD_SWITCH)) {
+    if (!opts.dryRun) log('Gradle web build task already present');
+  } else if (LEGACY_WEB_BUILD_TASK.test(gradleForWebTask)) {
+    if (opts.dryRun) {
+      pending.push(`Upgrade buildWebAssets Gradle task (${WEB_BUILD_SWITCH} switch, incremental, release check)`);
+    } else {
+      writeFileSync(buildGradle, gradleForWebTask.replace(LEGACY_WEB_BUILD_TASK, WEB_BUILD_TASK.trimStart()));
+      log(`Upgraded buildWebAssets Gradle task (${WEB_BUILD_SWITCH} switch, incremental, release check)`);
+    }
+  } else if (gradleForWebTask.includes('buildWebAssets')) {
+    log('Warning: app/build.gradle has a customised buildWebAssets task, so init left it alone.');
+    log(`  To let a build server without Node use a committed bundle, add an onlyIf on ${WEB_BUILD_SWITCH};`);
+    log('  see "Building without Node" in the atak-reactive README.');
+  } else if (opts.dryRun) {
+    pending.push('Add buildWebAssets Gradle task to build.gradle');
+  } else {
+    writeFileSync(buildGradle, gradleForWebTask.trimEnd() + '\n' + WEB_BUILD_TASK);
+    log('Added Gradle task to build web assets before the APK');
   }
 
   const webDir = join(root, 'web');
@@ -438,7 +530,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
 
     // Assets srcDir
-    if (gradleRaw.includes('dist-assets')) {
+    if (hasAssetsSrcDir(gradleRaw)) {
       log('  ✓ assets.srcDirs already configured');
     } else {
       log('  + Add assets.srcDirs for web build output to build.gradle');
@@ -453,11 +545,8 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
     }
     pendingPatches.forEach((p) => log(`  + ${p}`));
 
-    // Web build task
-    if (gradleRaw.includes('buildWebAssets')) {
+    if (gradleRaw.includes(WEB_BUILD_SWITCH)) {
       log('  ✓ Gradle web build task already present');
-    } else {
-      log('  + Add buildWebAssets Gradle task to build.gradle');
     }
 
     // Proguard
@@ -578,7 +667,7 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
   // 6. Patch build.gradle — assets srcDir
   const assetsSrcDir = '            assets.srcDirs += ["${rootDir}/web/dist-assets"]';
   const gradleContent = readFileSync(buildGradle, 'utf-8');
-  if (gradleContent.includes('dist-assets')) {
+  if (hasAssetsSrcDir(gradleContent)) {
     log('assets.srcDirs already configured');
   } else {
     const mainBlockMatch = gradleContent.match(/sourceSets\s*\{[\s\S]*?main\s*\{/);
@@ -604,23 +693,6 @@ export function init(opts: { embedded?: boolean; dryRun?: boolean } = {}): void 
       log('Warning: Could not find sourceSets.main block — add manually:');
       log(`  ${assetsSrcDir}`);
     }
-  }
-
-  // 8. Patch build.gradle — auto-build web assets before APK
-  const gradleAfterAssets = readFileSync(buildGradle, 'utf-8');
-  if (gradleAfterAssets.includes('buildWebAssets')) {
-    log('Gradle web build task already present');
-  } else {
-    const webBuildTask = `
-// atak-reactive: build web assets before assembling APK
-task buildWebAssets(type: Exec) {
-    workingDir "\${rootDir}/web"
-    commandLine 'npm', 'run', 'build'
-}
-preBuild.dependsOn buildWebAssets
-`;
-    writeFileSync(buildGradle, gradleAfterAssets.trimEnd() + '\n' + webBuildTask);
-    log('Added Gradle task to auto-build web assets before APK');
   }
 
   // 8. Patch proguard
