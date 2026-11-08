@@ -36,9 +36,9 @@ export function build(flavor: string = 'civ'): void {
   log(`Building release APK (${capFlavor}Release)...`);
   try {
     const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
-    // init wires `preBuild.dependsOn buildWebAssets`, an Exec task with no declared
-    // inputs/outputs — so it always re-runs and would build web/ a second time.
-    // Step 1 above already did it, and doing it here reports failures properly.
+    // init wires `preBuild.dependsOn buildWebAssets`. Step 1 above already built
+    // web/ and reports failures properly, so skip it rather than build twice (older
+    // projects' copy of the task declares no outputs and always re-runs).
     const buildGradle = join(root, 'app', 'build.gradle');
     const gradleSrc = existsSync(buildGradle) ? readFileSync(buildGradle, 'utf-8') : '';
     const skipWeb = gradleSrc.includes('buildWebAssets') ? ' -x buildWebAssets' : '';

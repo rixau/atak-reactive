@@ -109,6 +109,29 @@ Signing is your project's `signingConfig`, not something the CLI does. The ATAK 
 
 Substitute your own signing config before distributing through TAK.gov or an organization's plugin store.
 
+## Building without Node
+
+`init` adds a `buildWebAssets` task to `app/build.gradle`, so a plain `./gradlew assembleCivRelease` builds `web/` with npm first. A build server that can't run Node, such as TAK's third-party signing pipeline, fails at that step, and you can't add `-x buildWebAssets` to a pipeline's command. Ship a prebuilt bundle instead:
+
+1. Turn the Gradle web build off in `gradle.properties`, which is committed with the project:
+
+   ```properties
+   atakReactive.buildWeb=false
+   ```
+
+2. Build the bundle and commit it. `init` adds `dist-assets/` to `.gitignore`; remove that line. Once the switch is set, `init` no longer adds it back.
+
+   ```bash
+   npx @atak-reactive/cli build
+   git add web/dist-assets
+   ```
+
+Rebuild and commit `web/dist-assets` whenever the React code changes; with the switch off, Gradle packages whatever is committed. A release build fails if `web/dist-assets/web/index.html` is missing, so a forgotten bundle can't ship as a blank panel.
+
+The task declares its inputs and outputs, so with the switch on, Gradle skips the npm step when nothing in `web/` changed. Projects set up by an older `init` get this version of the task by running `init` again. A `buildWebAssets` task you've edited is left alone; add `onlyIf` on `atakReactive.buildWeb` to it yourself.
+
+The TAK pipeline also takes the plugin's `versionCode` from git through takdev. A source zip has no `.git`, so set `takStaticVersion` in `gradle.properties` or the build gets versionCode 1.
+
 ## Rename the template's Java package
 
 If your plugin started from the ATAK plugin template, rename its Java package before you publish. `init` warns when it sees the template's package, because the failure it causes is silent and easy to misread.

@@ -319,6 +319,115 @@ describe.skipIf(isWin)('init — existing AAR install (the upgrade path)', () =>
 });
 
 
+describe.skipIf(isWin)('init — web build task', () => {
+  // The only task init ever wrote before atakReactive.buildWeb existed.
+  const LEGACY_TASK = `
+// atak-reactive: build web assets before assembling APK
+task buildWebAssets(type: Exec) {
+    workingDir "\${rootDir}/web"
+    commandLine 'npm', 'run', 'build'
+}
+preBuild.dependsOn buildWebAssets
+`;
+  const gradleOf = (fx: Fixture) => readFileSync(join(fx.root, 'app', 'build.gradle'), 'utf-8');
+  const count = (text: string, needle: string) => text.split(needle).length - 1;
+
+  it('adds a task that a committed gradle.properties switch can turn off', () => {
+    // A build server without Node (TAK's signing pipeline) runs a plain
+    // assembleCivRelease and can't be handed -x buildWebAssets.
+    const fx = makeFixture();
+    runCli(fx, ['init']);
+    const gradle = gradleOf(fx);
+    expect(gradle).toContain("findProperty('atakReactive.buildWeb')");
+    expect(gradle).toContain('onlyIf { atakReactiveBuildWeb }');
+    expect(gradle).toContain('preBuild.dependsOn buildWebAssets');
+  });
+
+  it('declares inputs and outputs so an unchanged web/ is up to date', () => {
+    const fx = makeFixture();
+    runCli(fx, ['init']);
+    const gradle = gradleOf(fx);
+    expect(gradle).toContain("exclude 'node_modules/**', 'dist-assets/**', 'dist/**'");
+    expect(gradle).toContain('outputs.dir("${rootDir}/web/dist-assets")');
+  });
+
+  it('fails a release build that has no web bundle', () => {
+    const fx = makeFixture();
+    runCli(fx, ['init']);
+    const gradle = gradleOf(fx);
+    expect(gradle).toContain('it.name ==~ /merge\\w*ReleaseAssets/');
+    expect(gradle).toContain("rootProject.file('web/dist-assets/web/index.html').exists()");
+  });
+
+  it('upgrades the task an earlier init wrote, in place', () => {
+    const fx = makeFixture({ gradleExtra: LEGACY_TASK });
+    const r = runCli(fx, ['init']);
+    const gradle = gradleOf(fx);
+    expect(r.out).toContain('Upgraded buildWebAssets Gradle task');
+    expect(count(gradle, 'task buildWebAssets')).toBe(1);
+    expect(count(gradle, 'preBuild.dependsOn buildWebAssets')).toBe(1);
+    expect(gradle).toContain('atakReactive.buildWeb');
+    expect(gradle).not.toContain('build web assets before assembling APK');
+  });
+
+  it('upgrades it without its comment line too', () => {
+    const fx = makeFixture({ gradleExtra: LEGACY_TASK.replace(/^\/\/.*\n/m, '') });
+    runCli(fx, ['init']);
+    const gradle = gradleOf(fx);
+    expect(count(gradle, 'task buildWebAssets')).toBe(1);
+    expect(gradle).toContain('atakReactive.buildWeb');
+  });
+
+  it('leaves a hand-edited task alone and says so', () => {
+    const custom = LEGACY_TASK.replace("'npm', 'run', 'build'", "'npm', 'run', 'build:prod'");
+    const fx = makeFixture({ gradleExtra: custom });
+    const r = runCli(fx, ['init']);
+    const gradle = gradleOf(fx);
+    expect(gradle).toContain("'build:prod'");
+    expect(gradle).not.toContain('atakReactive.buildWeb');
+    expect(r.out).toContain('customised buildWebAssets task');
+  });
+
+  it('is idempotent', () => {
+    const fx = makeFixture({ gradleExtra: LEGACY_TASK });
+    runCli(fx, ['init']);
+    const once = gradleOf(fx);
+    const r = runCli(fx, ['init']);
+    expect(gradleOf(fx)).toBe(once);
+    expect(r.out).toContain('Gradle web build task already present');
+  });
+
+  it('reports the upgrade under --dry-run without writing', () => {
+    const fx = makeFixture({ gradleExtra: LEGACY_TASK, aarVersion: BUILT_CLI_VERSION });
+    const before = gradleOf(fx);
+    const r = runCli(fx, ['init', '--dry-run']);
+    expect(gradleOf(fx)).toBe(before);
+    expect(r.out).toContain('+ Upgrade buildWebAssets Gradle task');
+  });
+
+  it('upgrades a project that is otherwise already current', () => {
+    // The "Already on <version>" path returns early; the upgrade must not depend
+    // on a version bump to reach existing plugins.
+    const fx = makeFixture({ gradleExtra: LEGACY_TASK, aarVersion: BUILT_CLI_VERSION });
+    runCli(fx, ['init']);
+    expect(gradleOf(fx)).toContain('atakReactive.buildWeb');
+  });
+
+  it('stops re-ignoring dist-assets once the project ships a prebuilt bundle', () => {
+    const fx = makeFixture();
+    writeFileSync(join(fx.root, 'gradle.properties'), 'atakReactive.buildWeb=false\n');
+    writeFileSync(join(fx.root, '.gitignore'), 'node_modules/\n');
+    runCli(fx, ['init']);
+    expect(readFileSync(join(fx.root, '.gitignore'), 'utf-8')).not.toContain('dist-assets');
+  });
+
+  it('still ignores dist-assets by default', () => {
+    const fx = makeFixture();
+    runCli(fx, ['init']);
+    expect(readFileSync(join(fx.root, '.gitignore'), 'utf-8')).toContain('dist-assets/');
+  });
+});
+
 describe.skipIf(isWin)('init --dry-run — reports without writing', () => {
   // Moving the always-on patches ahead of the early returns put them ahead of the
   // dry-run guard too, so --dry-run wrote the resValues for real.

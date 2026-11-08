@@ -50,8 +50,9 @@ function buildAndInstall(root: string, flavor: string, port: number): void {
     const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
     const buildGradle = join(root, 'app', 'build.gradle');
     const gradleSrc = existsSync(buildGradle) ? readFileSync(buildGradle, 'utf-8') : '';
-    // init wires `preBuild.dependsOn buildWebAssets`, an Exec task with no declared
-    // inputs/outputs, so it always re-runs. Dev mode serves from Vite anyway.
+    // init wires `preBuild.dependsOn buildWebAssets`. Dev mode serves from Vite, so
+    // building web/ here is wasted time (and older projects' copy of the task always
+    // re-runs).
     const skipWeb = gradleSrc.includes('buildWebAssets') ? ' -x buildWebAssets' : '';
 
     if (gradleSrc && !gradleSrc.includes('atak_reactive_dev_port')) {
