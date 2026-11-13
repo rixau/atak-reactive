@@ -183,7 +183,7 @@ jobs:
         with:
           ref: ${{ env.CHECKOUT_REF }}
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -208,7 +208,7 @@ jobs:
           GH_TOKEN: ${{ secrets.CI_SDK_TOKEN }}
           EXAMPLE_VERSION_SUFFIX: ${{ needs.check-version.outputs.suffix }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: example-${{ matrix.atak-version }}
           path: ${{ steps.build.outputs.apk }}
@@ -227,7 +227,7 @@ jobs:
         with:
           ref: ${{ env.CHECKOUT_REF }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: example-*
           path: apks
