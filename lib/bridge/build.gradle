@@ -74,7 +74,7 @@ dependencies {
     // tests. The real library stands in for them; do not reach for
     // unitTests.returnDefaultValues instead, which would make every JSON call
     // silently return null and the tests pass for the wrong reason.
-    testImplementation 'org.json:json:20250517'
+    testImplementation 'org.json:json:20260814'
 }
 
 mavenPublishing {
